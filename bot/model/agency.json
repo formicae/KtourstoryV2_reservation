@@ -1,0 +1,254 @@
+{
+  "-Kxq8NY5C11jjY9ed3K0": {
+    "id": "-Kxq8NY5C11jjY9ed3K0",
+    "alias": "L",
+    "name": "Klook",
+    "from": "klook.com",
+    "subject": "Klook Order Confirmed",
+    "parsable": true,
+    "parsingStrategy": "reservation.agencyCode = /(?:Voucher[ ]?number|Booking[ ]?Reference[ ]?ID)[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    reservation.product = /Activity[ ]?booked[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    reservation.product += ' ';\n    reservation.product += /Package[ ]?booked[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    reservation.date = /Date[ ]?Request[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    let regResult = /(?:Pick[ ]?Up[ ]?Location|Boarding[ ]?Point|Meet[ ]?Up[ ]?Location)[  :]*(?:[\\d]{1,2}:[\\d]{1,2}[AaPp][Mm])?[ ]?(.*)\\r?\\n/i.exec(mail.content);\n    reservation.pickupPlace = (regResult) ? regResult[0] : \"N/A\";\n    regResult = /(?:Pick[ ]?Up[ ]?Location|Boarding[ ]?Point|Meet[ ]?Up[ ]?Location)[  :]*([\\d]{1,2}:[\\d]{1,2}[AaPp][Mm])[ ]?(?:.*)\\r?\\n/i.exec(mail.content);\n    reservation.pickupTime = (regResult) ? regResult[1] : 'N/A';\n    reservation.clientName = /Lead[ ]?person[ ]?name[  :]*([^:\\r\\n]*)\\r?\\n/.exec(mail.content)[1];\n    reservation.option = [];\n    reservation.people = 0;\n    reservation.adult = 0;\n    reservation.kid = 0;\n    regResult = /Units[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content);\n    if (regResult) {\n        let units = regResult[1];\n        units = units.split(\",\");\n        for (let unit of units) {\n            unit = unit.trim();\n            regResult = /([\\d]+)[  x]*(Person|Adult|Child)/i.exec(unit);\n            if (regResult) {\n                if (regResult[2].match(/Person/i)) {\n                    reservation.people += Number(regResult[1]);\n                } else if (regResult[2].match(/Adult/i)) {\n                    reservation.adult += Number(regResult[1]);\n                } else if (regResult[2].match(/Child/i)) {\n                    reservation.kid += Number(regResult[1]);\n                }\n            } else {\n                regResult = /([\\d]+)[  x]*(.*)/i.exec(unit);\n                if (regResult) {\n                    reservation.option.push({option: regResult[2], people: regResult[1] * 1})\n                }\n            }\n        }\n    } else {\n        regResult = /([\\d]+)[ ]?x[ ]?Person/i.exec(mail.content);\n        reservation.people = (regResult) ? Number(regResult[1]) : 0;\n        regResult = /([\\d]+)[ ]?x[ ]?Adult/i.exec(mail.content);\n        reservation.adult = (regResult) ? Number(regResult[1]) : 0;\n        regResult = /([\\d]+)[ ]?x[ ]?Child/i.exec(mail.content);\n        reservation.kid = (regResult) ? Number(regResult[1]) : 0;\n    }\n    reservation.infant = 0;\n    reservation.people = (!reservation.people || reservation.people === 0) ? reservation.adult + reservation.kid : reservation.people;\n    reservation.nationality = /Lead[ ]?person[ ]?nationality[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    reservation.language = 'N/A';\n    regResult = /Lead[ ]?person[ ]?number[  :]*(\\+?[\\d-]+)/i.exec(mail.content);\n    reservation.tel = (regResult) ? regResult[1] : 'N/A';\n    reservation.messenger = 'N/A';\n    regResult = /Lead[ ]?person[ ]?email[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content);\n    reservation.email = (regResult) ? regResult[1] : \"N/A\";\n    regResult = /(?:Whether[ ]?to[ ]?bring[ ]?along[ ]a[ ]infant[ ]stroller[ ]or[ ]wheelchair)[  :]*(.+)/i.exec(mail.content);\n    reservation.memo = ((regResult) ? '\\nBaby stroller or wheelchair: ' + regResult[1] : 'N/A');\n    regResult = /Package[ ]?booked[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content);\n    reservation.option.push({option: regResult[1], people: reservation.people});\n    regResult = /(?:Pick[ ]?Up[ ]?Location|Boarding[ ]?Point|Meet[ ]?Up[ ]?Location)[  :]*.*([\\s\\S]+)Any questions/i.exec(mail.content);\n    let splited = regResult[1].split(/\\r?\\n/);\n    let optionSplitRegEx = /(.*):[ ]*(\\D*)(\\d*)/i;\n    for (let optionable of splited) {\n        optionable = optionable.trim();\n        if (optionable.match(/(Will you be bringing a baby|Number of infants|Language Preference)/i) || optionable.length < 3) continue;\n        regResult = optionSplitRegEx.exec(optionable);\n        if (regResult)\n            reservation.option.push({\n                option: (regResult[2]) ? regResult[1] + \": \" + regResult[2] : regResult[1],\n                people: (regResult[3]) ? Number(regResult[3]) : reservation.people\n            });\n    }"
+  },
+  "-Kxq8eNN8yUYYtnsp5u9": {
+    "id": "-Kxq8eNN8yUYYtnsp5u9",
+    "alias": "VE",
+    "name": "Veltra",
+    "from": "veltra.com",
+    "subject": "VELTRA \\[Confirmation Needed\\] New Booking Request",
+    "parsable": true,
+    "parsingStrategy": "reservation.agencyCode = /VELTRA[ ]?Voucher[ ]?#[ :]*(.*)/i.exec(mail.content)[1];\n    reservation.product = /Activity[ :]*(.*)/i.exec(mail.content)[1];\n    reservation.date = /Activity[ ]?Date[ :]*([\\s\\S]*?)Transportation:/i.exec(mail.content)[1];\n    if (reservation.date.match(/1st[ ]?choice[ :]*(.*)/i)) {\n        reservation.date = /1st[ ]?choice[ :]*(.*)/i.exec(reservation.date)[1];\n    }\n    let regResult = /Desired[ ]?pick-up[ ]?location[ :]*(.*)/i.exec(mail.content);\n    regResult = (regResult) ? regResult : /Pick-up[ ]?time\\/place[ :]*(.*)/i.exec(mail.content);\n    reservation.pickupPlace = (regResult) ? regResult[1] : 'N/A';\n    regResult = /([\\d]{1,2}[:.][\\d]{1,2}[AaPp]?m?)/.exec(reservation.pickupPlace);\n    reservation.pickupTime = (regResult) ? regResult[1] : 'N/A';\n    reservation.clientName = /Customer[ ]?name[ :]*(.*)/i.exec(mail.content)[1];\n    reservation.people = /Quantity[ :]*(.*)/i.exec(mail.content)[1];\n    if(reservation.people.includes(\"Adult/Child\")){\n        regResult = /Adult\\/Child[^()]*?(?:\\(.*?\\))?[ ]*x[ ]*(\\d){1,2}/gi.exec(reservation.people);\n        reservation.people = regResult[1] * 1;\n        reservation.adult = reservation.people;\n    }else{\n        regResult = /Adult[^()]*?(?:\\(.*?\\))?[ ]*x[ ]*(\\d){1,2}/gi.exec(reservation.people);\n        reservation.adult = (regResult)? Number(regResult[1]) : 0;\n        regResult = /Child[^()]*?(?:\\(.*?\\))?[ ]*x[ ]*(\\d){1,2}/gi.exec(reservation.people);\n        reservation.kid = (regResult)? Number(regResult[1]) : 0;\n        reservation.people = reservation.adult + reservation.kid;\n    }\n    reservation.infant = 0;\n    regResult = /Nationality[ :]*(\\S*)/i.exec(mail.content);\n    reservation.nationality = (regResult) ? regResult[1] : 'N/A';\n    reservation.language = 'N/A';\n    regResult = /phone[ ]?number[ :]*(.*)/i.exec(mail.content);\n    reservation.tel = (regResult) ? regResult[1] : 'N/A';\n    reservation.messenger = 'N/A';\n    reservation.email = 'N/A';\n    reservation.memo = 'N/A';\n    reservation.option = [];"
+  },
+  "-Kxq8lFnSQESCMREb6PE": {
+    "id": "-Kxq8lFnSQESCMREb6PE",
+    "alias": "P",
+    "name": "Seoulpass",
+    "from": "seoulpass.kr",
+    "subject": "\\[서울 트래블 패스\\] 예약 확인 요청",
+    "parsable": true,
+    "parsingStrategy": "    reservation.agencyCode = /예약번호[  :]*([^:\\r\\n]*)/i.exec(mail.content)[1];\n    reservation.product = /상품명[  :]*([^:\\r\\n]*)/i.exec(mail.content)[1];\n    reservation.date = /예약일[  :]*([^:\\r\\n]*)/i.exec(mail.content)[1];\n    reservation.pickupPlace = /예약옵션[  :]*([^:\\r\\n]*)/i.exec(mail.content)[1];\n    reservation.pickupTime = /예약시간[  :]*([^\\r\\n]*)/i.exec(mail.content)[1];\n    reservation.clientName = /예약자[  :]*([^:\\r\\n]*)\\r?\\n/.exec(mail.content)[1];\n    reservation.people = 0;\n    let regResult = /성인[ ]?([\\d]+)/i.exec(mail.content);\n    reservation.adult = (regResult) ? Number(regResult[1]) : 0;\n    regResult = /청소년[ ]?([\\d]+)/i.exec(mail.content);\n    reservation.kid = (regResult) ? Number(regResult[1]) : 0;\n    reservation.infant = 0;\n    reservation.people = reservation.adult + reservation.kid;\n    reservation.option = [];\n    reservation.option.push({option: reservation.product, people: reservation.people});\n    reservation.nationality = /국적[  :]*([^:\\r\\n]*)/i.exec(mail.content)[1];\n    reservation.language = 'N/A';\n    reservation.tel = /예약자[ ]?연락처[  :]*(.?[()\\d-+ ]+)/i.exec(mail.content)[1];\n    reservation.email = /예약자[ ]?이메일[  :]*([^:\\r\\n]*)/i.exec(mail.content)[1];\n    reservation.messenger = 'N/A';\n    reservation.memo = 'N/A';"
+  },
+  "-Kxq8q_TGmaQlz6THStn": {
+    "id": "-Kxq8q_TGmaQlz6THStn",
+    "alias": "VI",
+    "name": "Viator",
+    "from": "e.tripadvisor.com",
+    "subject": "New Booking for",
+    "parsable": true,
+    "parsingStrategy": "\n    'use strict';\n    reservation.agencyCode = /Booking[ ]?Reference[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    reservation.product = /Tour[ ]?Name[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    reservation.option = [];\n    reservation.date = /Travel[ ]?Date[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    let regResult = /Tour[ ]?Grade[ ]?Description[  :]*([^\\r\\n]*)/i.exec(mail.content);\n    reservation.pickupPlace = (regResult) ? regResult[1] : \"\";\n    regResult = /Tour[ ]?Grade[ ]?Name[  :]*([^\\r\\n]*)/i.exec(mail.content);\n    reservation.pickupPlace += (regResult) ? regResult[1] : \"\";\n    regResult = /([\\d]{1,2}[.:][\\d]{1,2}[AaPp]?[Mm]?)/i.exec(reservation.pickupPlace);\n    reservation.pickupTime = (regResult) ? regResult[1] : \"\";\n    reservation.clientName = /Lead[ ]?Traveler(?: Name)?[  :]*([^:\\r\\n]*)\\r?\\n/i.exec(mail.content)[1];\n    reservation.people = Number(/(?:Number of )?Travelers[  :]*([\\d]+).*\\r?\\n/.exec(mail.content)[1]);\n    regResult = /([\\d]+)[ ]?Adult/i.exec(mail.content);\n    reservation.adult = (regResult) ? Number(regResult[1]) : 0;\n    regResult = /([\\d]+)[ ]?Child/i.exec(mail.content);\n    reservation.kid = (regResult) ? Number(regResult[1]) : 0;\n    reservation.infant = 0;\n    reservation.people = reservation.adult + reservation.kid;\n    reservation.nationality = 'N/A';\n    regResult = /Tour Language[  :]*([^:\\r\\n]*)/i.exec(mail.content);\n    reservation.language = (regResult) ? regResult[1] : 'N/A';\n    regResult = /Road[ ]?Contact[  :]*(?:.*?)?(\\+?[\\d-]+)/i.exec(mail.content);\n    if(regResult && regResult[1]){\n        reservation.tel = regResult[1];\n    }else{\n        regResult = /Phone[  :]*(?:.*?)?(\\+?[\\d-]+)/i.exec(mail.content);\n        reservation.tel = (regResult)? regResult[1]: \"N/A\";\n    }\n    reservation.messenger = 'N/A';\n    reservation.email = 'N/A';\n    regResult = /Special Requirements[  :]*([\\s\\S]+?)\\s+Kind regards/i.exec(mail.content);\n    reservation.memo = (regResult) ? regResult[1] : 'N/A';"
+  },
+  "-Kxrp6ymXyqN7C9vtGIq": {
+    "id": "-Kxrp6ymXyqN7C9vtGIq",
+    "alias": "T",
+    "name": "Trazy",
+    "from": "trazy.com",
+    "subject": "예약이 접수되었습니다",
+    "parsable": true,
+    "parsingStrategy": "let regResult = /예약번호[ :\\s]*?([^:\\r\\n]*)\\r?\\n/.exec(mail.content);\n    reservation.agencyCode = (regResult) ? regResult[1].trim() : 'N/A';\n    reservation.product = /예약 프로그램명[  :]*\\r?\\n?([\\s\\S]*)(?:\\*?날짜[ :*]*)/.exec(mail.content)[1];\n    reservation.date = /날짜[  :]*([^:\\r\\n]*)\\r?\\n/.exec(mail.content)[1];\n    let productInfo = reservation.product.split(\"-\");\n    reservation.pickupPlace = productInfo[productInfo.length - 1];\n    regResult = /시간[  :]*([\\d]{1,2}[  :]+[\\d]{1,2}[AaPp]?[Mm]?)/.exec(mail.content);\n    reservation.pickupTime = (regResult) ? regResult[1] : 'N/A';\n    reservation.clientName = /이름[  :]*([^:\\r\\n]*)\\r?\\n/.exec(mail.content)[1];\n    reservation.people = Number(/인원[  :]*([\\d]+)/.exec(mail.content)[1]);\n    regResult = /Adult[  :]*([\\d]+)/i.exec(mail.content);\n    reservation.adult = (regResult) ? Number(regResult[1]) : 0;\n    regResult = /Child\\r?\\n?\\(.*\\)[  :]*([\\d]+)/i.exec(mail.content);\n    reservation.kid = (regResult) ? Number(regResult[1]) : 0;\n    reservation.infant = 0;\n    reservation.option = [];\n\n    regResult = /-.+/g.exec(mail.content);\n    if (regResult) {\n        let optionables = regResult[0].split(\"-\");\n        for (let optionable of optionables) {\n            reservation.option.push({option: optionable, people: reservation.people});\n        }\n    }\n    reservation.product = reservation.product.replace(/\\r?\\n/g, ' ');\n    reservation.nationality = /국적[  :]*([^:\\r\\n]*)\\r?\\n/.exec(mail.content)[1];\n    reservation.language = 'N/A';\n    reservation.tel = /전화번호[ :\\s]*?(\\+?[^:\\r\\n]+)/.exec(mail.content)[1];\n    reservation.email = 'N/A';\n    if (reservation.tel.match('@')) {\n        reservation.email = reservation.tel;\n        reservation.tel = 'N/A';\n    }\n    regResult = /전화번호[  :]*(?:\\+?[\\d-]+)?[ /]*(.*)\\r?\\n/.exec(mail.content);\n    reservation.messenger = (regResult) ? regResult[1] : 'N/A'"
+  },
+  "-KyFyCwJQYXWBWMDZhVX": {
+    "id": "-KyFyCwJQYXWBWMDZhVX",
+    "alias": "KK",
+    "name": "Kkday",
+    "from": "kkday.com",
+    "subject": "You get a new order.",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KyKekGQxRKrhP2XSAPV": {
+    "id": "-KyKekGQxRKrhP2XSAPV",
+    "alias": "TE",
+    "name": "KoreaTravelEasy",
+    "from": "koreatraveleasy.com",
+    "subject": "\\[KoreaTravelEasy->KTourstory\\] 예약신청",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KyKfXdv-snchKn1dUYf": {
+    "id": "-KyKfXdv-snchKn1dUYf",
+    "alias": "SP",
+    "name": "SopoongTour",
+    "from": "sopoongtour@gmail.com",
+    "subject": "【예약】",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KyKgnevcrWwD4stxKck": {
+    "id": "-KyKgnevcrWwD4stxKck",
+    "alias": "SP",
+    "name": "Sarah",
+    "from": "sarahkoreatravel@gmail.com",
+    "subject": "\\d{2,4}-\\d{1,2}-\\d{1,2}.+",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KyKhFehf0yxd2bM3do8": {
+    "id": "-KyKhFehf0yxd2bM3do8",
+    "alias": "BK",
+    "name": "Boskorea",
+    "from": "boscolee93@gmail.com",
+    "subject": "BOSKOREA",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KyKiVCeOEy5H2-eqkNT": {
+    "id": "-KyKiVCeOEy5H2-eqkNT",
+    "alias": "F",
+    "name": "Indiway(Funko)",
+    "from": "indiway.com",
+    "subject": "예약내역을 전달드립니다",
+    "parsable": true,
+    "parsingStrategy": "let reservations = [];\n    if (!mail.content.match(\"신규 예약내역\")) return reservations;\n    let split = mail.content.split(\"\\n내일 이용 예약내역\");\n    let mailContent = split[0].split(\"\\nFREE & EASY KOREA!\")[0];\n    //Person\n    const product = /신규 예약내역 - (.+)\\r?\\n/i.exec(mailContent)[1].trim();\n    split = mailContent.split(\"예약번호\\n\")[1].split(\"\\n고객입력사항\");\n    let template = split[0].split(\"\\n\");\n    mailContent = split[1].split(\"\\nFREE & EASY KOREA!\")[0];\n    template.unshift(\"agencyCode\"); //idx === 0\n    let idx = 1;\n    template[idx++] = \"date\";\n    if (template[idx].match(\"판매사\"))\n        template[idx++] = \"seller\";\n    template[idx++] = \"clientName\";\n    template.splice(idx++, 0, \"nationality\");\n    if (template[idx].match(/연락처/))\n        template[idx++] = \"tel\";\n    template.splice(idx++, 0, \"messenger\");\n    if (template[idx].match(/Option/i))\n        template[idx++] = \"option\";\n    if (template[idx].match(/Meeting Point/i) || template[idx].match(/Pickup/i))\n        template[idx++] = \"pickupPlace\";\n    let optionStartIndex = idx;\n    template[template.length - 1] = \"memo\";\n    for (let i = idx; i < template.indexOf(\"memo\"); i++) {\n        if (template[i].match(/Passenger/i) || template[i].split(\"(\")[0].match(/Person/)) {\n            template[i] = \"people\";\n            continue;\n        }\n        if (template[i].match(/Adult/i)) {\n            template[i] = \"adult\";\n            continue;\n        }\n        if (template[i].match(/Child/i)) {\n            template[i] = \"kid\";\n            continue;\n        }\n        if ((template[i].match(/Free/i) || template[i].match(/Infant/i)) && !template[i].match(/Free time/i)) {\n            template[i] = \"infant\";\n        }\n    }\n    let splitedContent = mailContent.split(\"\\nFNK\");\n    splitedContent.shift();\n    for (let i in splitedContent) {\n        if (!splitedContent.hasOwnProperty(i) || !splitedContent) continue;\n        let info = splitedContent[i];\n        let content = info.split(\"\\n\");\n        let temp = {};\n        for (let l in content) {\n            if (!content.hasOwnProperty(l)) continue;\n            let property = template[l];\n            if (property) {\n                temp[property] = content[l].trim();\n            } else {\n                if (!temp.memo) temp.memo = \"\";\n                temp.memo += content[l];\n            }\n        }\n        let tempOption = null;\n        if (temp.option) {\n            tempOption = temp.option;\n            temp.option = [];\n        } else {\n            temp.option = []\n        }\n        if (!temp.people) {\n            temp.people = 0;\n            for (let i = optionStartIndex; i < template.indexOf(\"memo\"); i++) {\n                temp.people += Number(temp[template[i]]);\n                if (template[i] === \"adult\" || template[i] === \"kid\" || template[i] === \"infant\") continue;\n                temp.option.push({option: template[i], people: Number(temp[template[i]])});\n                delete temp[template[i]];\n            }\n        }\n        if (tempOption) {\n            temp.option.push({option: tempOption, people: temp.people});\n        }\n        temp.people = (temp.people) ? Number(temp.people) : 0;\n        temp.adult = (temp.adult) ? Number(temp.adult) : 0;\n        temp.kid = (temp.kid) ? Number(temp.kid) : 0;\n        temp.infant = (temp.infant) ? Number(temp.infant) : 0;\n        temp.product = product;\n        temp.agency = reservation.agency;\n        temp.id = reservation.id + \"-\" + i;\n        temp.agencyCode = \"FNK\" + temp.agencyCode;\n        if (!temp.memo) temp.memo = \"N/A\";\n        if (temp.memo && !temp.pickupPlace && temp.memo.match(/Meeting (Point|Location)/i) || temp.memo.match(/Pickup/i)) {\n            let regResult = /(?:Meeting Point.*?|Meeting Location.*?|Pickup.*?)[ :]*(.*)/i.exec(temp.memo);\n            if (regResult && regResult[1]) {\n                temp.pickupPlace = regResult[1];\n            }\n        }\n        let regResult = /[^\\r\\n]*?([\\d]{1,2}[ :]+[\\d]{1,2}[PpAa][Mm])/i.exec(temp.pickupPlace);\n        temp.pickupTime = (regResult) ? regResult[1] : \"N/A\";\n        if (temp.seller && temp.seller.match(/funko/i)) delete temp.seller;\n        reservations.push(temp);\n    }\n    return reservations;"
+  },
+  "-KyQJD7K6lYdrTdwWnSf": {
+    "id": "-KyQJD7K6lYdrTdwWnSf",
+    "alias": "CR",
+    "name": "Changi Recommends ",
+    "from": "Changi Recommends ",
+    "subject": "Changi Recommends ",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWV10Mwv0kBvsMhlGQ": {
+    "id": "-KzWV10Mwv0kBvsMhlGQ",
+    "alias": "HP",
+    "name": "Website",
+    "from": "ktourstory.com",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWV900y5EiYfc2Nxez": {
+    "id": "-KzWV900y5EiYfc2Nxez",
+    "alias": "WG",
+    "name": "WAG Travel",
+    "from": "wag",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWVCWZDxB3y8tmSMWP": {
+    "id": "-KzWVCWZDxB3y8tmSMWP",
+    "alias": "ID",
+    "name": "Indah",
+    "from": "indah",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWVFmKDS3GKk7eX2Nv": {
+    "id": "-KzWVFmKDS3GKk7eX2Nv",
+    "alias": "PS",
+    "name": "Preimium Pass",
+    "from": "Preimium Pass",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWVJNzVrwsVqD9rRh1": {
+    "id": "-KzWVJNzVrwsVqD9rRh1",
+    "alias": "GT",
+    "name": "Gtripkorea",
+    "from": "Gtripkorea",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWVLUFVO8mPqGE6WhP": {
+    "id": "-KzWVLUFVO8mPqGE6WhP",
+    "alias": "KR",
+    "name": "Korealtrip",
+    "from": "Korealtrip",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWVNAt62jBQu5VOkgk": {
+    "id": "-KzWVNAt62jBQu5VOkgk",
+    "alias": "BN",
+    "name": "BnbHero",
+    "from": "Bnb",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWVUixMcELPmBI-WVC": {
+    "id": "-KzWVUixMcELPmBI-WVC",
+    "alias": "KT",
+    "name": "Ktourstory",
+    "from": "ktourstory",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-KzWVXdq-a8GUhB0Svck": {
+    "id": "-KzWVXdq-a8GUhB0Svck",
+    "alias": "ETC",
+    "name": "ETC",
+    "from": "ETC",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-L2r6MJe3408StwkP2NG": {
+    "id": "-L2r6MJe3408StwkP2NG",
+    "alias": "HT",
+    "name": "HopeTrip",
+    "from": "hp",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-L3b4e5v8V5tVs1fHQt6": {
+    "id": "-L3b4e5v8V5tVs1fHQt6",
+    "alias": "TL",
+    "name": "Touristly",
+    "from": "touristly.com",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-L8kRD9VM5DXQUE4AuMo": {
+    "id": "-L8kRD9VM5DXQUE4AuMo",
+    "alias": "12",
+    "name": "1박2일",
+    "from": "",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-L8kRRUkaWz1KRkDPvui": {
+    "id": "-L8kRRUkaWz1KRkDPvui",
+    "alias": "PL",
+    "name": "Travel PLK",
+    "from": "",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-L947lE8vGhhCJ_XghIT": {
+    "id": "-L947lE8vGhhCJ_XghIT",
+    "alias": "GG",
+    "name": "GetYourGuide",
+    "from": "",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-LBdSHvmIFYAzhn0ZnE9": {
+    "id": "-LBdSHvmIFYAzhn0ZnE9",
+    "alias": "TA",
+    "name": "THE ASIA",
+    "from": "theasia.com",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  },
+  "-LBsoQkjm8Cxb2e05qF2": {
+    "id": "-LBsoQkjm8Cxb2e05qF2",
+    "alias": "TF",
+    "name": "TravelFlan",
+    "from": "travelflan.com",
+    "subject": "",
+    "parsable": false,
+    "parsingStrategy": ""
+  }
+}

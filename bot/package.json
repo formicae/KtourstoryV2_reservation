@@ -1,0 +1,19 @@
+{
+  "name": "bot",
+  "version": "0.0.0",
+  "description": "",
+  "main": "gmailWatcher.js",
+  "dependencies": {
+    "@google-cloud/pubsub": "0.20.1",
+    "googleapis": "34.0.0",
+    "request": "2.88.0",
+    "gmail-parser": "^1.1.4",
+    "striptags": "^3.1.1"
+  },
+  "scripts": {
+    "test": "mocha *.test.js",
+    "start": "node ./index.js"
+  },
+  "author": "",
+  "license": "UNLICENSED"
+}

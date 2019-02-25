@@ -1,0 +1,39 @@
+{
+  "name": "ktourstoryv2",
+  "version": "0.0.0",
+  "engines": {
+    "node": "10.x"
+  },
+  "description": "ktourstory v2 project, Reliable, expandable reservation system",
+  "main": "/server/app.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RyunDoKim/ktourstoryV2.git"
+  },
+  "author": "Kim Do Hyeong (Ryundo), Lee Young Mo",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/RyunDoKim/ktourstoryV2/issues"
+  },
+  "homepage": "https://github.com/RyunDoKim/ktourstoryV2#readme",
+  "devDependencies": {
+    "mocha": "^5.2.0",
+    "chai": "^4.2.0",
+    "supertest": "^3.3.0"
+  },
+  "dependencies": {
+    "elasticsearch": "^15.2.0",
+    "firebase-admin": "^6.4.0",
+    "lodash": "^4.17.11"
+  },
+  "env": {
+    "released": false
+  },
+  "scripts": {
+    "test": "mocha **/*.test.js --timeout 5000",
+    "test-server": "cd server/ && npm run test",
+    "test-bot": "cd bot/ && npm run test",
+    "server": "cd server/ && npm run start",
+    "bot": "cd bot/ && npm run start"
+  }
+}
