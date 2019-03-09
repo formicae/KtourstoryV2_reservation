@@ -1,4 +1,4 @@
-const fbDB = require('../../databaseAuth/firebase').database;
+const fbDB = require('../../auth/firebase').database;
 
 class V2Bus {
     constructor(operation) {

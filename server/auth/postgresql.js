@@ -1,5 +1,5 @@
 const {Pool ,Client} = require('pg');
-const postgreSQLAuth = require('./postgresql-auth.json');
+const postgreSQLAuth = require('./keys/postgresql-auth.json');
 const fs = require('fs');
 
 const connectionConfig = {

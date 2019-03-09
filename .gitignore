@@ -14,7 +14,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 server/models/testFiles/*.json
-server/databaseAuth/keys/*.json
+server/auth/keys/*.json
 *.pem
 
 # Runtime data

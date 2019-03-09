@@ -8,15 +8,15 @@ const RESERVATION_VALID_TEST_RESULT_MAP = {
         '85' : 'productCheck',
         '88' : 'productCheck',
         '90' : 'productCheck',
-        '98': 'operation_date',
+        '98': 'tour_date',
         '99': 'productCheck',
-        '100': 'operation_date',
+        '100': 'tour_date',
         '101': 'agency_id',
         '102': 'totalPeopleNumberCheck',
         '103': 'totalPeopleNumberCheck',
         '104': 'agency_id',
         '105': 'productCheck',
-        '106': 'operation_date',
+        '106': 'tour_date',
         '107': 'productCheck'
     }
 };

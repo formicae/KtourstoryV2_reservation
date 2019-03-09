@@ -1,77 +1,118 @@
-const sqlDB = require('../databaseAuth/postgresql');
-const fbDB = require('../databaseAuth/firebase').database;
-const elasticDB = require('../databaseAuth/elastic');
+const sqlDB = require('../auth/postgresql');
+const fbDB = require('../auth/firebase').database;
+const elasticDB = require('../auth/elastic');
 const validation = require('./validation');
 const TIME_OFFSET_MAP = {'UTC0':0,'UTC+1':-60,'UTC+2':-120,'UTC+3':-180,'UTC+4':-240,'UTC+5':-300,'UTC+6':-360, 'UTC+7':-420,'UTC+8':-480,'UTC+9':-540,'UTC+10':-600,'UTC+11':-660,'UTC+12':-720,'UTC-1':60,'UTC-2':120,'UTC-3':180,'UTC-4':240,'UTC-5':300,'UTC-6':360,'UTC-7':420,'UTC-8':480,'UTC-9':540,'UTC-10':600,'UTC-11':660};
 const RESERVATION_KEY_MAP = validation.RESERVATION_KEY_MAP;
 const Exceptor = require('../../exceptor');
+const BUS_PEOPLE_MAX_NUMBER = 40;
+sqlDB.connect();
+
+class Team {
+    constructor() {
+        this.notification = '';
+        this.guides = { id : '', name : '',};
+        this.reservations = {};
+    }
+}
 
 class Reservation {
     constructor(data) {
+        if (data.adult + data.kid + data.infant <= 0) Exceptor.report(Exceptor.TYPE.NO_PEOPLE_NUMBER_INFO, 'Total number of people is zero');
         const currentDate = Reservation.getGlobalDate();
-        if (!!data.id) this.id = data.id;
-        this.mail_id = (!data.mail_id) ? 'NM-' + new Date().getTime() : data.mail_id;
-        this.product_id = (!data.product_id) ? '' : data.product_id;
-        this.agency_id = (!data.agency_id) ? '' : data.agency_id;
-        this.reserved_name = (!data.reserved_name) ? '' : data.reserved_name;
-        this.nationality = (!data.nationality) ? '' : data.nationality;
-        if (!!data.timezone) { this.timezone = data.timezone }
-        else if (!!data.timezone) {this.timezone = data.timezone }
-        else { data.timezone = 'UTC+9' }
-        this.operation_date = (!data.operation_date) ? 'No operation_date' : Reservation.getLocalDate(data.operation_date, data.timezone);
-        this.pickup_place = (!data.pickup_place) ? '' : data.pickup_place;
-        this.option = Reservation.optionPreprocess(data.option);
-        this.adult = Reservation.peopleNumberPreprocess(data.adult);
-        this.child = Reservation.peopleNumberPreprocess(data.child);
-        this.infant = Reservation.peopleNumberPreprocess(data.infant);
-        this.memo = (!data.memo) ? '' : data.memo;
-        this.phone = Reservation.phoneNumberPreprocess(data.phone);
-        this.email = (!data.email) ? '' : data.email;
-        this.messenger = (!data.messenger) ? '' : data.messenger;
-        this.canceled = (!data.canceled) ? false : Boolean(data.canceled);
-        this.reserved_date = (!data.reserved_date) ? currentDate : data.reserved_date;
-        this.modify_date = (!data.modify_date) ? currentDate : data.modify_date;
-        this.cancel_comment = (!data.cancel_comment) ? '' : data.cancel_comment;
-        if (data.adult + data.child + data.infant <= 0) {
-            Exceptor.report(Exceptor.TYPE.NO_PEOPLE_NUMBER_INFO, 'Total number of people is zero');
-        }
+        this.sqlData = Reservation.generatePostgreSQLObject(data, currentDate);
+        this.elasticData = Reservation.generateElasticObject(data, currentDate);
     }
 
     /**
      * generate object which will be saved in Elastic search
-     * @param reservation {Object} reservation data which is already saved in postgreSQL
-     * @param product {Object} product data
+     * @param data {Object} reservation data
+     * @param currentDate {String} Time information without timezone information which is made in server.
      */
-    static generateElasticObject(reservation, product){
-        return {
-            id : Number(reservation.id),
-            mail_id : reservation.mail_id,
+    static generateElasticObject(data, currentDate){
+        const result = {
+            id : data.reservation_id,
+            message_id : data.message_id,
+            writer : data.writer,
             product : {
-                id : Number(reservation.product_id),
-                name : product.name,
-                category : product.category,
-                area : product.area,
-                geos : product.geos
+                id : data.productData.id,
+                name : data.productData.name,
+                alias : data.productData.alias,
+                category : data.productData.category,
+                area : data.productData.area,
+                geos : Reservation.locationPreprocess(data.productData.geos)
             },
-            agency : reservation.agency,
-            reserved_name : reservation.reservation_id,
-            nationality : reservation.nationality,
-            operation_date : reservation.operation_date,
-            pickup_place : reservation.pickup_place,
-            option : reservation.option,
-            adult : Number(reservation.adult),
-            child : Number(reservation.child),
-            infant : Number(reservation.infant),
-            memo : reservation.memo,
-            phone : reservation.phone,
-            email : reservation.email,
-            messenger : reservation.messenger,
-            canceled : reservation.canceled,
-            reserved_date : reservation.reserve_date,
-            modify_date : reservation.modify_date,
-            timezone : reservation.timezone,
-            cancel_comment : reservation.cancel_comment
-        }
+            agency : data.agency,
+            name : data.name,
+            nationality : data.nationality,
+            tour_date : data.date,
+            pickup : data.pickup,
+            options : Reservation.optionPreprocess(data.options),
+            adult : Reservation.peopleNumberPreprocess(data.adult),
+            kid : Reservation.peopleNumberPreprocess(data.kid),
+            infant : Reservation.peopleNumberPreprocess(data.infant),
+            phone : Reservation.phoneNumberPreprocess(data.phone),
+            email : data.email,
+            messenger : data.messenger,
+            memo : data.reservation_memo,
+            canceled : data.canceled,
+            modified_date : currentDate,
+            timezone : data.timezone,
+        };
+        if (!data.created_date) {
+            result.created_date = currentDate;
+        } else { result.created_date = data.reservation_created_date }
+        if (!!data.timezone) result.timezone = 'UTC+9';
+        result.total = result.adult + result.kid + result.infant;
+        return result;
+    }
+
+    /**
+     * Generate data for postgreSQL.
+     * @param data {Object} Reservation data
+     * @param currentDate {String} Time information without timezone information which is made in server.
+     * @returns {{message_id: *, agency_id: *, writer_id: (*|boolean|string|Function), date: (*|string), option: {}, adult: (number|*), kid: (number|*), infant: (number|*), canceled: (boolean|string), reserved_date: (string|boolean|*)}}
+     */
+    static generatePostgreSQLObject(data, currentDate) {
+        const result = {
+            message_id: data.message_id,
+            writer : data.writer,
+            product_id : data.productData.id,
+            agency : data.agency,
+            tour_date : data.date,
+            options : Reservation.optionPreprocess(data.options),
+            adult : Reservation.peopleNumberPreprocess(data.adult),
+            kid : Reservation.peopleNumberPreprocess(data.kid),
+            infant : Reservation.peopleNumberPreprocess(data.infant),
+            canceled : data.canceled,
+            modified_date : currentDate,
+        };
+        if (!!data.reservation_id) {
+            result.id = data.reservation_id;
+            result.created_date = currentDate;
+        } else { result.created_date = data.reservation_created_date }
+        return result;
+    }
+
+    static generateFirebaseObject(data) {
+        return {
+            id : data.reservation_id,
+            name : data.name,
+            nationality : data.nationality,
+            agency : data.agency,
+            writer : data.writer,
+            pickup : data.pickup,
+            adult : data.adult,
+            kid : data.kid,
+            infant : data.infant,
+            options : data.options,
+            phone : data.phone,
+            email : data.email,
+            messenger : data.messenger,
+            memo : data.reservation_memo,
+            g : data.g || false,
+            o : data.o || false
+        };
     }
 
     static getGlobalDate() {
@@ -82,9 +123,16 @@ class Reservation {
         return TIME_OFFSET_MAP[utc.toUpperCase()];
     }
 
-    static getLocalDate(date, utc) {
-        if (typeof date === 'string') return new Date(new Date(date) - (Number(Reservation.getTimeOffset(utc)) * 60000));
-        return new Date(date - (Number(Reservation.getTimeOffset(utc)) * 60000));
+    static locationPreprocess(object) {
+        let temp = object;
+        if (typeof object === 'string') temp = JSON.parse(object);
+        return {
+            place : temp.place,
+            location : {
+                lat : Number(temp.location.lat),
+                lng : Number(temp.location.lng)
+            }
+        }
     }
 
     static optionPreprocess(option) {
@@ -109,7 +157,7 @@ class Reservation {
     }
 
     /**
-     *
+     * Validation for updating reservation before delete / insert data from / to databases.
      * @param reservation {Object} reservation object
      * @param detail {Boolean} false : only validation result. true : include details
      * @returns {PromiseLike<T | never> | Promise<T | never>}
@@ -124,7 +172,7 @@ class Reservation {
     }
 
     /**
-     *
+     * Validation for creating reservation before insert data to databases.
      * @param reservation {Object} reservation object
      * @param detail {Boolean} false : only validation result. true : include details
      * @returns {PromiseLike<T | never> | Promise<T | never>}
@@ -138,56 +186,125 @@ class Reservation {
             });
     }
 
+    /**
+     * insert data to postgreSQL
+     * @param reservation
+     * @returns {Promise<any>}
+     */
     static insertSQL(reservation) {
-        return reservationCreateQuery(reservation)
-            .then(text => {
-                return new Promise((resolve, reject)=> {
-                    const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
-                    sqlDB.query(query, (err, result) => {
-                        const bool = (result.command === 'INSERT' && result.rowCount === 1);
-                        if (err || !bool) throw new Error('Reservation insert to SQL failed');
-                        resolve(result.rows[0]);
-                    });
-                });
+        const text = reservationCreateQuery(reservation)
+        return new Promise((resolve, reject)=> {
+            const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
+            sqlDB.query(query, (err, result) => {
+                const bool = (result.command === 'INSERT' && result.rowCount === 1);
+                if (err || !bool) throw new Error('Reservation insert to SQL failed');
+                resolve(result.rows[0]);
             });
+        });
     }
 
-    static updateSQL(reservation) {
-        reservation.modify_date = Reservation.getGlobalDate();
-        return reservationUpdateQuery(reservation)
-            .then(text => {
-                return new Promise((resolve, reject) => {
-                    const query = `UPDATE reservation SET ${text} WHERE id = ${reservation.id} RETURNING *`;
-                    sqlDB.query(query, (err, result) => {
-                        const bool = (result.command === 'UPDATE' && result.rowCount === 1);
-                        if (err || !bool) throw new Error('Reservation update from SQL failed');
-                        resolve(result.rows[0]);
-                    });
-                });
-            })
-    }
-
-    static insertFB(reservation) {
+    /**
+     * Update postgreSQL only changes "canceled" column to true.
+     * @param reservation {Object} reservation object to be deleted.
+     * @returns {Promise<any>}
+     */
+    static cancelSQL(reservation) {
         return new Promise((resolve, reject) => {
-            // todo : create data to Firebase
-            resolve(true);
-        })
+            const query = `UPDATE reservation SET canceled = true WHERE id = ${reservation.id}`;
+            sqlDB.query(query, (err, result) => {
+                const bool = (result.command === 'UPDATE' && result.rowCount === 1);
+                if (err || !bool) throw new Error('Reservation update from SQL failed');
+                resolve(result.rows[0]);
+            });
+        });
     }
+
+    /**
+     * make new Team for operation of Firebase.
+     * @param reservation {Object} reservation object
+     * @param data {Object} tongjjabaegi object from Clinet server or BOT.
+     * @returns {admin.database.ThenableReference}
+     */
+    static newTeamBuild(reservation, data){
+        const team = new Team();
+        team.reservations[reservation.id] = reservation;
+        return fbDB.ref.child(data.date).child(reservation.productData.id).child('teams').push(team);
+    }
+
+    /**
+     * team building function when product is not private and
+     * total people number of reservation is smaller than maximum people number of bus.
+     * @param reservation {Object} reservation object
+     * @param data {Object} tongjjabaegi object from Clinet server or BOT.
+     * @param operation {Object} operation data from firebase. starts with team data.
+     * @returns {Promise<void>}
+     */
+    static regularTeamBuild(reservation, data, operation) {
+        if (!operation.teams) operation.teams = [];
+        const fbReservation = Reservation.generateFirebaseObject(data);
+        const reservedPeopleNumber = data.adult + data.kid + data.infant;
+        let peopleCount;
+        for (let teamId in operation.teams) {
+            let tempReservation;
+            peopleCount = 0;
+            for (let reservationId in operation.teams[teamId].reservations) {
+                tempReservation = operation.teams[teamId][reservationId];
+                peopleCount += (tempReservation.adult + tempReservation.kid + tempReservation.infant);
+            }
+            if (peopleCount + reservedPeopleNumber <= BUS_PEOPLE_MAX_NUMBER) {
+                return fbDB.ref.child(data.date).child(reservation.productData.id)
+                    .child('teams').child(teamId).child('reservations').child(reservation.id).update(fbReservation);
+            }
+        }
+        Reservation.newTeamBuild(reservation, data);
+    }
+
+    /**
+     * Insert data to Firebase
+     * @param reservation {Object} new reservation object
+     * @param data {Object} tongjjabaegi data from Client server or BOT.
+     */
+    static insertFB(reservation, data) {
+        const reservedPeopleNumber = data.adult + data.kid + data.infant;
+        fbDB.ref.child(data.date).child(reservation.productData.id).once('value', (snapshot) => {
+            const operation = snapshot.val();
+            if (reservation.productData.name.match(/private/i)) {
+                Reservation.newTeamBuild(reservation, data);
+            } else if (reservedPeopleNumber > BUS_PEOPLE_MAX_NUMBER) {
+                throw new Error(`maximum people number exceeded in one reservation : ${reservation.id}`)
+            } else {
+                return Reservation.regularTeamBuild(reservation, data, operation);
+            }
+        });
+    }
+
+    /**
+     * cancel FB : delete previous data in firebase.
+     * @param reservation {Object} reservation object
+     */
     static cancelFB(reservation) {
-        return new Promise((resolve, reject) => {
-            // todo : delete reservation data from Firebase - operation
-            const date = reservation.operation_date.toISOString().slice(0,10);
-            // fbDB.ref('_operation').child(date).push()
-            resolve(true);
+        const operationArr = reservation.operation.split('/');
+        const date = operationArr[0];
+        const productId = operationArr[1];
+        const teamId = operationArr[2];
+        const reservationId = operationArr[3];
+        fbDB.ref.child(date).child(productId).child('teams').child(teamId)
+            .child('reservations').child(reservationId).remove(err => {
+                if (err) throw new Error(`reservation removed failed in firebase : ${reservationId}`);
         })
     }
 
+    /**
+     * Insert data to Elastic search
+     * @param reservation {Object} reservation object
+     * @returns {Promise<any>}
+     */
     static insertElastic(reservation) {
         return new Promise((resolve, reject)=> {
             elasticDB.create({
-                index: 'ktour_story',
-                type: 'reservation',
-                id: reservation.id,
+                index : 'ktour_reservation',
+                type : '_doc',
+                id : reservation.id,
                 body: reservation
             },(err, resp) => {
                 if (err || resp.result !== 'created' || resp._shards.successful <= 0) {
@@ -199,20 +316,26 @@ class Reservation {
         });
     }
 
-    static cancelElastic(id) {
+    /**
+     * cancel Elastic : only change "canceled" column to true.
+     * @param reservation {Object} reservation object
+     * @returns {Promise<any>}
+     */
+    static cancelElastic(reservation) {
         return new Promise((resolve, reject) => {
             elasticDB.delete({
-                index:'ktour_story',
-                type:'reservation',
-                id:id
+                index : 'ktour_reservation',
+                type : '_doc',
+                id : reservation.id
             }, (err, resp) => {
                 if (err || resp.result !== 'deleted' || resp._shards.successful <= 0) {
                     Exceptor.report(Exceptor.TYPE.NETWORK_ERR, `Elastic search delete failed. reservation id : ${reservation.id}`);
-                    throw new Error('Failed : cancelElastic');
-                }
-                resolve(true);
-            });
-        })
+                    throw new Error('Failed : cancelElastic')}
+                resolve(resp)})})
+            .then(() => {
+                reservation.canceled = false;
+                return Reservation.insertElastic(reservation);
+            })
     }
 
     /**
@@ -233,7 +356,7 @@ class Reservation {
             }, (err, resp) => {
                 if (err || resp.timed_out) {
                     Exceptor.report(Exceptor.TYPE.NETWORK_ERR, `Elastic search search failed. query : ${query}`);
-                    throw new Error('Failed : searchElastic');
+                    throw new Error('Failed : searchElastic',err);
                 }
                 if (resp._shards.successful <= 0) resolve(result);
                 result.exist = true;
@@ -270,21 +393,19 @@ function reservationUpdateQuery(object) {
 function reservationCreateQuery(object) {
     let tempKeys = "";
     let tempValues = "";
-    return new Promise((resolve, reject) => {
-        let value;
-        Object.keys(object).forEach((key, index) => {
-            value = object[key];
-            if (RESERVATION_KEY_MAP.includes(key) && key !== 'id') {
-                if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
-                else if (typeof value === 'string') { tempValues += "'" + value + "'" + ", "}
-                else { tempValues += value + ", "}
-                tempKeys += key + ", ";
-            }
-            if (index === Object.keys(object).length - 1) {
-                resolve({keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)})
-            }
-        });
-    })
+    let value;
+    Object.keys(object).forEach((key, index) => {
+        value = object[key];
+        if (RESERVATION_KEY_MAP.includes(key) && key !== 'id') {
+            if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
+            else if (typeof value === 'string') { tempValues += "'" + value + "'" + ", "}
+            else { tempValues += value + ", "}
+            tempKeys += key + ", ";
+        }
+        if (index === Object.keys(object).length - 1) {
+            return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
+        }
+    });
 }
 
 function testById() {
@@ -321,6 +442,90 @@ function makeElasticObject(){
 }
 
 // Reservation.searchElastic({"product.area":"Busan"}).then(result => console.log(result))
+
+const example = {
+    create : {
+        product : '남쁘아',
+        message_id : 'NM-201902171930',
+        agency : 'Klook',
+        writer : 'Ktour || Formicae',
+        date : new Date(2019,2,18),
+        pickup : 'Myeongdong',
+        name : 'YeyakName',
+        nationality : 'Korea',
+        adult : 6,
+        kid : 2,
+        infant : 4,
+        cash : true,
+        timezone : 'UTC+9',
+        options : {
+            0 : {name : '번지점프', number : 2},
+            1 : {name : '배', number : 3}
+        },
+        phone : '+10-5184-8886',
+        email : 'anywhere@naver.com',
+        messenger : 'noone@nate.com',
+        reservation_memo : 'pre-paid(reservation)',
+        account_memo : 'pre-paid(account)'
+    },
+    update : {
+        reservation_id : 'r221',
+        operation : '2019-02-22/p53/team3/r221',
+        product : '남쁘아',
+        agency : 'Klook',
+        writer : 'Ktour || Formicae',
+        canceled : false,
+        date : new Date(2019,2,22),
+        pickup : 'Myeongdong',
+        name : 'YeyakName',
+        area : 'Busan',
+        adult : 6,
+        kid : 2,
+        infant : 4,
+        cash : false,
+        timezone : 'UTC+9',
+        team_notification : 'this is an example data',
+        nationality : 'Korea',
+        options : {
+            0 : {name : 'Ski', number : 4},
+            1 : {name : '루지', number : 7}
+        },
+        phone : '+10-5184-8886',
+        email : 'anywhere@naver.com',
+        messenger : 'noone@nate.com',
+        reservation_memo : 'pre-paid(reservation)',
+        account_memo : 'pre-paid(account)'
+    }
+}
+// const data = new Reservation(example);
+// console.log('elastic : ',data.elastic);
+// console.log('postgreSQL : ',data.sql);
+// sqlDB.query('SELECT * FROM reservation WHERE id = 104', (err, result) => {
+//     console.log(result.rows[0])
+// })
+const product = {
+    name : '통영루지_스키',
+    alias : 'Busan_통영_루지_스키',
+    category : 'CATEGORY-39',
+    currency : 'KRW',
+    income : 45000,
+    expenditure : 0,
+    area : 'BUSAN',
+    geos : {
+        place : '통영',
+        location : { lat : 35.11, lng : 96.84 }
+    }
+};
+example.create.productData = product;
+example.update.productData = product;
+const kk = new Reservation(example.create);
+// console.log(kk.elasticData);
+// console.log(kk.sqlData);
+const Account = require('./account');
+const pp = new Account(example.create)
+pp.elasticData.id = 'testId2935'
+pp.elasticData.reservation.id = 'testI12391u60';
+console.log(pp.elasticData)
 
 module.exports = Reservation;
 

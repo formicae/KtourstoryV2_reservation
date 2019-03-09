@@ -1,31 +1,65 @@
-const sqlDB = require('../databaseAuth/postgresql');
+const sqlDB = require('../auth/postgresql');
 const validation = require('./validation');
 const ACCOUNT_KEY_MAP = validation.ACCOUNT_KEY_MAP;
+const Exceptor = require('../../exceptor');
 
 class Account {
-    constructor(reservation, data) {
-        const currentDate = Account.getGlobalDate();
+    constructor(data) {
         if (!!data.id) this.id = data.id;
-        this.reservation_id = Number(reservation.id);
-        this.writer = (!data.writer) ? 'No writer' : data.writer;
-        this.created = (!data.created) ? currentDate : data.created;
-        this.category = (!data.category) ? '' : data.category;
-        this.currency = (!data.currency) ? 'No currency' : data.currency;
-        this.card_income = Account.moneyPreprocess(data.card_income);
-        this.card_expenditure = Account.moneyPreprocess(data.card_expenditure);
-        this.cash_income = Account.moneyPreprocess(data.cash_income);
-        this.cash_expenditure = Account.moneyPreprocess(data.cash_expenditure);
-        this.option = Account.optionPreprocess(data.option);
+        if (Math.abs(data.productData.income) + Math.abs(data.productData.expenditure) <= 0) Exceptor.report(Exceptor.TYPE.NO_PRICE_INFO, 'Total amount of money is zero');
+        const currentDate = Account.getGlobalDate();
+        this.sqlData = Account.generateSQLObject(data, currentDate);
+        this.elasticData = Account.generateElasticObject(data, currentDate);
+    }
+
+    static generateSQLObject(data, currentDate) {
+        const result = {
+            writer : data.writer,
+            category : data.productData.category,
+            currency : data.productData.currency,
+            income : Account.moneyPreprocess(data.productData.income) || 0.00,
+            expenditure : Account.moneyPreprocess(data.productData.expenditure) || 0.00,
+            cash : data.cash,
+            memo : data.account_memo,
+            created_date : currentDate,
+            reservation_id : data.reservation_id
+        };
+        if (!!data.account_id) result.id = data.account_id;
+        return result;
+    }
+
+    static generateElasticObject(data, currentDate) {
+        return {
+            id : data.account_id,
+            writer : data.writer,
+            category : data.productData.category,
+            currency : data.productData.currency,
+            income : data.productData.income,
+            expenditure : data.productData.expenditure,
+            cash : data.cash,
+            memo : data.account_memo,
+            created_date: currentDate,
+            reservation : {
+                id : data.reservation_id,
+                agency : data.agency,
+                tour_date : data.date,
+                nationality : data.nationality,
+                adult : data.adult,
+                kid : data.kid,
+                infant : data.infant,
+                product : {
+                    name : data.productData.name,
+                    alias : data.productData.alias,
+                    category : data.productData.category,
+                    area : data.productData.area
+                },
+                options : data.options
+            }
+        }
     }
 
     static getGlobalDate() {
         return new Date().toISOString().slice(0,-2);
-    }
-
-    static optionPreprocess(option) {
-        if (!option) return {};
-        if (typeof option === 'string') return JSON.parse(option);
-        return option;
     }
 
     static moneyPreprocess(money) {
@@ -35,12 +69,12 @@ class Account {
     }
 
     static reverseMoneyProcess(account) {
-        if (account.card_income > 0) {
-            account.card_expenditure = (-1) * account.card_income;
-            account.card_income = 0;
-        } else if (account.cash_income > 0) {
-            account.cash_expenditure = (-1) * account.cash_income;
-            account.cash_income = 0;
+        if (account.income > 0) {
+            account.expenditure = (-1) * account.income;
+            account.income = 0
+        } else {
+            account.income = (-1) * account.expenditure;
+            account.expenditure = 0;
         }
         return account;
     }
@@ -61,28 +95,29 @@ class Account {
     }
 
     /**
-     * make reverse account when reservation is canceled. money income / expenditure will be reversed.
-     * @param id {Object} reservation id
-     * @param data {Object} raw data requested through router
-     * @param currentDate {Date} current date
-     * @returns {Promise<any>}
+     * make reverse account when reservation is canceled.
+     * canceled reservation data is being used to make reverse account data
+     * @param data {Object} data from v2Reservation router. Reservation id is included.
+     * @returns {Promise<boolean | never>}
      */
-    static makeReverseData(id, data) {
-        const query = `SELECT * FROM reservation, account WHERE reservation.id = account.id AND reservation.id = ${id}`;
-        let newAccount;
+    static insertReverseAccountToSQL(data) {
+        let reverseAccount;
+        const queryColumns = 'acc ount.id, writer, category, currency, income, expenditure, cash, account.memo, created_date, reservation_id';
+        const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = ${data.canceled_reservation_id}`;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
                 const bool = (result.command === 'SELECT' && result.rowCount > 0);
-                if (err || !bool) throw new Error(`get data from Account database failed. ${id}`);
-                newAccount = new Account(result.rows[0], data);
-                if (result.rowCount === 2 && (result.rows[0].option.reverseAccountPresent || result.rows[1].option.reverseAccountPresent)) {
-                    newAccount.insertInhibition = true;
-                }
-                newAccount = Account.reverseMoneyProcess(newAccount);
-                newAccount.option.reverseAccountPresent = true;
-                resolve(newAccount);
+                if (err || !bool) throw new Error(`get data from Account database failed. ${data.canceled_reservation_id}`);
+                resolve(result.rows[0])})})
+            .then(canceledData => {
+                const tempAccount = new Account(canceledData);
+                reverseAccount = Account.reverseMoneyProcess(tempAccount.sqlData);
+                return Account.insertSQL(reverseAccount)})
+            .then(result => {
+                const bool = (result.command === 'INSERT' && result.rowCount === 1);
+                if (err || !bool) throw new Error(`Reverse Account insert to SQL failed.`);
+                return reverseAccount;
             });
-        });
     }
 
     /**
@@ -103,6 +138,29 @@ class Account {
                 });
             });
     }
+
+    /**
+     * Insert data to Elastic search
+     * @param account {Object} account object
+     * @returns {Promise<any>}
+     */
+    static insertElastic(account) {
+        return new Promise((resolve, reject)=> {
+            elasticDB.create({
+                index : 'ktour_account',
+                type : '_doc',
+                id : account.id,
+                body: account
+            },(err, resp) => {
+                if (err || resp.result !== 'created' || resp._shards.successful <= 0) {
+                    Exceptor.report(Exceptor.TYPE.NETWORK_ERR, `Elastic search insert failed. reservation id : ${reservation.id}`);
+                    throw new Error('Failed : insert Account to Elastic');
+                }
+                resolve(true);
+            });
+        });
+    }
+
 }
 
 function accountCreateQuery(object) {
@@ -124,6 +182,33 @@ function accountCreateQuery(object) {
         });
     })
 }
+const testAccount = {
+    id: 'testId2935',
+    writer: 'Ktour || Formicae',
+    category: 'CATEGORY-39',
+    currency: 'KRW',
+    income: 45000,
+    expenditure: 0,
+    cash: true,
+    memo: 'pre-paid(account)',
+    created_date: '2019-03-09T08:10:18.87',
+    reservation: {
+        id: 'testI12391u60',
+        agency: 'Klook',
+        tour_date: new Date(2019,3,17,15,0,0),
+        nationality: 'Korea',
+        adult: 6,
+        kid: 2,
+        infant: 4,
+        product: {
+            name: '통영루지_스키',
+            alias: 'Busan_통영_루지_스키',
+            category: 'CATEGORY-39',
+            area: 'BUSAN'
+        },
+        options: { '0': {name:'LUGI',number:4}, '1': {name:'SKI',number:2} }
+    }
+};
 // const testFile = require('./test files/v2TEST_AccountData.json');
 // Account.validation(testFile['1']).then(result => console.log(result))
 

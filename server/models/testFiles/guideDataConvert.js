@@ -1,4 +1,4 @@
-const fbDB = require('../../databaseAuth/firebase').database;
+const fbDB = require('../../auth/firebase').database;
 const LANGUAGE_SET = new Set(['KOREAN', 'ENGLISH', 'CHINESE', 'CANTONESE', 'JAPANESE', 'INDONESIAN','THAI','VIETNAMESE','TAGALOG','FRENCH','SPANISH','GERMAN']);
 class V2Guide {
     constructor(data) {
@@ -102,7 +102,7 @@ function convert(testFile) {
 convert(testFile);
 function buildPromise(guide){
     return new Promise((resolve, reject) => {
-        fbDB.ref('_guide').child(guide.guide_name).push(guide).then(result => {
+        fbDB.ref('_guide').kid(guide.guide_name).push(guide).then(result => {
             resolve();
         })
     })

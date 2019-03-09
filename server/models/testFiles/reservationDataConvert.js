@@ -2,10 +2,10 @@ const ALTER_TABLE = {
     'agencyCode':'agency_id',
     'clientName':'reserved_name',
     'nationality':'nationality',
-    'pickupPlace':'pickup_place',
+    'pickupPlace':'pickup',
     'product':'product_id',
     'adult':'adult',
-    'kid':'child',
+    'kid':'kid',
     'infant':'infant',
     'memo':'memo',
     'tel':'phone',
@@ -13,9 +13,9 @@ const ALTER_TABLE = {
     'messenger':'messenger',
     'reservedDate':'temp_date',
     'reservedTime':'temp_time',
-    'modify_date':'temp',
+    'modified_date':'temp',
 };
-const RESERVATION_KEY_MAP = new Set(['id', 'mail_id', 'product_id', 'agency_id', 'reserved_name', 'nationality', 'operation_date', 'pickup_place', 'name', 'option', 'adult', 'child', 'infant', 'memo', 'phone', 'email', 'messenger', 'canceled', 'reserved_date', 'modify_date', 'cancel_comment']);
+const RESERVATION_KEY_MAP = new Set(['id', 'mail_id', 'product_id', 'agency_id', 'reserved_name', 'nationality', 'tour_date', 'pickup', 'name', 'option', 'adult', 'kid', 'infant', 'memo', 'phone', 'email', 'messenger', 'canceled', 'created_date', 'modified_date', 'cancel_comment']);
 const newData = {};
 const oldData = require('./v1ReservationData');
 let i = 0;
@@ -30,9 +30,9 @@ Object.keys(oldData).forEach(id => {
             newData[i][ALTER_TABLE[property]] = oldData[id][property];
         }
     });
-    newData[i].operation_date = '';
-    newData[i].reserved_date = tempdate + 'T' + temptime;
-    newData[i].modify_date = tempdate + 'T' + temptime;
+    newData[i].tour_date = '';
+    newData[i].created_date = tempdate + 'T' + temptime;
+    newData[i].modified_date = tempdate + 'T' + temptime;
     newData[i].canceled = false;
     newData[i].option = {};
     newData[i].cancel_comment = 'not canceled';
@@ -70,8 +70,8 @@ class V2Reservation {
         this.email = ''
         this.messenger = ''
         this.canceled = ''
-        this.reserved_date = ''
-        this.modify_date = ''
+        this.created_date = ''
+        this.modified_date = ''
 
     }
     static generateElastic(data) {
@@ -99,15 +99,15 @@ class V2Reservation {
             });
         }
         tempObj.adult = data.adult;
-        tempObj.child = data.kid;
+        tempObj.kid = data.kid;
         tempObj.infant = data.infant;
         tempObj.memo = data.memo;
         tempObj.phone = data.tel;
         tempObj.email = data.email;
         tempObj.messenger = data.messenger;
         tempObj.canceled = false;
-        tempObj.reserved_date = data.reservedDate;
-        tempObj.modify_date = data.reservedDate;
+        tempObj.created_date = data.reservedDate;
+        tempObj.modified_date = data.reservedDate;
         tempObj.timezone = 'UTC+9';
         return tempObj
     }

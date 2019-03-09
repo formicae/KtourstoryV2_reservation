@@ -1,144 +1,156 @@
-const sqlDB = require('../databaseAuth/postgresql');
+const sqlDB = require('../auth/postgresql');
 const Reservation = require('../models/reservation');
-const Exceptor = require('../../exceptor');
-const Account = require('../models/account');
-const url = require('url');
-const querystring = require("querystring");
+const Product = require('../models/product');
+const accountRouter = require('./v2Account');
 sqlDB.connect();
 
+exports.post = (req, res) => {
+    if (!req.get('Content-Type')) return res.status(400).send("Content-Type should be json");
+    routerHandler(req, res, 'POST').catch(err => { res.status(500).send(`POST error :${err.message}`)});
+};
+
+exports.update = (req, res) => {
+    if (!req.get('Content-Type')) return res.status(400).send("Content-Type should be json");
+    routerHandler(req, res, 'UPDATE').catch(err => { res.status(500).send(`POST error :${err.message}`)});
+};
+
 /**
- *
- * @param reservation {Object} reservation object
- * @param data {Object} raw requested data
- * @param isUpdate {boolean} boolean for edit
- * @returns {Promise<boolean | never>}
+ * router handler for reservation POST / UPDATE.
+ * product data is being included in "data" before reservationHandler call.
+ * After reservationHandler is finished, account router is being called.
+ * @param req {Object} request object from express
+ * @param res {Object} response object from express
+ * @param requestType {String} POST || UPDATE
+ * @returns {PromiseLike<boolean | never>}
  */
-function createReservation(reservation, data, isUpdate) {
-    let account;
-    return Promise.resolve().then(() => {
-            if (isUpdate) return reservation;
-            return Reservation.insertSQL(reservation)})
+function routerHandler(req, res, requestType) {
+    let data = req.body;
+    return productFinder(data)
+        .then(productData => {
+            data.productData = productData;
+            const reservation = new Reservation(data);
+            return reservationHandler(reservation, data, requestType)})
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - insertSQL`);
-            if (isUpdate && reservation.canceled) return Account.makeReverseData(reservation.id, data);
-            else return new Account(result, data)})
-        .then(object => {
-            account = object;
-            if (isUpdate && !reservation.canceled) return true;
-            return Account.validation(account, false)})
-        .then(validCheck => {
-            if (!validCheck) {
-                Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_ACCOUNT, 'ValidDataCheck failed');
-                throw new Error(`ValidDataCheck failed [Account] ${reservation.id}`);
-            }
-            if ((isUpdate && !reservation.canceled) || account.insertInhibition) return true;
-            return Account.insertSQL(account)})
-        .then(result => {
-            if (!result) throw new Error(`No result from Account - insertSQL`);
-            return Reservation.insertFB(reservation)})
-        .then(result => {
-            if (!result) throw new Error(`No result from Reservation - insertFB`);
-            return Reservation.insertElastic(reservation)})
-        .then(result => {
-            if (!result) throw new Error(`No result from Reservation - insertElastic`);
-            return result;
+            if (!result) throw new Error('reservationHandler failed');
+            req.body = result;
+            if (requestType === 'POST') return accountRouter.post(req, res);
+            else return accountRouter.update(req, res);
         });
 }
 
+function productFinder(data) {
+    let product;
+    return Product.getProduct(data.product)
+        .then(result => {
+            product = result;
+            if (result.sales.__proto__ === [].__proto__) {
+                result.sales.forEach(item => {
+                    if (item.default) return item })
+            } else if (result.sales.__proto__ === {}.__proto__) {
+                Object.keys(result.sales).forEach(key => {
+                    if (result.sales[key].default) return result.sales[key] })
+            }})
+        .then(targetItem => {
+            return {
+                id : product.id,
+                name : targetItem.name,
+                alias : product.alias,
+                category : product.category,
+                area : product.area,
+                geos : product.geos,
+                currency : targetItem.currency,
+                income : incomeCalculation(data, product, targetItem),
+                expenditure : 0
+            };
+        });
+}
+
+function incomeCalculation(data, product, targetItem) {
+    let income = 0;
+    if (targetItem.sales.__proto__ === [].__proto__) {
+        targetItem.sales.forEach(priceItem => income += priceCalculation(priceItem, data));
+    } else if (targetItem.sales.__proto__ === {}.__proto__) {
+        Object.keys(targetItem.sales).forEach(key => income += priceCalculation(targetItem.sales[key], data))
+    }
+    if (Object.keys(data.options).length > 0) {
+        data.options.forEach(targetOption => {
+            product.options.forEach(productOption => {
+                if (productOption.name === targetOption.name) income += productOption.price * targetOption.number;
+            });
+        });
+    }
+    return income;
+}
+
+function priceCalculation(item, data) {
+    if (item.type === 'adult' && !!Number(data.adult)) return item.net * data.adult;
+    else if (item.type === 'adolescent' && !!Number(data.adolescent)) return item.net * data.adolescent;
+    else if (item.type === 'child' && !!Number(data.kid)) return item.net * data.kid;
+    else if (item.type === 'infant' && !!Number(data.infant)) return item.net * data.infant;
+}
+
 /**
- *
+ * Reservation handler for inserting data to SQL, EL, FB
  * @param reservation {Object} reservation
  * @param data {Object} raw requested data
- * @param currentDate {Date} current date
+ * @param action {String} GET / POST / EDIT
  * @returns {Promise<boolean | never | never>}
  */
-function editReservation(reservation, data) {
-    let newReservation;
-    return Promise.resolve(Reservation.updateSQL(reservation))
+function reservationHandler(reservation, data, action) {
+    if (action === 'POST') { return Reservation.validationCreate(reservation, false)
+        .then(validCheck => {
+            if (!validCheck) throw new Error(`ValidDataCheck create failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
+            return createReservation(reservation, data)})}
+    else { return Reservation.validationUpdate(reservation, false)
+        .then(validCheck => {
+            if (!validCheck) throw new Error(`ValidDataCheck update failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
+            return updateReservation(reservation, data)
+        })}
+}
+
+/**
+ * Reservation create function and insert to SQL, EL, FB
+ * @param reservation {Object} reservation object
+ * @param data {Object} raw requested data
+ * @returns {Promise<boolean | never>}
+ */
+function createReservation(reservation, data) {
+    let overallData = data;
+    return Reservation.insertSQL(reservation.sqlData)
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - updateSQL`);
-            newReservation = new Reservation(result);
-            return Reservation.cancelFB(result)})
+            if (!result) throw new Error(`No result from Reservation - insertSQL`);
+            overallData.reservation_id = result.id;
+            reservation.elasticData.id = result.id;
+            return Reservation.insertFB(reservation, overallData)})
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - cancelFB`);
-            return Reservation.cancelElastic(reservation.id)})
+            if (!result) throw new Error(`No result from Reservation - insertFB`);
+            return Reservation.insertElastic(reservation.elasticData)})
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - cancelElastic`);
-            return newReservation})
-        .then(reservation => {
-            return createReservation(reservation, data, true);
+            if (!result) throw new Error(`No result from Reservation - insertElastic`);
+            return overallData;
         })
 }
 
 /**
- *
- * @param data {Object} data should include privateTour
- * @returns {Promise<any>}
- */
-function checkPrivateTour(data) {
-    return new Promise((resolve, reject) => {
-        if (data.privateTour) {
-            Exceptor.report(Exceptor.TYPE.PRIVATE_TOUR, `Private Tour`);
-            resolve(true);
-        } else { resolve(false) }
-    });
-}
-
-/**
- *
+ * Reservation edit function and update SQL, delete and create EL, FB
+ * For next createReservation task, reservation id is deleted in reservation object.
  * @param reservation {Object} reservation
  * @param data {Object} raw requested data
- * @param currentDate {Date} current date
- * @param action {String} GET / POST / EDIT
  * @returns {Promise<boolean | never | never>}
  */
-function reservationHandler(reservation, data, action){
-    return checkPrivateTour(reservation)
-        .then(isPrivate => {
-            if (isPrivate) throw new Error(`Private tour : reservation = ${JSON.stringify(reservation)}`);
-            if (action === 'EDIT') { return Reservation.validationUpdate(reservation, false)}
-            else { return Reservation.validationCreate(reservation, false)}})
-        .then(validCheck => {
-            if (!validCheck) {
-                Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_RESERVATION, `ValidDataCheck failed ${action}`);
-                throw new Error(`ValidDataCheck failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
-            }
-            if (action === 'GET' || action === 'POST') {
-                return createReservation(reservation, data, false);
-            } else if (action === 'EDIT') {
-                return editReservation(reservation, data);
-            }
-        });
+function updateReservation(reservation, data) {
+    return Promise.resolve(Reservation.cancelSQL(reservation))
+        .then(result => {
+            if (!result) throw new Error(`No result from Reservation - updateSQL`);
+            data.canceled_reservation_id = result.id;
+            return Reservation.cancelFB(reservation)})
+        .then(result => {
+            if (!result) throw new Error(`No result from Reservation - cancelFB`);
+            return Reservation.cancelElastic(reservation)})
+        .then(result => {
+            if (!result) throw new Error(`No result from Reservation - cancelElastic`);
+            delete reservation.sqlData.id;
+            delete reservation.elasticData.id;
+            return createReservation(reservation, data);
+        })
 }
-
-exports.get = (req, res) => {
-    const data = url.parse(req.url, true).query;
-    const obj = querystring.parse(data);
-    const reservation = new Reservation(data);
-    // console.log('GET request!', reservation);
-    reservationHandler(reservation, data, 'GET')
-        .then(result => { res.status(201).send('Reservation saved properly : GET')})
-        .catch(err => { res.status(500).send(`GET error :${err.message}`)});
-};
-
-exports.post = (req, res) => {
-    const data = req.body;
-    const reservation = new Reservation(data);
-    // console.log('Post request!', reservation);
-    if (!req.get('Content-Type')) {
-        Exceptor.report(Exceptor.TYPE.UNKNOWN_CONTENT_TYPE, 'Content-Type should be json');
-        return res.status(400).send("Content-Type should be json")
-    }
-    reservationHandler(reservation, data, 'POST')
-        .then(result => { res.status(201).send('Reservation saved properly : POST')})
-        .catch(err => { res.status(500).send(`POST error :${err.message}`)});
-};
-
-exports.edit = (req, res) => {
-    const data = url.parse(req.url, true).query;
-    const reservation = new Reservation(data);
-    // console.log('EDIT request! data : ', reservation);
-    reservationHandler(reservation, data, 'EDIT')
-        .then(result => { res.status(201).send('Reservation saved properly : EDIT')})
-        .catch(err => { res.status(500).send(`EDIT error :${err.message}`)});
-};

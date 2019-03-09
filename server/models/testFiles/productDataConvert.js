@@ -1,4 +1,4 @@
-const fbDB = require('../../databaseAuth/firebase').database;
+const fbDB = require('../../auth/firebase').database;
 const testFile = require('./v1ProductData.json');
 const LANGUAGE_MAP = { // 1 : THAI, 3 : VIETNAMESE, 5: TAGALOG, ... (Ktourstory 웹에서 확인)
     '0':'KOREAN',
