@@ -2,9 +2,10 @@ const sqlDB = require('../auth/postgresql');
 const fbDB = require('../auth/firebase').database;
 const elasticDB = require('../auth/elastic');
 const validation = require('./validation');
+const log = require('../../log');
 const TIME_OFFSET_MAP = {'UTC0':0,'UTC+1':-60,'UTC+2':-120,'UTC+3':-180,'UTC+4':-240,'UTC+5':-300,'UTC+6':-360, 'UTC+7':-420,'UTC+8':-480,'UTC+9':-540,'UTC+10':-600,'UTC+11':-660,'UTC+12':-720,'UTC-1':60,'UTC-2':120,'UTC-3':180,'UTC-4':240,'UTC-5':300,'UTC-6':360,'UTC-7':420,'UTC-8':480,'UTC-9':540,'UTC-10':600,'UTC-11':660};
 const RESERVATION_KEY_MAP = validation.RESERVATION_KEY_MAP;
-const Exceptor = require('../../exceptor');
+
 const BUS_PEOPLE_MAX_NUMBER = 40;
 sqlDB.connect();
 
@@ -18,7 +19,7 @@ class Team {
 
 class Reservation {
     constructor(data) {
-        if (data.adult + data.kid + data.infant <= 0) Exceptor.report(Exceptor.TYPE.NO_PEOPLE_NUMBER_INFO, 'Total number of people is zero');
+        if (data.adult + data.kid + data.infant <= 0) log.info('INFO', 'Reservation people number', 'Total number of people is zero', {message_id:data.message_id});
         const currentDate = Reservation.getGlobalDate();
         this.sqlData = Reservation.generatePostgreSQLObject(data, currentDate);
         this.elasticData = Reservation.generateElasticObject(data, currentDate);
@@ -197,7 +198,10 @@ class Reservation {
             const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 const bool = (result.command === 'INSERT' && result.rowCount === 1);
-                if (err || !bool) throw new Error('Reservation insert to SQL failed');
+                if (err || !bool) {
+                    log.warn('WARN', 'SQL DB insert fail', 'data insert to SQL failed', {reservation_id : reservation.id});
+                    throw new Error('Reservation insert to SQL failed');
+                }
                 resolve(result.rows[0]);
             });
         });
@@ -213,7 +217,10 @@ class Reservation {
             const query = `UPDATE reservation SET canceled = true WHERE id = ${reservation.id}`;
             sqlDB.query(query, (err, result) => {
                 const bool = (result.command === 'UPDATE' && result.rowCount === 1);
-                if (err || !bool) throw new Error('Reservation update from SQL failed');
+                if (err || !bool) {
+                    log.warn('WARN', 'SQL DB cancel fail', 'data update from SQL failed - make "cancel" column to TRUE', {reservation_id : reservation.id});
+                    throw new Error('Reservation update from SQL failed');
+                }
                 resolve(result.rows[0]);
             });
         });
@@ -237,7 +244,7 @@ class Reservation {
      * @param reservation {Object} reservation object
      * @param data {Object} tongjjabaegi object from Clinet server or BOT.
      * @param operation {Object} operation data from firebase. starts with team data.
-     * @returns {Promise<void>}
+     * @returns {admin.database.ThenableReference}
      */
     static regularTeamBuild(reservation, data, operation) {
         if (!operation.teams) operation.teams = [];
@@ -256,7 +263,7 @@ class Reservation {
                     .child('teams').child(teamId).child('reservations').child(reservation.id).update(fbReservation);
             }
         }
-        Reservation.newTeamBuild(reservation, data);
+        return Reservation.newTeamBuild(reservation, data);
     }
 
     /**
@@ -266,32 +273,41 @@ class Reservation {
      */
     static insertFB(reservation, data) {
         const reservedPeopleNumber = data.adult + data.kid + data.infant;
-        fbDB.ref.child(data.date).child(reservation.productData.id).once('value', (snapshot) => {
-            const operation = snapshot.val();
-            if (reservation.productData.name.match(/private/i)) {
-                Reservation.newTeamBuild(reservation, data);
-            } else if (reservedPeopleNumber > BUS_PEOPLE_MAX_NUMBER) {
-                throw new Error(`maximum people number exceeded in one reservation : ${reservation.id}`)
-            } else {
-                return Reservation.regularTeamBuild(reservation, data, operation);
-            }
-        });
+        return new Promise((resolve, reject) => {
+            fbDB.ref.child(data.date).child(reservation.productData.id).once('value', (snapshot) => {
+                const operation = snapshot.val();
+                if (reservation.productData.name.match(/private/i)) {
+                    resolve(Reservation.newTeamBuild(reservation, data));
+                } else if (reservedPeopleNumber > BUS_PEOPLE_MAX_NUMBER) {
+                    log.debug('DEBUG', 'Reservation people number', 'maximum people number exceeded in one reservation');
+                    reject(`maximum people number exceeded in one reservation : ${reservation.id}`);
+                    //todo : make function for large number reservation here.
+                } else {
+                    resolve(Reservation.regularTeamBuild(reservation, data, operation));
+                }
+            });
+        }).catch(err => {throw new Error(err)})
     }
 
     /**
      * cancel FB : delete previous data in firebase.
      * @param reservation {Object} reservation object
+     * @param data {Object} tonjjabaegi data from Clinet server of BOT.
      */
-    static cancelFB(reservation) {
+    static cancelFB(reservation, data) {
         const operationArr = reservation.operation.split('/');
         const date = operationArr[0];
         const productId = operationArr[1];
         const teamId = operationArr[2];
         const reservationId = operationArr[3];
-        fbDB.ref.child(date).child(productId).child('teams').child(teamId)
-            .child('reservations').child(reservationId).remove(err => {
+        return new Promise((resolve, reject) => {
+            fbDB.ref.child(date).child(productId).child('teams').child(teamId)
+                .child('reservations').child(reservationId).remove(err => {
                 if (err) throw new Error(`reservation removed failed in firebase : ${reservationId}`);
-        })
+                resolve(true)})})
+            .then((result) => {
+                if (result) return Reservation.insertFB(reservation, data);
+            });
     }
 
     /**
@@ -308,7 +324,7 @@ class Reservation {
                 body: reservation
             },(err, resp) => {
                 if (err || resp.result !== 'created' || resp._shards.successful <= 0) {
-                    Exceptor.report(Exceptor.TYPE.NETWORK_ERR, `Elastic search insert failed. reservation id : ${reservation.id}`);
+                    log.warn('WARN', 'DB fail', 'insert into Elastic', {reservation_id : reservation.id});
                     throw new Error('Failed : insertElastic');
                 }
                 resolve(true);
@@ -329,7 +345,7 @@ class Reservation {
                 id : reservation.id
             }, (err, resp) => {
                 if (err || resp.result !== 'deleted' || resp._shards.successful <= 0) {
-                    Exceptor.report(Exceptor.TYPE.NETWORK_ERR, `Elastic search delete failed. reservation id : ${reservation.id}`);
+                    log.warn('WARN', 'DB fail', 'delete from Elastic', {reservation_id : reservation.id});
                     throw new Error('Failed : cancelElastic')}
                 resolve(resp)})})
             .then(() => {
@@ -355,7 +371,7 @@ class Reservation {
                 }
             }, (err, resp) => {
                 if (err || resp.timed_out) {
-                    Exceptor.report(Exceptor.TYPE.NETWORK_ERR, `Elastic search search failed. query : ${query}`);
+                    log.warn('WARN', 'Search DB fail', 'query from Elastic', {query : query});
                     throw new Error('Failed : searchElastic',err);
                 }
                 if (resp._shards.successful <= 0) resolve(result);

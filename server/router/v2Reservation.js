@@ -2,6 +2,7 @@ const sqlDB = require('../auth/postgresql');
 const Reservation = require('../models/reservation');
 const Product = require('../models/product');
 const accountRouter = require('./v2Account');
+const log = require('../../log');
 sqlDB.connect();
 
 exports.post = (req, res) => {
@@ -109,46 +110,62 @@ function reservationHandler(reservation, data, action) {
 }
 
 /**
- * Reservation create function and insert to SQL, EL, FB
+ * Reservation create function and insert to SQL, FB, EL
+ * if FB insert fail, SQL data will be canceled.
+ * if EL insert fail, SQL data will be canceled and FB data will be deleted.
  * @param reservation {Object} reservation object
  * @param data {Object} raw requested data
  * @returns {Promise<boolean | never>}
  */
 function createReservation(reservation, data) {
-    let overallData = data;
+    let fail = {sql:false, fb:false, elastic:false};
     return Reservation.insertSQL(reservation.sqlData)
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - insertSQL`);
-            overallData.reservation_id = result.id;
-            reservation.elasticData.id = result.id;
-            return Reservation.insertFB(reservation, overallData)})
+            if (!result) {
+                fail.sql = true;
+                return false;
+            }
+            data.reservation_id = result.id;
+            data.elasticData.id = result.id;
+            reservation.id = result.id;
+            return Reservation.insertFB(reservation, data)})
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - insertFB`);
+            if (!result && !fail.sql) fail.fb = true;
+            if (fail.sql) return Reservation.cancelSQL(reservation);
             return Reservation.insertElastic(reservation.elasticData)})
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - insertElastic`);
-            return overallData;
+            if (!result && !fail.fb) fail.elastic = true;
+            if (fail.fb) return Reservation.cancelFB(reservation, data).then(() => {return Reservation.cancelSQL(reservation)});
+            return data;
         })
 }
 
 /**
  * Reservation edit function and update SQL, delete and create EL, FB
  * For next createReservation task, reservation id is deleted in reservation object.
+ * if update fail is present for SQL / FB / Elastic, only log will be called because original data will not be modified due to error.
  * @param reservation {Object} reservation
  * @param data {Object} raw requested data
  * @returns {Promise<boolean | never | never>}
  */
 function updateReservation(reservation, data) {
+    let fail = {sql:false, fb:false, elastic:false};
     return Promise.resolve(Reservation.cancelSQL(reservation))
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - updateSQL`);
+            if (!result) {
+                fail.sql = true;
+                return false;
+            }
             data.canceled_reservation_id = result.id;
-            return Reservation.cancelFB(reservation)})
+            return Reservation.cancelFB(reservation, data)})
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - cancelFB`);
+            if (!result && !fail.sql) fail.fb = true;
+            if (fail.sql) log.warn('WARN', 'SQL update fail', 'Reservation data update from SQL failed', {reservation_id : reservation.id});
             return Reservation.cancelElastic(reservation)})
         .then(result => {
-            if (!result) throw new Error(`No result from Reservation - cancelElastic`);
+            if (!result && !fail.fb) fail.elastic = true;
+            if (fail.fb) log.warn('WARN', 'FB update fail', 'Reservation data delete / create from / to FB failed', {reservation_id : reservation.id});
+            if (fail.elastic) log.warn('WARN', 'Elastic update fail', 'Reservation data delete / create from / to Elastic failed', {reservation_id : reservation.id});
             delete reservation.sqlData.id;
             delete reservation.elasticData.id;
             return createReservation(reservation, data);

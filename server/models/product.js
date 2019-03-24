@@ -1,9 +1,6 @@
-const fbDB = require('../databaseAuth/firebase').database;
-const sqlDB = require('../databaseAuth/postgresql');
+const fbDB = require('../auth/firebase').database;
+const sqlDB = require('../auth/postgresql');
 const TIME_OFFSET_MAP = {'UTC0':0,'UTC+1':-60,'UTC+2':-120,'UTC+3':-180,'UTC+4':-240,'UTC+5':-300,'UTC+6':-360, 'UTC+7':-420,'UTC+8':-480,'UTC+9':-540,'UTC+10':-600,'UTC+11':-660,'UTC+12':-720,'UTC-1':60,'UTC-2':120,'UTC-3':180,'UTC-4':240,'UTC-5':300,'UTC-6':360,'UTC-7':420,'UTC-8':480,'UTC-9':540,'UTC-10':600,'UTC-11':660};
-const LANGUAGE_SET = new Set(['KOREAN', 'ENGLISH', 'CHINESE']);
-const Exceptor = require('../../exceptor');
-const Reservation = require('./reservation');
 let productMap = new Map();
 
 class Product {
@@ -120,12 +117,18 @@ class Product {
         };
     }
 
-    static getAvailablePriceGroup(operation_date, product) {
+    /**
+     * return available price group from Firebase based on tour_date and sales status.
+     * @param tour_date
+     * @param product
+     * @returns {Array}
+     */
+    static getAvailablePriceGroup(tour_date, product) {
         const availableGroup = [];
         Object.keys(product.sales).forEach(key => {
             if (product.sales[key].on) {
                 let tour_date = product.sales[key].tour_date;
-                if (Product.checkValidFBDate(operation_date, tour_date.begin, tour_date.end, product.timezone)) {
+                if (Product.checkValidFBDate(tour_date, product.tour_begin, product.tour_end, product.timezone)) {
                     availableGroup.push(product.sales[key]);
                 }
             }
@@ -134,22 +137,22 @@ class Product {
     }
 
     /**
-     * Compare operation_date and product's begin / end date with year, month, day
-     * @param operation_date {Object} operation date from SQL which contains timezone information
+     * Compare tour_date and product's begin / end date with year, month, day
+     * @param tour_date {Object} operation date from SQL which contains timezone information
      * @param begin {String} price group's available begin date from Firebase
      * @param end {String} price group's available end date from Firebase
      * @param timezone {String} product's timezone information
      */
-    static checkValidFBDate(operation_date, begin, end, timezone) {
+    static checkValidFBDate(tour_date, begin, end, timezone) {
         const array = {begin:[],target:[],end:[]};
-        array.target = operation_date.toISOString().slice(0,10).split('-');
+        array.target = tour_date.toISOString().slice(0,10).split('-');
         array.begin = begin.split('-');
         array.end = end.split('-');
         const newBegin = new Date(array.begin[0], array.begin[1]-1,array.begin[2]);
         const newTarget = new Date(array.target[0], array.target[1]-1,array.target[2]);
         const newEnd = new Date(array.end[0], array.end[1]-1,array.end[2]);
         // console.log(`begin : ${begin} --> ${newBegin}`);
-        // console.log(`target : ${operation_date} --> ${newTarget}`);
+        // console.log(`target : ${tour_date} --> ${newTarget}`);
         // console.log(`end : ${end} --> ${newEnd}`);
         return newBegin <= newTarget && newTarget <= newEnd;
     }
@@ -244,9 +247,9 @@ function monitorProduct() {
 }
 
 function testTourDateCheck(id) {
-    sqlDB.query(`SELECT operation_date from reservation where id = ${id}`, (err, result) => {
-        console.log('date from SQL : ', result.rows[0].operation_date);
-        const date = result.rows[0].operation_date;
+    sqlDB.query(`SELECT tour_date from reservation where id = ${id}`, (err, result) => {
+        console.log('date from SQL : ', result.rows[0].tour_date);
+        const date = result.rows[0].tour_date;
         const FBbegin = '2018-04-10';
         const FBend = '2018-04-11';
         const timezone = 'UTC+9';
@@ -259,13 +262,13 @@ function testGetPriceGroup(id) {
         .then(result => {
             product = result;
             return new Promise((resolve, reject) => {
-                sqlDB.query(`SELECT operation_date from reservation WHERE id = '${id}'`, (err, result) => {
+                sqlDB.query(`SELECT tour_date from reservation WHERE id = '${id}'`, (err, result) => {
                     console.log(result.rows);
-                    const date = result.rows[0].operation_date;
+                    const date = result.rows[0].tour_date;
                     console.log('sql database result : ',date);
                     resolve(date); })})})
-        .then(operation_date => {
-            const finalResult =  Product.checkValidFBDate(operation_date, product.availability.reserve_date.begin, product.availability.reserve_date.end, product.timezone)
+        .then(tour_date => {
+            const finalResult =  Product.checkValidFBDate(tour_date, product.reserve_begin, product.reserve_end, product.timezone)
             console.log(finalResult);
             return finalResult;
         });
@@ -288,21 +291,22 @@ function testGetProductWithReservation(){
             console.log(JSON.stringify(finalObj));
         }));
 }
-function testoperationDateCheck(){
-    let operation_date;
+
+function testOperationDateCheck(){
+    let tour_date;
     let product;
     Product.getProduct('Seoul_Regular_레남쁘')
         .then(result => {
-            console.log('Before Class : ', [result.sales.default.tour_date.begin, result.sales.default.tour_date.end]);
+            console.log('Before Class : ', [result.sales.default.tour_begin, result.sales.default.tour_end]);
             product = new Product(result);
-            console.log('after Class : ', [result.sales.default.tour_date.begin, result.sales.default.tour_date.end]);
+            console.log('after Class : ', [result.sales.default.tour_begin, result.sales.default.tour_end]);
             return new Promise((resolve, reject) => {
                 sqlDB.query(`SELECT * FROM reservation WHERE id = 'Seoul_Regular_레남쁘'`, (err, result) => {
                     resolve(result.rows[0])
                 })})})
         .then(result => {
-            operation_date = result.operation_date;
-            return Product.checkValidFBDate(result.operation_date,product.sales.default.tour_date.begin, product.sales.default.tour_date.end, product.timezone)})
+            tour_date = result.tour_date;
+            return Product.checkValidFBDate(result.tour_date,product.sales.default.tour_begin, product.sales.default.tour_end, product.timezone)})
         .then(result => {
             console.log('final result : ',result)
         });

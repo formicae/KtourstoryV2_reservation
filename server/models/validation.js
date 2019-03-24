@@ -1,207 +1,190 @@
-const RESERVATION_KEY_MAP = ['id', 'mail_id', 'product_id', 'agency_id', 'reserved_name', 'nationality', 'operation_date', 'pickup_place', 'name', 'option', 'adult', 'child', 'infant', 'memo', 'phone', 'email', 'messenger', 'canceled', 'reserved_date', 'modify_date', 'cancel_comment'];
-const ACCOUNT_KEY_MAP = ['id', 'reservation_id', 'writer', 'created', 'category', 'currency', 'card_income', 'card_expenditure', 'cash_income', 'cash_expenditure', 'option'];
+const RESERVATION_KEY_MAP = ['id', 'message_id', 'product_id', 'agency', 'reserved_name', 'nationality', 'tour_date', 'pickup', 'name', 'options', 'adult', 'kid', 'infant', 'memo', 'phone', 'email', 'messenger', 'canceled', 'created_date', 'modified_date', 'cancel_comment'];
+const ACCOUNT_KEY_MAP = ['id', 'reservation_id', 'writer', 'created_date', 'category', 'currency', 'income', 'expenditure', 'cash_income', 'cash_expenditure', 'options'];
 const DAY_MAP = {'MON':0,'TUE':1,'WED':2,'THU':3,'FRI':4,'SAT':5,'SUN':6,'0':'MON','1':'TUE','2':'WED','3':'THU','4':'FRI','5':'SAT','6':'SUN'};
-const env = require('../../package.json').env;
-const Exceptor = require('../../exceptor');
 const Product = require('./product');
-const sqlDB = require('../databaseAuth/postgresql');
+const env = require('../../package.json').env;
+const sqlDB = require('../auth/postgresql');
 sqlDB.connect();
+
 const ACCOUNT_VALID_CHECK_LIST_MAP = {
-    'account_id' : false,
-    'reservation_id' : true,
+    'id' : false,
     'writer' : true,
-    'created' : true,
     'category' : true,
     'currency' : true,
-    'card_income' : true,
-    'card_expenditure' : true,
-    'cash_income' : true,
-    'cash_expenditure' : true,
-    'option' : false,
+    'income' : true,
+    'expenditure' : true,
+    'cash' : true,
+    'memo' : true,
+    'created_date' : true,
+    'reservation_id' : false,
     'totalMoneyCheck' : true
 };
+
 const RESERVATION_UPDATE_VALID_CHECK_LIST_MAP = {
-    'reservation_id':true,
-    'mail_id':true,
-    'productCheck':true,
-    'agency_id':true,
-    'reserved_name':true,
-    'nationality':true,
-    'operation_date':true,
-    'pickup_place':true,
-    'name':true,
-    'option':false,
+    'id':true,
+    'message_id':true,
+    'writer':true,
+    'agency':true,
+    'tour_date':true,
+    'options':false,
     'adult':true,
-    'child':true,
+    'kid':true,
     'infant':true,
-    'memo':false,
-    'phone':false,
-    'email':false,
-    'messenger':false,
     'canceled':true,
-    'reserved_date':true,
-    'modify_date':true,
-    'cancel_comment':false,
-    'totalPeopleNumberCheck':true
-};
-const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
-    'reservation_id':false,
-    'mail_id':true,
+    'created_date':true,
+    'modified_date':true,
     'productCheck':true,
-    'agency_id':true,
-    'reserved_name':true,
-    'nationality':true,
-    'operation_date':true,
-    'pickup_place':true,
-    'name':true,
-    'option':false,
-    'adult':true,
-    'child':true,
-    'infant':true,
-    'memo':false,
-    'phone':false,
-    'email':false,
-    'messenger':false,
-    'canceled':false,
-    'reserved_date':true,
-    'modify_date':true,
-    'cancel_comment':false,
     'totalPeopleNumberCheck':true
 };
+
+const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
+    'id':false,
+    'message_id':true,
+    'writer':true,
+    'agency':true,
+    'tour_date':true,
+    'options':false,
+    'adult':true,
+    'kid':true,
+    'infant':true,
+    'canceled':true,
+    'created_date':true,
+    'modified_date':true,
+    'productCheck':true,
+    'totalPeopleNumberCheck':true
+};
+
+/**
+ * Parameter Map for reservation validation
+ * @param data {Object} Reservation object
+ * @returns {Map<any, any>} Reservation parameter map
+ * @constructor
+ */
 function RESERVATION_VALID_CHECK_PARAMETER_MAP(data) {
     return new Map([
-        ['reservation_id', ['reservation', 'id', Number(data.id), 'number']],
-        ['mail_id', [data.mail_id, 'string']],
-        ['productCheck', [data.product_id, data.operation_date]],
-        ['agency_id', [data.agency_id, 'string']],
-        ['reserved_name', [data.reserved_name, 'string']],
-        ['nationality', [data.nationality, 'string']],
-        ['operation_date', [data.operation_date, data.product_id]],
-        ['pickup_place', [data.pickup_place, 'string']],
-        ['name', [data.name, 'string']],
-        ['option', [data.option, 'object']],
-        ['adult', [Number(data.adult)]],
-        ['child', [Number(data.child)]],
-        ['infant', [Number(data.infant)]],
-        ['memo', [data.memo, 'string']],
-        ['phone', [data.phone, 'string']],
-        ['email', [data.email, 'string']],
-        ['messenger', [data.messenger, 'string']],
-        ['canceled', [Boolean(data.canceled), 'boolean']],
-        ['reserved_date', [data.reserved_date]],
-        ['modify_date', [data.modify_date]],
-        ['cancel_comment', [data.cancel_comment, 'string']],
-        ['totalPeopleNumberCheck', [Number(data.adult), Number(data.child), Number(data.infant)]],
+        ['id', ['reservation', 'id', data.id]],
+        ['message_id', [data.message_id, 'string']],
+        ['writer', [data.writer, 'string']],
+        ['agency', [data.agency, 'string']],
+        ['tour_date', [data.tour_date, data.product_id]],
+        ['options', [data.options, 'object']],
+        ['adult', [data.adult]],
+        ['kid', [data.kid]],
+        ['infant', [data.infant]],
+        ['canceled', [data.canceled, 'boolean']],
+        ['created_date', [data.created_date]],
+        ['modified_date', [data.modified_date]],
+        ['productCheck', [data.product_id, data.tour_date]],
+        ['totalPeopleNumberCheck', [data.adult, data.kid, data.infant]],
     ]);
 }
+
+/**
+ * Parameter Map for account validation
+ * @param data {Object} Account object
+ * @returns {Map<any, any>} Account parameter map
+ * @constructor
+ */
 function ACCOUNT_VALID_CHECK_PARAMETER_MAP(data) {
     return new Map([
-        ['account_id', ['account', 'id', Number(data.id), 'number']],
-        ['reservation_id', ['reservation', 'id', Number(data.reservation_id), 'number']],
+        ['id', ['account', 'id', data.id]],
         ['writer', [data.writer, 'string']],
-        ['created', [data.created]],
         ['category', [data.category, 'string']],
         ['currency', [data.currency, 'string']],
-        ['card_income', [Number(data.card_income)]],
-        ['card_expenditure', [Number(data.card_expenditure)]],
-        ['cash_income', [Number(data.cash_income)]],
-        ['cash_expenditure', [Number(data.cash_expenditure)]],
-        ['option', [data.option, 'object']],
-        ['totalMoneyCheck', [Number(data.card_income), Number(data.card_expenditure), Number(data.cash_income), Number(data.cash_expenditure)]]
+        ['income', [data.income]],
+        ['expenditure', [data.expenditure]],
+        ['cash', [data.cash, 'boolean']],
+        ['memo', [data.memo, 'string']],
+        ['created_date', [data.created_date]],
+        ['reservation_id', ['reservation', 'reservation_id', data.reservation_id]],
+        ['totalMoneyCheck', [data.income, data.expenditure]]
     ]);
 }
+
+/**
+ * Function Map for Reservation validation
+ * @returns {Map<any, any>} Reservation function map
+ * @constructor
+ */
 function RESERVATION_VALID_CHECK_FUNCTION_MAP() {
     return new Map([
-        ['reservation_id', validCheckObjectSQL],
-        ['mail_id',validCheckSimpleItem],
-        ['productCheck',validCheckProduct],
-        ['agency_id',validCheckSimpleItem],
-        ['reserved_name',validCheckOptionalItem],
-        ['nationality',validCheckOptionalItem],
-        ['operation_date', validCheckOperationDateTime],
-        ['pickup_place', validCheckOptionalItem],
-        ['name', validCheckSimpleItem],
-        ['option',validCheckOptionalItem],
+        ['id', validCheckObjectSQL],
+        ['message_id',validCheckSimpleItem],
+        ['writer', validCheckOptionalItem],
+        ['agency',validCheckSimpleItem],
+        ['tour_date', validCheckOperationDateTime],
+        ['options',validCheckOptionalItem],
         ['adult', validCheckPeopleNumber],
-        ['child', validCheckPeopleNumber],
+        ['kid', validCheckPeopleNumber],
         ['infant', validCheckPeopleNumber],
-        ['memo', validCheckOptionalItem],
-        ['phone', validCheckOptionalItem],
-        ['email', validCheckOptionalItem],
-        ['messenger', validCheckOptionalItem],
-        ['canceled', validCheckOptionalItem],
-        ['reserved_date', validCheckSimpleDateTime],
-        ['modify_date', validCheckSimpleDateTime],
-        ['cancel_comment', validCheckOptionalItem],
+        ['canceled', validCheckSimpleItem],
+        ['created_date', validCheckSimpleDateTime],
+        ['modified_date', validCheckSimpleDateTime],
+        ['productCheck',validCheckProduct],
         ['totalPeopleNumberCheck', validCheckTotalPeopleNumber],
     ]);
 }
+
+/**
+ * Function Map for Account validation
+ * @returns {Map<any, any>} Account function map
+ * @constructor
+ */
 function ACCOUNT_VALID_CHECK_FUNCTION_MAP() {
     return new Map([
-        ['account_id', validCheckObjectSQL],
-        ['reservation_id', validCheckObjectSQL],
+        ['id', validCheckObjectSQL],
         ['writer', validCheckOptionalItem],
-        ['created', validCheckSimpleDateTime],
         ['category', validCheckOptionalItem],
         ['currency', validCheckSimpleItem],
-        ['card_income', validCheckMoney],
-        ['card_expenditure', validCheckMoney],
-        ['cash_income', validCheckMoney],
-        ['cash_expenditure', validCheckMoney],
-        ['option', validCheckOptionalItem],
+        ['income', validCheckMoney],
+        ['expenditure', validCheckMoney],
+        ['cash', validCheckSimpleItem],
+        ['memo', validCheckOptionalItem],
+        ['created_date', validCheckSimpleDateTime],
+        ['reservation_id', validCheckObjectSQL],
         ['totalMoneyCheck', validCheckTotalMoneyAmount]
     ]);
 }
 
 /**
- *
+ * Check if object ID exist in postgreSQL.
  * @param table {String} table name of database
  * @param field {String} field name of table
  * @param objectId {String | Number} object id
- * @param type {String | Number} expected type of corresponding objectId
- * @returns {Promise<boolean>}
+ * @returns {Promise<boolean>} return true if table has objectId in certain field.
  */
-function validCheckObjectSQL (table, field, objectId, type) {
+function validCheckObjectSQL (table, field, objectId) {
     const tempValue = (typeof objectId === 'string') ? `"${objectId}"` : objectId;
-    if (!objectId && typeof objectId !== type) return Promise.resolve(false);
     const query = `SELECT EXISTS(SELECT 1 FROM ${table} WHERE ${field} = ${tempValue})`;
-    console.log('validCheckObjectSQL - query : ',table,field, objectId, type, query);
+    // console.log('validCheckObjectSQL - query : ',table,field, objectId, query);
     return new Promise((resolve, reject) => {
         sqlDB.query(query, (err, result) => {
             if (err) throw new Error(`validCheckObjectSQL failed : [${table}, ${field}, ${objectId}]`);
             if (!result || result.rowCount <= 0 || !result.rows[0].exists) {
-                Exceptor.report(Exceptor.TYPE.NO_OBJECT_ID_IN_DATABASE, `No object. table & field : ${table} & ${field} / object id : ${objectId}`);
-                resolve(false);
-            } else { resolve(true) }
+                // Exceptor.report(Exceptor.TYPE.NO_OBJECT_ID_IN_DATABASE, `No object. table & field : ${table} & ${field} / object id : ${objectId}`);
+                resolve(false)}
+            resolve(true);
         });
-    }).catch(err => {
-        if (field === 'id') Exceptor.report(Exceptor.TYPE.UNKNOWN_RESERVATION, `${err.message}`);
-        else if (field === 'account_id') Exceptor.report(Exceptor.TYPE.UNKNOWN_ACCOUNT, `${err.message}`);
-        return err;
-    })
+    }).catch(err => {return err.message;})
 }
 
-function validCheckProduct(product_id, operation_date) {
+function validCheckProduct(product_id, tour_date) {
     let product;
     return Product.getProduct(product_id)
         .then(result => {
             if (!result) {
-                Exceptor.report(Exceptor.TYPE.UNKNOWN_PRODUCT, `Unknown product id in reservation : ${product_id}`);
-                return false;
-            } else {
-                product = result;
-                return product.availability.on === 'ON' }})
+                // Exceptor.report(Exceptor.TYPE.UNKNOWN_PRODUCT, `Unknown product id in reservation : ${product_id}`);
+                return false;}
+            product = result;
+            return product.on === 'ON' })
         .then(statusCheck => {
             if (!statusCheck) {
-                Exceptor.report(Exceptor.TYPE.CLOSED_PRODUCT, `Product Status is STOP. product_id : ${product_id}`);
-                return false;
-            } else { return Product.getAvailablePriceGroup(operation_date, product) }})
+                // Exceptor.report(Exceptor.TYPE.CLOSED_PRODUCT, `Product Status is STOP. product_id : ${product_id}`);
+                return false;}
+            return Product.getAvailablePriceGroup(tour_date, product) })
         .then(availablePriceGroup => {
             if (!availablePriceGroup) return false;
-            if (availablePriceGroup.length > 1) {
-                Exceptor.report(Exceptor.TYPE.MULTIPLE_PRICE_GROUP, `available price group : ${availablePriceGroup}`);
-                return false;
-            } else { return true }
+            return availablePriceGroup.length > 1;
         });
 }
 
@@ -221,16 +204,16 @@ function validCheckOptionalItem(item, type) {
 }
 /**
  *
- * @param operation_date {Date} Local date (UTC+9)
+ * @param tour_date {Date} Local date (UTC+9)
  * @param product_id {Number} product id
  * @returns {Promise<any | never | boolean>}
  */
-function validCheckOperationDateTime(operation_date, product_id) {
+function validCheckOperationDateTime(tour_date, product_id) {
     let product;
-    if (!operation_date) throw new Error(`operation date is undefined ${operation_date}`);
+    if (!tour_date) throw new Error(`operation date is undefined ${tour_date}`);
     if (!product_id) throw new Error(`product id is undefined ${product_id}`);
     return new Promise((resolve, reject) => {
-        resolve(validCheckSimpleDateTime(operation_date))})
+        resolve(validCheckSimpleDateTime(tour_date))})
         .then(simpleCheck => {
             // console.log('validCheckOperationDateTime - simpleCheck : ', simpleCheck);
             if (!simpleCheck) return false;
@@ -239,40 +222,27 @@ function validCheckOperationDateTime(operation_date, product_id) {
             product = result;
             // console.log('validCheckOperationDateTime - product : ', !!product);
             if (!result) {
-                Exceptor.report(Exceptor.TYPE.UNKNOWN_PRODUCT, `No product in product map. product_id : ${product_id}`);
+                // Exceptor.report(Exceptor.TYPE.UNKNOWN_PRODUCT, `No product in product map. product_id : ${product_id}`);
                 throw new Error('UNKNOWN_PRODUCT'); }
-            return validCheckDayOfWeek(product, operation_date)})
+            return validCheckDayOfWeek(product, tour_date)})
         .then(dayCheck => {
             // console.log('validCheckOperationDateTime - dayCheck : ', dayCheck);
             if (!dayCheck) {
-                Exceptor.report(Exceptor.TYPE.INVALID_OPERATION_DAY_OF_WEEK, `Operation Date Wrong day. product_id : ${product_id}`);
-                throw new Error('INVALID_OPERATION_DAY_OF_WEEK')
-            }
-            return Product.checkValidFBDate(operation_date, product.availability.reserve_date.begin, product.availability.reserve_date.end, product.timezone)})
-        .then(reserveDateCheck => {
-            // console.log('validCheckOperationDateTime - reserveDateCheck : ', reserveDateCheck);
-            if (!reserveDateCheck) {
-                Exceptor.report(Exceptor.TYPE.INVALID_OPERATION_DATE, `Invalid operation date compare to reserve_date : [${product.availability.reserve_date.begin}, ${product.availability.reserve_date.end}]`);
-                throw new Error('Invalid Operation date at reserverDateCheck!');
-            }
-            const priceGroup = Product.getAvailablePriceGroup(operation_date, product);
-            if (priceGroup.length === 0) {
-                Exceptor.report(Exceptor.TYPE.NO_MATCHING_PRICE_GROUP, 'In operation date check');
-                throw new Error('validCheckOperationDateTime - no matching price group');
-            }
-            let availablePriceGroup = [];
-            priceGroup.forEach(group => {
-                if (Product.checkValidFBDate(operation_date, group.tour_date.begin, group.tour_date.end, product.timezone)) {
-                    availablePriceGroup.push(group);
-                }
-            });
-            // console.log('validCheckOperationDateTime - priceGroupCheck : ', availablePriceGroup.length > 0);
-            return availablePriceGroup.length > 0;
+                // Exceptor.report(Exceptor.TYPE.INVALID_OPERATION_DAY_OF_WEEK, `Operation Date Wrong day. product_id : ${product_id}`);
+                throw new Error('INVALID_OPERATION_DAY_OF_WEEK')}
+            return Product.checkValidFBDate(tour_date, product.tour_begin, product.tour_end, product.timezone)})
+        .then(tourDateCheck => {
+            if (!tourDateCheck) throw new Error('Invalid Operation date at tourDateCheck!');
+            return Product.checkValidFBDate(new Date(), product.reserve_begin, product.reserve_end, product.timezone)})
+        .then((priceGroupCheck) => {
+            if (!priceGroupCheck) throw new Error('price group check failed!');
+            if (env.released) return new Date().getTime() - tour_date.getTime() < product.deadline;
+            return true;
         }).catch(err => {return false});
 }
-// sqlDB.query('SELECT operation_date, product_id from reservation where id = 98', (err, result) => {
+// sqlDB.query('SELECT tour_date, product_id from reservation where id = 98', (err, result) => {
 //     // console.log(result)
-//     date = result.rows[0].operation_date;
+//     date = result.rows[0].tour_date;
 //     validCheckOperationDateTime(date, result.rows[0].product_id)
 //         .then(result => console.log(result));
 // })
@@ -284,6 +254,7 @@ function validCheckPeopleNumber(number) {
         else resolve(false);
     });
 }
+
 function simpleCheck(input, length, limitNumber) {
     return new Promise((resolve, reject) => {
         if (!!input && input.length === length && Number(input) <= limitNumber) {resolve(true)}
@@ -296,7 +267,7 @@ function simpleCheck(input, length, limitNumber) {
  * @param input
  * @returns {*}
  */
-function validCheckSimpleDateTime (input) {
+function validCheckSimpleDateTime(input) {
     if (!input) return Promise.resolve(false);
     const date = (typeof input === 'string') ? input : input.toISOString();
     const array = date.split('T');
@@ -328,17 +299,10 @@ function validCheckDayOfWeek(product, date) {
     // console.log('validCheckDayOfWeek : ', date, ' correctedDate -> ', correctedDate);
     let tourDay = new Date(correctedDate).getDay() - 1;
     tourDay = (tourDay < 0) ? 6 : tourDay;
-    // console.log(`tourDay : ${tourDay}, operation day : ${product.availability.days}`);
-    return product.availability.days[tourDay];
+    // console.log(`tourDay : ${tourDay}, operation day : ${product.days}`);
+    return product.days[tourDay];
 }
 
-/**
- *
- * @param target {Date} date object from reservation
- * @param begin {String} beginning of available date of price group (Firebase)
- * @param end {String} end of available date of price group (Firebase)
- * @param timezone {String} timezone information
- */
 
 function validCheckMoney(money) {
     return new Promise((resolve, reject) => {
@@ -346,16 +310,16 @@ function validCheckMoney(money) {
         resolve(false);
     });
 }
-function validCheckTotalPeopleNumber(adult, child, infant){
+function validCheckTotalPeopleNumber(adult, kid, infant){
     return new Promise((resolve, reject) => {
-        resolve(adult + child + infant > 0);
+        resolve(adult + kid + infant > 0);
     });
 }
 
-function validCheckTotalMoneyAmount(card_income, card_expenditure, cash_income, cash_expenditure){
+function validCheckTotalMoneyAmount(income, expenditure){
     return new Promise((resolve, reject) => {
-        if (card_income === 0 && card_expenditure === 0 && cash_income === 0 && cash_expenditure === 0) {
-            Exceptor.report(Exceptor.TYPE.NO_PRICE_INFO, 'sum of money is zero')
+        if (income === 0 && expenditure === 0) {
+            // Exceptor.report(Exceptor.TYPE.NO_PRICE_INFO, 'sum of money is zero')
             resolve(false);
         } else { resolve(true) }
     });
