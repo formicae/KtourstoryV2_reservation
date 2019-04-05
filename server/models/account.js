@@ -1,7 +1,8 @@
 const sqlDB = require('../auth/postgresql');
+const elasticDB = require('../auth/elastic');
 const validation = require('./validation');
 const ACCOUNT_KEY_MAP = validation.ACCOUNT_KEY_MAP;
-const Exceptor = require('../../exceptor');
+const log = require('../../log');
 
 class Account {
     constructor(data) {
@@ -31,19 +32,19 @@ class Account {
     static generateElasticObject(data, currentDate) {
         return {
             id : data.account_id,
-            writer : data.writer,
-            category : data.productData.category,
-            currency : data.productData.currency,
+            writer : data.writer || '',
+            category : data.productData.category || '',
+            currency : data.productData.currency || 'KRW',
             income : data.productData.income,
             expenditure : data.productData.expenditure,
             cash : data.cash,
-            memo : data.account_memo,
+            memo : data.account_memo || '',
             created_date: currentDate,
             reservation : {
                 id : data.reservation_id,
-                agency : data.agency,
+                agency : data.agency || '',
                 tour_date : data.date,
-                nationality : data.nationality,
+                nationality : data.nationality || '',
                 adult : data.adult,
                 kid : data.kid,
                 infant : data.infant,
@@ -53,7 +54,7 @@ class Account {
                     category : data.productData.category,
                     area : data.productData.area
                 },
-                options : data.options
+                options : data.options || {}
             }
         }
     }
@@ -80,7 +81,7 @@ class Account {
     }
 
     /**
-     *
+     * validation for account Object
      * @param account {Object} account object
      * @param detail {Boolean} false : only validation result. true : include details
      * @returns {PromiseLike<T | never> | Promise<T | never>}
@@ -100,9 +101,10 @@ class Account {
      * @param data {Object} data from v2Reservation router. Reservation id is included.
      * @returns {Promise<boolean | never>}
      */
-    static insertReverseAccountToSQL(data) {
-        let reverseAccount;
-        const queryColumns = 'acc ount.id, writer, category, currency, income, expenditure, cash, account.memo, created_date, reservation_id';
+    static insertReverseAccount(data) {
+        let reverseSQLAccount;
+        let reverseElasticAccount;
+        const queryColumns = 'account.id, writer, category, currency, income, expenditure, cash, account.memo, created_date, reservation_id';
         const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = ${data.canceled_reservation_id}`;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
@@ -111,32 +113,46 @@ class Account {
                 resolve(result.rows[0])})})
             .then(canceledData => {
                 const tempAccount = new Account(canceledData);
-                reverseAccount = Account.reverseMoneyProcess(tempAccount.sqlData);
-                return Account.insertSQL(reverseAccount)})
+                reverseSQLAccount = Account.reverseMoneyProcess(tempAccount.sqlData);
+                reverseElasticAccount = Account.reverseMoneyProcess(tempAccount.elasticData);
+                return Account.insertSQL(reverseSQLAccount)})
             .then(result => {
                 const bool = (result.command === 'INSERT' && result.rowCount === 1);
-                if (err || !bool) throw new Error(`Reverse Account insert to SQL failed.`);
-                return reverseAccount;
-            });
+                if (err || !bool) {
+                    log.warn('Model','insertReverseAccount','insert SQL failed');
+                    throw new Error(`Reverse Account insert to SQL failed.`);
+                }
+                log.debug('Model','insertReverseAccount','insert SQL success!');
+                return Account.insertElastic(reverseElasticAccount)})
+            .then(result => {
+                if (!result) {
+                    log.warn('Model', 'insertReverseAccount', 'insert Elastic failed');
+                    throw new Error(`Reverse Account insert to Elastic failed.`);
+                }
+                log.debug('Model', 'insertReverseAccount', 'insert Elastic success!');
+                return true;
+            })
     }
 
     /**
-     *
+     * insert account Object to postgreSQL database
      * @param account {Object}
      * @returns {Promise<any | never>}
      */
     static insertSQL(account) {
-        return accountCreateQuery(account)
-            .then(text => {
-                const query = `INSERT INTO account (${text.keys}) VALUES (${text.values}) RETURNING *`;
-                return new Promise((resolve, reject) => {
-                    sqlDB.query(query, (err, result) => {
-                        const bool = (result.command === 'INSERT' && result.rowCount === 1);
-                        if (err || !bool) throw new Error(`Account insert to SQL failed. Account ${account}`);
-                        resolve(result.rows[0]);
-                    });
-                });
+        const text = accountCreateQuery(account);
+        const query = `INSERT INTO account (${text.keys}) VALUES (${text.values}) RETURNING *`;
+        return new Promise((resolve, reject) => {
+            sqlDB.query(query, (err, result) => {
+                const bool = (result.command === 'INSERT' && result.rowCount === 1);
+                if (err || !bool) {
+                    log.warn('Model','Account-insertSQL',`insert SQL failed query : ${query}`);
+                    throw new Error(`Account insert to SQL failed. Account ${account}`);
+                }
+                result.rows[0].id = 'a' + result.rows[0]._id;
+                resolve(result.rows[0]);
             });
+        });
     }
 
     /**
@@ -147,41 +163,57 @@ class Account {
     static insertElastic(account) {
         return new Promise((resolve, reject)=> {
             elasticDB.create({
-                index : 'ktour_account',
+                index : 'account',
                 type : '_doc',
                 id : account.id,
                 body: account
             },(err, resp) => {
                 if (err || resp.result !== 'created' || resp._shards.successful <= 0) {
-                    Exceptor.report(Exceptor.TYPE.NETWORK_ERR, `Elastic search insert failed. reservation id : ${reservation.id}`);
+                    log.warn('Model','Account-insertElastic', `insert Elastic failed : ${account.id}`);
                     throw new Error('Failed : insert Account to Elastic');
                 }
                 resolve(true);
             });
         });
     }
-
 }
+
+// function accountCreateQuery(object) {
+//     let tempKeys = "";
+//     let tempValues = "";
+//     return new Promise((resolve, reject) => {
+//         let value;
+//         Object.keys(object).forEach((key, index) => {
+//             value = object[key];
+//             if (ACCOUNT_KEY_MAP.includes(key) && key !== 'id') {
+//                 if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
+//                 else if (typeof value === 'string') { tempValues += "'" + value + "'" + ", "}
+//                 else { tempValues += value + ", "}
+//                 tempKeys += key + ", ";
+//             }
+//             if (index === Object.keys(object).length - 1) {
+//                 resolve({keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)})
+//             }
+//         });
+//     })
+// }
 
 function accountCreateQuery(object) {
     let tempKeys = "";
     let tempValues = "";
-    return new Promise((resolve, reject) => {
-        let value;
-        Object.keys(object).forEach((key, index) => {
-            value = object[key];
-            if (ACCOUNT_KEY_MAP.includes(key) && key !== 'id') {
-                if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
-                else if (typeof value === 'string') { tempValues += "'" + value + "'" + ", "}
-                else { tempValues += value + ", "}
-                tempKeys += key + ", ";
-            }
-            if (index === Object.keys(object).length - 1) {
-                resolve({keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)})
-            }
-        });
-    })
+    let value;
+    Object.keys(object).forEach((key, index) => {
+        value = object[key];
+        if (ACCOUNT_KEY_MAP.includes(key) && key !== 'id') {
+            if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
+            else if (typeof value === 'string') { tempValues += "'" + value + "'" + ", "}
+            else { tempValues += value + ", "}
+            tempKeys += key + ", ";
+        }
+    });
+    return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
 }
+
 const testAccount = {
     id: 'testId2935',
     writer: 'Ktour || Formicae',

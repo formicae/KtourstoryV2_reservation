@@ -16,7 +16,7 @@ class V2Product {
         this.geos = [];
         this.pickups = [];
         if (data.info.pickup) {
-            data.info.pickup.forEach(each => {this.pickups.push({place:each, lat:"", lng:""})});
+            data.info.pickup.forEach(each => {this.pickups.push({place:each, lat:"", lon:""})});
         }
         this.timezone = 'UTC+9';
         this.description = data.info.description;

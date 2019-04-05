@@ -1,9 +1,10 @@
-const RESERVATION_KEY_MAP = ['id', 'message_id', 'product_id', 'agency', 'reserved_name', 'nationality', 'tour_date', 'pickup', 'name', 'options', 'adult', 'kid', 'infant', 'memo', 'phone', 'email', 'messenger', 'canceled', 'created_date', 'modified_date', 'cancel_comment'];
-const ACCOUNT_KEY_MAP = ['id', 'reservation_id', 'writer', 'created_date', 'category', 'currency', 'income', 'expenditure', 'cash_income', 'cash_expenditure', 'options'];
+const RESERVATION_KEY_MAP = ['id', 'message_id', 'writer', 'product_id', 'agency', 'agency_code', 'tour_date', 'options', 'adult', 'kid', 'infant', 'canceled', 'created_date', 'modified_date'];
+const ACCOUNT_KEY_MAP = ['id', 'writer', 'category', 'currency', 'income', 'expenditure', 'cash', 'memo', 'created_date','reservation_id'];
 const DAY_MAP = {'MON':0,'TUE':1,'WED':2,'THU':3,'FRI':4,'SAT':5,'SUN':6,'0':'MON','1':'TUE','2':'WED','3':'THU','4':'FRI','5':'SAT','6':'SUN'};
 const Product = require('./product');
 const env = require('../../package.json').env;
 const sqlDB = require('../auth/postgresql');
+const log = require('../../log');
 sqlDB.connect();
 
 const ACCOUNT_VALID_CHECK_LIST_MAP = {
@@ -25,8 +26,9 @@ const RESERVATION_UPDATE_VALID_CHECK_LIST_MAP = {
     'message_id':true,
     'writer':true,
     'agency':true,
+    'agency_code':true,
     'tour_date':true,
-    'options':false,
+    'options':true,
     'adult':true,
     'kid':true,
     'infant':true,
@@ -42,14 +44,15 @@ const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
     'message_id':true,
     'writer':true,
     'agency':true,
+    'agency_code':true,
     'tour_date':true,
-    'options':false,
+    'options':true,
     'adult':true,
     'kid':true,
     'infant':true,
     'canceled':true,
-    'created_date':true,
-    'modified_date':true,
+    'created_date':false,
+    'modified_date':false,
     'productCheck':true,
     'totalPeopleNumberCheck':true
 };
@@ -66,6 +69,7 @@ function RESERVATION_VALID_CHECK_PARAMETER_MAP(data) {
         ['message_id', [data.message_id, 'string']],
         ['writer', [data.writer, 'string']],
         ['agency', [data.agency, 'string']],
+        ['agency_code', [data.agency_code, 'string']],
         ['tour_date', [data.tour_date, data.product_id]],
         ['options', [data.options, 'object']],
         ['adult', [data.adult]],
@@ -112,6 +116,7 @@ function RESERVATION_VALID_CHECK_FUNCTION_MAP() {
         ['message_id',validCheckSimpleItem],
         ['writer', validCheckOptionalItem],
         ['agency',validCheckSimpleItem],
+        ['agency_code',validCheckSimpleItem],
         ['tour_date', validCheckOperationDateTime],
         ['options',validCheckOptionalItem],
         ['adult', validCheckPeopleNumber],
@@ -153,47 +158,68 @@ function ACCOUNT_VALID_CHECK_FUNCTION_MAP() {
  * @param objectId {String | Number} object id
  * @returns {Promise<boolean>} return true if table has objectId in certain field.
  */
-function validCheckObjectSQL (table, field, objectId) {
+function validCheckObjectSQL(table, field, objectId) {
     const tempValue = (typeof objectId === 'string') ? `"${objectId}"` : objectId;
     const query = `SELECT EXISTS(SELECT 1 FROM ${table} WHERE ${field} = ${tempValue})`;
-    // console.log('validCheckObjectSQL - query : ',table,field, objectId, query);
     return new Promise((resolve, reject) => {
         sqlDB.query(query, (err, result) => {
             if (err) throw new Error(`validCheckObjectSQL failed : [${table}, ${field}, ${objectId}]`);
             if (!result || result.rowCount <= 0 || !result.rows[0].exists) {
-                // Exceptor.report(Exceptor.TYPE.NO_OBJECT_ID_IN_DATABASE, `No object. table & field : ${table} & ${field} / object id : ${objectId}`);
+                log.warn('Validation','validCheckObjectSQL', `sqlDB query failed : [query : ${query}, objectId : ${objectId}]`);
                 resolve(false)}
             resolve(true);
         });
     }).catch(err => {return err.message;})
 }
 
+/**
+ * check if product is valid.
+ * product is retrieved from productMap and check status, price group.
+ * @param product_id {String}
+ * @param tour_date {String || Date}
+ * @returns {Promise<T | never>}
+ */
 function validCheckProduct(product_id, tour_date) {
     let product;
     return Product.getProduct(product_id)
         .then(result => {
             if (!result) {
-                // Exceptor.report(Exceptor.TYPE.UNKNOWN_PRODUCT, `Unknown product id in reservation : ${product_id}`);
+                log.warn('Validation','validCheckProduct', `getProduct failed : ${product_id}`);
                 return false;}
             product = result;
             return product.on === 'ON' })
         .then(statusCheck => {
             if (!statusCheck) {
-                // Exceptor.report(Exceptor.TYPE.CLOSED_PRODUCT, `Product Status is STOP. product_id : ${product_id}`);
+                log.warn('Validation','validCheckProduct', 'statusCheck failed. product.on is not TRUE');
                 return false;}
+            log.debug('Debug','validCheckProduct status check', `statusCheck success with ${product_id}`);
             return Product.getAvailablePriceGroup(tour_date, product) })
         .then(availablePriceGroup => {
-            if (!availablePriceGroup) return false;
-            return availablePriceGroup.length > 1;
+            if (availablePriceGroup.length === 0) return false;
+            log.debug('Debug','validCheckProduct price group check', `availablePriceGroup check success with ${JSON.stringify(availablePriceGroup)}`);
+            return availablePriceGroup.length > 0;
         });
 }
 
+/**
+ * check simple item. only compare type.
+ * @param item {any}
+ * @param type {String}
+ * @returns {Promise<any>}
+ */
 function validCheckSimpleItem(item, type) {
     return new Promise((resolve, reject) => {
-        if (!!item && typeof item === type) resolve(true);
+        if (typeof item === type) resolve(true);
         else resolve(false);
     });
 }
+
+/**
+ * check optional item
+ * @param item {any}
+ * @param type {String}
+ * @returns {Promise<any>}
+ */
 function validCheckOptionalItem(item, type) {
     return new Promise((resolve, reject) => {
         if (type === 'string' && item === '') resolve(true);
@@ -203,50 +229,62 @@ function validCheckOptionalItem(item, type) {
     });
 }
 /**
- *
+ * validation check for tour_date(operation date) of reservation.
+ * simple string, availability of day of week, tour_date valid check with available reservation date, price group is checked.
  * @param tour_date {Date} Local date (UTC+9)
  * @param product_id {Number} product id
  * @returns {Promise<any | never | boolean>}
  */
 function validCheckOperationDateTime(tour_date, product_id) {
     let product;
-    if (!tour_date) throw new Error(`operation date is undefined ${tour_date}`);
-    if (!product_id) throw new Error(`product id is undefined ${product_id}`);
-    return new Promise((resolve, reject) => {
-        resolve(validCheckSimpleDateTime(tour_date))})
-        .then(simpleCheck => {
-            // console.log('validCheckOperationDateTime - simpleCheck : ', simpleCheck);
-            if (!simpleCheck) return false;
+    if (!tour_date) {
+        log.warn('Validation', 'validCheckOperationDateTime', 'tour_date is undefined');
+        throw new Error(`operation date is undefined ${tour_date}`);
+    }
+    if (!product_id) {
+        log.warn('Validation', 'validCheckOperationDateTime', 'product_id is undefined');
+        throw new Error(`product id is undefined ${product_id}`);
+    }
+    console.log('before validCheckOperationDateTime promise');
+    return validCheckSimpleDateTime(tour_date)
+        .then(simpleLengthCheck => {
+            if (!simpleLengthCheck) return false;
+            log.debug('Debug','validCheckOperationDateTime','validCheckSimpleDateTime passed');
             return Product.getProduct(product_id)})
         .then(result => {
             product = result;
-            // console.log('validCheckOperationDateTime - product : ', !!product);
             if (!result) {
-                // Exceptor.report(Exceptor.TYPE.UNKNOWN_PRODUCT, `No product in product map. product_id : ${product_id}`);
+                log.warn('Validation', 'validCheckOperationDateTime',`getProduct failed. [${product_id}] is not in productMap.`);
                 throw new Error('UNKNOWN_PRODUCT'); }
+            log.debug('Debug','validCheckOperationDateTime','get Product passed');
             return validCheckDayOfWeek(product, tour_date)})
         .then(dayCheck => {
-            // console.log('validCheckOperationDateTime - dayCheck : ', dayCheck);
             if (!dayCheck) {
-                // Exceptor.report(Exceptor.TYPE.INVALID_OPERATION_DAY_OF_WEEK, `Operation Date Wrong day. product_id : ${product_id}`);
+                log.warn('Validation', 'validCheckOperationDateTime', 'dayCheck failed. invalid operation day of week')
                 throw new Error('INVALID_OPERATION_DAY_OF_WEEK')}
-            return Product.checkValidFBDate(tour_date, product.tour_begin, product.tour_end, product.timezone)})
+            log.debug('Debug','validCheckOperationDateTime','dayCheck passed');
+            return Product.checkTourDateInValidRange(tour_date, product.tour_begin, product.tour_end, product.timezone)})
         .then(tourDateCheck => {
-            if (!tourDateCheck) throw new Error('Invalid Operation date at tourDateCheck!');
-            return Product.checkValidFBDate(new Date(), product.reserve_begin, product.reserve_end, product.timezone)})
+            if (!tourDateCheck) {
+                log.warn('Validation','validCheckOperationDateTime', 'tourDateCheck failed');
+                throw new Error('Invalid Operation date at tourDateCheck!');}
+            log.debug('Debug','validCheckOperationDateTime','tourDateCheck passed');
+            return Product.getAvailablePriceGroup(tour_date, product)})
         .then((priceGroupCheck) => {
-            if (!priceGroupCheck) throw new Error('price group check failed!');
+            if (!priceGroupCheck) {
+                log.warn('Valdation','validCheckOperationDateTime', 'priceGroupCheck failed. no existing price group in product');
+                throw new Error('price group check failed!');}
+            log.debug('Debug','validCheckOperationDateTime','priceGroupCheck passed');
             if (env.released) return new Date().getTime() - tour_date.getTime() < product.deadline;
             return true;
         }).catch(err => {return false});
 }
-// sqlDB.query('SELECT tour_date, product_id from reservation where id = 98', (err, result) => {
-//     // console.log(result)
-//     date = result.rows[0].tour_date;
-//     validCheckOperationDateTime(date, result.rows[0].product_id)
-//         .then(result => console.log(result));
-// })
 
+/**
+ * people number check
+ * @param number {Number} people number
+ * @returns {Promise<any>}
+ */
 function validCheckPeopleNumber(number) {
     return new Promise((resolve, reject) => {
         if (number === 'NaN') resolve(false);
@@ -255,7 +293,14 @@ function validCheckPeopleNumber(number) {
     });
 }
 
-function simpleCheck(input, length, limitNumber) {
+/**
+ * simple length check for date and time element.
+ * @param input {Number}
+ * @param length {Number}
+ * @param limitNumber {Number}
+ * @returns {Promise<any>}
+ */
+function simpleLengthCheck(input, length, limitNumber) {
     return new Promise((resolve, reject) => {
         if (!!input && input.length === length && Number(input) <= limitNumber) {resolve(true)}
         else {resolve(false)}
@@ -264,30 +309,42 @@ function simpleCheck(input, length, limitNumber) {
 /**
  * check structure of date / time
  * example of input : Date object || '2018-04-23T16:46:5800Z'
- * @param input
+ * @param input {String || Date} input can be String(only Date) and Date object(Date and Time)
  * @returns {*}
  */
 function validCheckSimpleDateTime(input) {
     if (!input) return Promise.resolve(false);
+    let dateArray = [];
+    let timeArray = [];
     const date = (typeof input === 'string') ? input : input.toISOString();
-    const array = date.split('T');
-    const dateArray = array[0].split('-');
-    const timeArray = array[1].split(':');
-    // console.log(dateArray, timeArray);
+    if (date.match(/T/i)){
+        const array = date.split('T');
+        dateArray = array[0].split('-');
+        timeArray = array[1].split(':');
+    } else {
+        dateArray = date.split('-');
+    }
     if (dateArray.length === 3 && timeArray.length === 3) {
         return Promise.all([
-            simpleCheck(dateArray[0], 4, 9999),
-            simpleCheck(dateArray[1], 2, 12),
-            simpleCheck(dateArray[2], 2, 31),
-            simpleCheck(timeArray[0], 2, 24),
-            simpleCheck(timeArray[1], 2, 60),
-            simpleCheck(timeArray[2].split('.')[0], 2, 60) ])
+            simpleLengthCheck(dateArray[0], 4, 9999),
+            simpleLengthCheck(dateArray[1], 2, 12),
+            simpleLengthCheck(dateArray[2], 2, 31),
+            simpleLengthCheck(timeArray[0], 2, 24),
+            simpleLengthCheck(timeArray[1], 2, 60),
+            simpleLengthCheck(timeArray[2].split('.')[0], 2, 60)])
             .then(result => {
                 // console.log('simple check result : ',result);
-                return !result.includes(false);
-            }).catch(err => {return false});
+                return !result.includes(false)})
+    } else if (dateArray.length === 3) {
+        return Promise.all([
+            simpleLengthCheck(dateArray[0], 4, 9999),
+            simpleLengthCheck(dateArray[1], 2, 12),
+            simpleLengthCheck(dateArray[2], 2, 31)])
+            .then(result => {
+                return !result.includes(false)})
     } else { return Promise.resolve(false) }
 }
+
 /**
  *
  * @param product {Object} product object
@@ -303,19 +360,39 @@ function validCheckDayOfWeek(product, date) {
     return product.days[tourDay];
 }
 
-
+/**
+ * valid check money
+ * @param money {Number}
+ * @returns {Promise<any>}
+ */
 function validCheckMoney(money) {
     return new Promise((resolve, reject) => {
         if (typeof money === 'number' && money !== 'NaN') resolve(true);
         resolve(false);
     });
 }
+
+/**
+ * valid check for Total people number : adult & kid & infant.
+ * at least one of adult, kid, infant should be bigger than 0.
+ * @param adult {Number}
+ * @param kid {Number}
+ * @param infant {Number}
+ * @returns {Promise<any>}
+ */
 function validCheckTotalPeopleNumber(adult, kid, infant){
     return new Promise((resolve, reject) => {
         resolve(adult + kid + infant > 0);
     });
 }
 
+/**
+ * valid check for Total money : income & expenditure.
+ * at least one of income ,expenditure should be bigger than 0.
+ * @param income {Number}
+ * @param expenditure {Number}
+ * @returns {Promise<any>}
+ */
 function validCheckTotalMoneyAmount(income, expenditure){
     return new Promise((resolve, reject) => {
         if (income === 0 && expenditure === 0) {
@@ -326,7 +403,8 @@ function validCheckTotalMoneyAmount(income, expenditure){
 }
 
 /**
- *
+ * function to build promise array for validation check.
+ * check list, parameter map, function map for Reservation / Account is used to make array.
  * @param list {Array} check list array
  * @param paramMap {Object} parameter map : JSON
  * @param functionMap {Map} function map : MAP
@@ -357,34 +435,52 @@ function validDataCheck(object, paramMap ,checkList, functionMap) {
     return Promise.all(promiseArray.array)
         .then(checkList => {
             checkList.forEach((bool, index) => {checkObject[checkKey[index]] = bool});
-            // console.log('validDataCheck result : ',checkObject);
             return {result:!checkList.includes(false), detail:checkObject};
         }).catch(err => console.log(err));
 }
+
+/**
+ * validation check for reservation update (reservation is already exist)
+ * @param reservation {Object}
+ * @returns {Promise<{result: boolean, detail} | never | boolean>}
+ */
 function validReservationUpdateCheck(reservation) {
     console.log('update validation!')
-    return validDataCheck(reservation, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_UPDATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
+    return validDataCheck(reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_UPDATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
         .catch(err => {
             Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_RESERVATION, `Error occurred while update Reservation validation`);
             return false;
         });
 }
+
+/**
+ * validation check for reservation create
+ * @param reservation {Object}
+ * @returns {Promise<{result: boolean, detail} | never | boolean>}
+ */
 function validReservationCreateCheck(reservation) {
-    console.log('create validation!')
-    return validDataCheck(reservation, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_CREATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
+    console.log('reservation validation check!');
+    return validDataCheck(reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_CREATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
         .catch(err => {
             Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_RESERVATION, `Error occurred while create Reservation validation`);
             return false;
         });
 }
+
+/**
+ * validation for account creation. account cannot be modified.
+ * @param account
+ * @returns {Promise<{result: boolean, detail} | never | boolean>}
+ */
 function validAccountCheck(account) {
-    console.log('account check!');
-    return validDataCheck(account, ACCOUNT_VALID_CHECK_PARAMETER_MAP, ACCOUNT_VALID_CHECK_LIST_MAP, ACCOUNT_VALID_CHECK_FUNCTION_MAP)
+    console.log('account validation check!');
+    return validDataCheck(account.sqlData, ACCOUNT_VALID_CHECK_PARAMETER_MAP, ACCOUNT_VALID_CHECK_LIST_MAP, ACCOUNT_VALID_CHECK_FUNCTION_MAP)
         .catch(err => {
             Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_ACCOUNT, `Error occured while Account validation`);
             return false;
         });
 }
+
 exports.RESERVATION_KEY_MAP = RESERVATION_KEY_MAP;
 exports.ACCOUNT_KEY_MAP = ACCOUNT_KEY_MAP;
 exports.DAY_MAP = DAY_MAP;

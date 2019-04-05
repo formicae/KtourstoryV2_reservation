@@ -60,12 +60,12 @@ class Product {
         if (typeof object === 'string') return JSON.parse(object);
         return object;
     }
-    static getProduct(id) {
+    static getProduct(input) {
         return new Promise((resolve, reject) => {
             if (productMap.size === 0) {
-                setTimeout(() => { resolve(Product.getProduct(id)) }, 200);
+                setTimeout(() => { resolve(Product.getProduct(input)) }, 200);
             } else {
-                resolve(productMap.get(id));
+                resolve(productMap.get(input));
             }
         })
     }
@@ -73,7 +73,7 @@ class Product {
     /**
      * make product for Elastic search
      * @param product {Object} product object from Firebase
-     * @returns {{id: *, name: *, alias: *, category: (*|string|string|boolean), area: *, geos: {place: *, lat: *, lng: *}, description: string | string, memo: *, on: *, reserve_begin: *, reserve_end: *, tour_begin: *, tour_end: *, options: {price: *, name: *}}}
+     * @returns {{id: *, name: *, alias: *, category: (*|string|string|boolean), area: *, geos: {place: *, lat: *, lon: *}, description: string | string, memo: *, on: *, reserve_begin: *, reserve_end: *, tour_begin: *, tour_end: *, options: {price: *, name: *}}}
      */
     static generateElasticObject(product) {
         return {
@@ -85,7 +85,7 @@ class Product {
             geos : {
                 place : product.geos.place,
                 lat : product.geos.lat,
-                lng : product.geos.lng
+                lon : product.geos.lon
             },
             description : product.description,
             memo : product.memo,
@@ -104,7 +104,7 @@ class Product {
     /**
      * make object for postgreSQL
      * @param product {Object} product object from Firebase
-     * @returns {{id: *, name: *, alias: *, category: (*|string|string|boolean), area: *, geos: (*|geos|{place, lat, lng}|Array)}}
+     * @returns {{id: *, name: *, alias: *, category: (*|string|string|boolean), area: *, geos: (*|geos|{place, lat, lon}|Array)}}
      */
     static generateSQLObject(product) {
         return {
@@ -125,11 +125,10 @@ class Product {
      */
     static getAvailablePriceGroup(tour_date, product) {
         const availableGroup = [];
-        Object.keys(product.sales).forEach(key => {
-            if (product.sales[key].on) {
-                let tour_date = product.sales[key].tour_date;
-                if (Product.checkValidFBDate(tour_date, product.tour_begin, product.tour_end, product.timezone)) {
-                    availableGroup.push(product.sales[key]);
+        product.sales.forEach(item => {
+            if (item.default) {
+                if (Product.checkTourDateInValidRange(tour_date, item.tour_begin, item.tour_end, product.timezone)) {
+                    availableGroup.push(item);
                 }
             }
         });
@@ -138,22 +137,23 @@ class Product {
 
     /**
      * Compare tour_date and product's begin / end date with year, month, day
-     * @param tour_date {Object} operation date from SQL which contains timezone information
+     * @param tour_date {Object || String} operation date from SQL or String which contains timezone information
      * @param begin {String} price group's available begin date from Firebase
      * @param end {String} price group's available end date from Firebase
      * @param timezone {String} product's timezone information
      */
-    static checkValidFBDate(tour_date, begin, end, timezone) {
+    static checkTourDateInValidRange(tour_date, begin, end, timezone) {
         const array = {begin:[],target:[],end:[]};
-        array.target = tour_date.toISOString().slice(0,10).split('-');
-        array.begin = begin.split('-');
-        array.end = end.split('-');
-        const newBegin = new Date(array.begin[0], array.begin[1]-1,array.begin[2]);
-        const newTarget = new Date(array.target[0], array.target[1]-1,array.target[2]);
+        if (typeof tour_date === 'string') {
+            array.target = tour_date.split('-')
+        } else {
+            array.target = tour_date.toISOString().slice(0,10).split('-')
+        }
+        array.begin = begin.trim().split('-');
+        array.end = end.trim().split('-');
+        const newBegin = new Date(array.begin[0], array.begin[1]-1, array.begin[2]);
+        const newTarget = new Date(array.target[0], array.target[1]-1, array.target[2]);
         const newEnd = new Date(array.end[0], array.end[1]-1,array.end[2]);
-        // console.log(`begin : ${begin} --> ${newBegin}`);
-        // console.log(`target : ${tour_date} --> ${newTarget}`);
-        // console.log(`end : ${end} --> ${newEnd}`);
         return newBegin <= newTarget && newTarget <= newEnd;
     }
 
@@ -168,7 +168,17 @@ class Product {
     }
 }
 
+/**
+ * generate productMap for searching product from outside of this module.
+ * key of productMap : [Alias], [Area]_[Category]_[Alias], incoming (which is not in ignoreSet), options.incoming
+ * @param productMap {Map} result product Map
+ * @param ignoreSet {Set} data Set which should not be included in productMap as a key
+ * @param product {Object} product object
+ * @returns {*}
+ */
 function productMapProcessing(productMap, ignoreSet, product) {
+    let areaCategoryalias = product.area + '_' + product.category + '_' + product.alias;
+    productMap.set(areaCategoryalias, product);
     if (!!product.incoming) {
         product.incoming.forEach(incoming => { productMap.set(incoming, product) })
     }
@@ -215,21 +225,21 @@ function monitorProduct() {
     // 4. 해당 product_id를 가지는 reservation 을 Elasticsearch에서 불러오기
     // 5. Reservation.updateProduct 실행 (reservation 가서 만들어야 함.)
     // 6. 업데이트 된 Reservation -> SQL / Elasticsearch로 다시 보냄.
-    fbDB.ref('_product').on('child_added', (snapshot, key) => {
+    fbDB.ref('v2Product').on('child_added', (snapshot, key) => {
         let newProduct = snapshot.val();
         let ignoreSet = new Set(newProduct.ignore_options);
         productMap = productMapProcessing(productMap, ignoreSet, newProduct);
         // Promise.resolve(changeProductToSQL(newProduct.id, newProduct))
     });
 
-    fbDB.ref('_product').on('child_changed', (snapshot) => {
+    fbDB.ref('v2Product').on('child_changed', (snapshot) => {
         let changedProduct = snapshot.val();
         let ignoreSet = new Set(changedProduct.ignore_options);
         productMap = productMapProcessing(productMap, ignoreSet, changedProduct);
         // changeProductToSQL(changedProduct.id, changedProduct);
     });
 
-    fbDB.ref('_product').on('child_removed', (snapshot) => {
+    fbDB.ref('v2Product').on('child_removed', (snapshot) => {
         let deletedProduct = snapshot.val();
         let ignoreSet = new Set(deletedProduct.ignore_options);
         if (!ignoreSet.has(deletedProduct.id)) { productMap.delete(deletedProduct.id) }
@@ -253,7 +263,7 @@ function testTourDateCheck(id) {
         const FBbegin = '2018-04-10';
         const FBend = '2018-04-11';
         const timezone = 'UTC+9';
-        console.log('FB valid check : ',Product.checkValidFBDate(date, FBbegin, FBend, timezone))
+        console.log('FB valid check : ',Product.checkTourDateInValidRange(date, FBbegin, FBend, timezone))
     })
 }
 function testGetPriceGroup(id) {
@@ -268,7 +278,7 @@ function testGetPriceGroup(id) {
                     console.log('sql database result : ',date);
                     resolve(date); })})})
         .then(tour_date => {
-            const finalResult =  Product.checkValidFBDate(tour_date, product.reserve_begin, product.reserve_end, product.timezone)
+            const finalResult =  Product.checkTourDateInValidRange(tour_date, product.reserve_begin, product.reserve_end, product.timezone)
             console.log(finalResult);
             return finalResult;
         });
@@ -306,11 +316,39 @@ function testOperationDateCheck(){
                 })})})
         .then(result => {
             tour_date = result.tour_date;
-            return Product.checkValidFBDate(result.tour_date,product.sales.default.tour_begin, product.sales.default.tour_end, product.timezone)})
+            return Product.checkTourDateInValidRange(result.tour_date,product.sales.default.tour_begin, product.sales.default.tour_end, product.timezone)})
         .then(result => {
             console.log('final result : ',result)
         });
 }
+// const v2productObject = {};
+// sqlDB.query('SELECT id, name, alias, category, area FROM product', (err, result) => {
+//     result.rows.forEach(each => {
+//         v2productObject[each.id] = each;
+//     });
+//     console.log(JSON.stringify(v2productObject))
+// })
+// fbDB.ref('v2Geos').child("areas").push({
+//     name:"Seoul",
+//     pickups:[
+//         {
+//             name: "Dongdaemoon",
+//             incoming: ["동대문", "동대문역","Dongdaemun"],
+//             location: {
+//                 lat: 37.5713101,
+//                 lon: 127.0074567
+//             }
+//         },
+//         {
+//             name : "Myeongdong",
+//             incoming : ["명동","명동역","명동역 4번출구","Myungdong"],
+//             location : {
+//                 lat:37.5609892,
+//                 lon:126.9839981
+//             }
+//         }
+//     ]
+// })
 
 monitorProduct();
 module.exports = Product;

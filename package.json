@@ -22,9 +22,10 @@
     "supertest": "^3.3.0"
   },
   "dependencies": {
+    "ejs": "^2.6.1",
     "elasticsearch": "^15.2.0",
     "firebase-admin": "^6.4.0",
-    "kintranet_lib": "git+https://082b7d9382a615ea3feb686e82cdf6771730b753:x-oauth-basic@github.com/ktourstory/kintranet_lib.git",
+    "kintranet_lib": "git+https://d9c2c2bdc81132852d0b11614eac18455272bd26:x-oauth-basic@github.com/ktourstory/kintranet_lib.git",
     "lodash": "^4.17.11",
     "pg": "^7.9.0",
     "swagger": "^0.7.5",

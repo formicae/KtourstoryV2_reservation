@@ -1,4 +1,5 @@
 const sqlDB = require('../auth/postgresql');
+const fbDB = require('../auth/firebase').database;
 const Reservation = require('../models/reservation');
 const Product = require('../models/product');
 const accountRouter = require('./v2Account');
@@ -7,11 +8,13 @@ sqlDB.connect();
 
 exports.post = (req, res) => {
     if (!req.get('Content-Type')) return res.status(400).send("Content-Type should be json");
+    console.log('post request!');
     routerHandler(req, res, 'POST').catch(err => { res.status(500).send(`POST error :${err.message}`)});
 };
 
 exports.update = (req, res) => {
     if (!req.get('Content-Type')) return res.status(400).send("Content-Type should be json");
+    console.log('update reqeust!');
     routerHandler(req, res, 'UPDATE').catch(err => { res.status(500).send(`POST error :${err.message}`)});
 };
 
@@ -26,10 +29,14 @@ exports.update = (req, res) => {
  */
 function routerHandler(req, res, requestType) {
     let data = req.body;
-    return productFinder(data)
+    return pickupPlaceFinder(data)
+        .then(location => {
+            data.pickupData = location;
+            return productFinder(data)})
         .then(productData => {
             data.productData = productData;
             const reservation = new Reservation(data);
+            log.debug('Router','reservationHandler','reservation object had been created without error')
             return reservationHandler(reservation, data, requestType)})
         .then(result => {
             if (!result) throw new Error('reservationHandler failed');
@@ -39,55 +46,69 @@ function routerHandler(req, res, requestType) {
         });
 }
 
+function pickupPlaceFinder(data){
+    return new Promise((resolve, reject) => {
+        fbDB.ref('v2Geos').once('value', (snapshot) => {
+            const geos = snapshot.val();
+            Object.keys(geos.areas).forEach(key => {
+                geos.areas[key].pickups.forEach(area => {
+                    if (area.name === data.pickup) resolve(area.location);
+                    area.incoming.forEach(incoming => {
+                        if (incoming === data.pickup) resolve(area.location);
+                    });
+                })
+            });
+            resolve({lat:0.00,lon:0.00});
+        })
+    })
+}
+
 function productFinder(data) {
     let product;
+    let result;
     return Product.getProduct(data.product)
-        .then(result => {
-            product = result;
-            if (result.sales.__proto__ === [].__proto__) {
-                result.sales.forEach(item => {
-                    if (item.default) return item })
-            } else if (result.sales.__proto__ === {}.__proto__) {
-                Object.keys(result.sales).forEach(key => {
-                    if (result.sales[key].default) return result.sales[key] })
-            }})
-        .then(targetItem => {
-            return {
-                id : product.id,
-                name : targetItem.name,
-                alias : product.alias,
-                category : product.category,
-                area : product.area,
-                geos : product.geos,
-                currency : targetItem.currency,
-                income : incomeCalculation(data, product, targetItem),
-                expenditure : 0
-            };
-        });
+        .then(productData => {
+            product = productData;
+            productData.sales.forEach(item => { if (item.default) {
+                result = {
+                    id : product.id,
+                    name : item.name,
+                    alias : product.alias,
+                    category : product.category,
+                    area : product.area,
+                    geos : product.geos,
+                    currency : item.currency,
+                    income : incomeCalculation(data, product, item),
+                    expenditure : 0
+                }}});
+            return result;
+        })
 }
 
 function incomeCalculation(data, product, targetItem) {
     let income = 0;
-    if (targetItem.sales.__proto__ === [].__proto__) {
-        targetItem.sales.forEach(priceItem => income += priceCalculation(priceItem, data));
-    } else if (targetItem.sales.__proto__ === {}.__proto__) {
-        Object.keys(targetItem.sales).forEach(key => income += priceCalculation(targetItem.sales[key], data))
-    }
-    if (Object.keys(data.options).length > 0) {
-        data.options.forEach(targetOption => {
-            product.options.forEach(productOption => {
-                if (productOption.name === targetOption.name) income += productOption.price * targetOption.number;
+    targetItem.sales.forEach(priceItem => {
+        let price = priceCalculation(priceItem, data);
+        income += price;
+    });
+    if (!!data.options && !!product.options) {
+        if (data.options.length > 0 && product.options.length > 0) {
+            data.options.forEach(option => {
+                product.options.forEach(productOption => {
+                    if (productOption.name === option.name) income += productOption.price * option.number;
+                });
             });
-        });
+        }
     }
     return income;
 }
 
 function priceCalculation(item, data) {
-    if (item.type === 'adult' && !!Number(data.adult)) return item.net * data.adult;
-    else if (item.type === 'adolescent' && !!Number(data.adolescent)) return item.net * data.adolescent;
-    else if (item.type === 'child' && !!Number(data.kid)) return item.net * data.kid;
-    else if (item.type === 'infant' && !!Number(data.infant)) return item.net * data.infant;
+    if (item.type === 'adult' && !!Number(data.adult)) return Number(item.net * data.adult) || 0;
+    else if (item.type === 'adolescent' && !!Number(data.adolescent)) return Number(item.net * data.adolescent) || 0;
+    else if (item.type === 'kid' && !!Number(data.kid)) return Number(item.net * data.kid) || 0;
+    else if (item.type === 'infant' && !!Number(data.infant)) return Number(item.net * data.infant) || 0;
+    else return 0;
 }
 
 /**
@@ -122,20 +143,46 @@ function createReservation(reservation, data) {
     return Reservation.insertSQL(reservation.sqlData)
         .then(result => {
             if (!result) {
+                log.warn('Router', 'createReservation', `insertSQL failed. result : ${JSON.stringify(result)}`);
                 fail.sql = true;
                 return false;
             }
+            log.debug('Router', 'createReservation', `insertSQL success! reservation id : ${result.id}`);
             data.reservation_id = result.id;
-            data.elasticData.id = result.id;
-            reservation.id = result.id;
-            return Reservation.insertFB(reservation, data)})
+            reservation.fbData.id = result.id;
+            reservation.sqlData.id = result.id;
+            reservation.elasticData.id = result.id;
+            return Reservation.insertFB(reservation.fbData, data)})
         .then(result => {
-            if (!result && !fail.sql) fail.fb = true;
-            if (fail.sql) return Reservation.cancelSQL(reservation);
+            if (!result && !fail.sql) {
+                fail.fb = true;
+                log.warn('Router', 'createReservation', `insertFB failed!`);
+                return false;
+            }
+            if (fail.sql) return true;
             return Reservation.insertElastic(reservation.elasticData)})
         .then(result => {
-            if (!result && !fail.fb) fail.elastic = true;
-            if (fail.fb) return Reservation.cancelFB(reservation, data).then(() => {return Reservation.cancelSQL(reservation)});
+            if (!result) {
+                if (!fail.fb) {
+                    log.warn('Router', 'createReservation', `insertElastic failed!`);
+                    return Reservation.cancelFB(reservation.fbData, data)
+                        .then(() => {
+                            log.debug('Router', 'createReservation', 'cancelFB success! this procedure is done due to insertElastic failure');
+                            return Reservation.cancelSQL(reservation.sqlData)})
+                        .then(() => {
+                            log.debug('Router', 'createReservation', 'cancelFB-cancelSQL success!');
+                            return false;
+                        });
+                } else {
+                    log.warn('Router', 'createReservation', `insertElastic passed due to firebase failure!`);
+                    return Reservation.cancelSQL(reservation.sqlData)
+                    .then(() => {
+                        log.debug('Router', 'createReservation', 'cancelFB-cancelSQL success!');
+                        return false
+                    });
+                }
+            }
+            log.debug('Router', 'createReservation', `insertElastic success!`);
             return data;
         })
 }
@@ -160,14 +207,18 @@ function updateReservation(reservation, data) {
             return Reservation.cancelFB(reservation, data)})
         .then(result => {
             if (!result && !fail.sql) fail.fb = true;
-            if (fail.sql) log.warn('WARN', 'SQL update fail', 'Reservation data update from SQL failed', {reservation_id : reservation.id});
+            if (fail.sql) log.warn('Router', 'updateReservation', `Reservation data update from SQL failed : ${reservation.id}`);
             return Reservation.cancelElastic(reservation)})
         .then(result => {
             if (!result && !fail.fb) fail.elastic = true;
-            if (fail.fb) log.warn('WARN', 'FB update fail', 'Reservation data delete / create from / to FB failed', {reservation_id : reservation.id});
-            if (fail.elastic) log.warn('WARN', 'Elastic update fail', 'Reservation data delete / create from / to Elastic failed', {reservation_id : reservation.id});
+            if (fail.fb) log.warn('Router', 'updateReservation', `Reservation data delete / create from / to FB failed : ${reservation.id}`);
+            if (fail.elastic) log.warn('Router', 'updateReservation', `Reservation data delete / create from / to Elastic failed : ${reservation.id}`);
             delete reservation.sqlData.id;
             delete reservation.elasticData.id;
             return createReservation(reservation, data);
         })
 }
+
+// Product.getProduct('Seoul_Regular_남쁘아').then(result => {
+//     console.log(result);
+// })

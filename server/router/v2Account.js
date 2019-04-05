@@ -1,5 +1,6 @@
 const sqlDB = require('../auth/postgresql');
 const Account = require('../models/account');
+const log = require('../../log');
 sqlDB.connect();
 
 exports.post = (req, res) => {
@@ -22,18 +23,33 @@ function accountHandler(req, res, requestType) {
     let reverseAccount;
     return Account.validation(account, false)
         .then(validCheck => {
-            if (!validCheck) throw new Error('account validation failed!');
-            if (requestType === 'UPDATE') return Account.insertReverseAccountToSQL(data);
-            return true })
+            if (!validCheck) {
+                log.warn('Router', 'accountHandler', 'validCheck failed');
+                throw new Error('account validation failed!');
+            }
+            log.debug('Router','accountHandler', 'validCheck success!');
+            if (requestType === 'UPDATE') return Account.insertReverseAccount(data);
+            else return true})
         .then(result => {
-            if (!result) throw new Error('insert reverse account insert to SQL failed in accountHandler!');
-            reverseAccount = result;
-            return Account.insertSQL(account)})
+            if (!result) {
+                log.warn('Router', 'accountHandler', 'insertReverseAccount failed');
+                throw new Error('insert reverse account insert to SQL failed in accountHandler!');
+            }
+            return Account.insertSQL(account.sqlData)})
         .then(result => {
-            if (!result) throw new Error('insert Account to SQL failed in accountHandler!');
-            return Promise.all([Account.insertElastic(reverseAccount), Account.insertElastic(account)])})
+            if (!result) {
+                log.warn('Router', 'accountHandler', 'insertSQL failed');
+                throw new Error('insert Account to SQL failed in accountHandler!');
+            }
+            log.debug('Router','accountHandler', 'insertSQL success!');
+            account.elasticData.id = result.id;
+            return Account.insertElastic(account.elasticData)})
         .then(result => {
-            if (!result) throw new Error('insert account / reverseAccount to Elastic failed in accountHandler!');
+            if (!result) {
+                log.warn('Router', 'accountHandler', 'insertElastic failed');
+                throw new Error('insert Account to Elastic failed in accountHandler!');
+            }
+            log.debug('Router','accountHandler', 'insertElastic success!');
             return true;
         })
 }

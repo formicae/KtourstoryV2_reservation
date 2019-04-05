@@ -19,9 +19,11 @@ class Team {
 
 class Reservation {
     constructor(data) {
-        if (data.adult + data.kid + data.infant <= 0) log.info('INFO', 'Reservation people number', 'Total number of people is zero', {message_id:data.message_id});
+        if (data.adult + data.kid + data.infant <= 0) log.debug('INFO', 'Reservation people number', 'Total number of people is zero', {message_id:data.message_id});
         const currentDate = Reservation.getGlobalDate();
+        console.log('Reservation - productData : ',data.productData);
         this.sqlData = Reservation.generatePostgreSQLObject(data, currentDate);
+        this.fbData = Reservation.generateFirebaseObject(data);
         this.elasticData = Reservation.generateElasticObject(data, currentDate);
     }
 
@@ -31,10 +33,11 @@ class Reservation {
      * @param currentDate {String} Time information without timezone information which is made in server.
      */
     static generateElasticObject(data, currentDate){
+        console.log('pickupData : ',data.pickupData)
         const result = {
             id : data.reservation_id,
             message_id : data.message_id,
-            writer : data.writer,
+            writer : data.writer || '',
             product : {
                 id : data.productData.id,
                 name : data.productData.name,
@@ -43,19 +46,23 @@ class Reservation {
                 area : data.productData.area,
                 geos : Reservation.locationPreprocess(data.productData.geos)
             },
-            agency : data.agency,
-            name : data.name,
-            nationality : data.nationality,
+            agency : data.agency || '',
+            agency_code : data.agency_code || '',
+            name : data.name || '',
+            nationality : data.nationality || '',
             tour_date : data.date,
-            pickup : data.pickup,
-            options : Reservation.optionPreprocess(data.options),
+            pickup : {
+                place : data.pickup || '',
+                location : data.pickupData
+            },
+            options : Reservation.optionPreprocess(data.options) || [],
             adult : Reservation.peopleNumberPreprocess(data.adult),
             kid : Reservation.peopleNumberPreprocess(data.kid),
             infant : Reservation.peopleNumberPreprocess(data.infant),
             phone : Reservation.phoneNumberPreprocess(data.phone),
-            email : data.email,
-            messenger : data.messenger,
-            memo : data.reservation_memo,
+            email : data.email || '',
+            messenger : data.messenger || '',
+            memo : data.reservation_memo || '',
             canceled : data.canceled,
             modified_date : currentDate,
             timezone : data.timezone,
@@ -79,9 +86,10 @@ class Reservation {
             message_id: data.message_id,
             writer : data.writer,
             product_id : data.productData.id,
-            agency : data.agency,
+            agency : data.agency || '',
+            agency_code : data.agency_code || '',
             tour_date : data.date,
-            options : Reservation.optionPreprocess(data.options),
+            options : Reservation.optionPreprocess(data.options) || {},
             adult : Reservation.peopleNumberPreprocess(data.adult),
             kid : Reservation.peopleNumberPreprocess(data.kid),
             infant : Reservation.peopleNumberPreprocess(data.infant),
@@ -90,27 +98,28 @@ class Reservation {
         };
         if (!!data.reservation_id) {
             result.id = data.reservation_id;
-            result.created_date = currentDate;
-        } else { result.created_date = data.reservation_created_date }
+            result.created_date = data.created_date;
+        } else { result.created_date = currentDate }
         return result;
     }
 
     static generateFirebaseObject(data) {
         return {
             id : data.reservation_id,
-            name : data.name,
-            nationality : data.nationality,
-            agency : data.agency,
-            writer : data.writer,
-            pickup : data.pickup,
+            name : data.name || '',
+            nationality : data.nationality || '',
+            agency : data.agency || '',
+            agency_code : data.agency_code || '',
+            writer : data.writer || '',
+            pickup : data.pickup || '',
             adult : data.adult,
             kid : data.kid,
             infant : data.infant,
-            options : data.options,
-            phone : data.phone,
-            email : data.email,
-            messenger : data.messenger,
-            memo : data.reservation_memo,
+            options : data.options || [],
+            phone : data.phone || '',
+            email : data.email || '',
+            messenger : data.messenger || '',
+            memo : data.reservation_memo || '',
             g : data.g || false,
             o : data.o || false
         };
@@ -131,7 +140,7 @@ class Reservation {
             place : temp.place,
             location : {
                 lat : Number(temp.location.lat),
-                lng : Number(temp.location.lng)
+                lon : Number(temp.location.lon)
             }
         }
     }
@@ -181,6 +190,7 @@ class Reservation {
     static validationCreate(reservation, detail) {
         return validation.validReservationCreateCheck(reservation)
             .then(validation => {
+                console.log(validation)
                 console.log('validationCreate - result : ',validation.result);
                 if (!detail) return validation.result;
                 else return validation;
@@ -199,9 +209,10 @@ class Reservation {
             sqlDB.query(query, (err, result) => {
                 const bool = (result.command === 'INSERT' && result.rowCount === 1);
                 if (err || !bool) {
-                    log.warn('WARN', 'SQL DB insert fail', 'data insert to SQL failed', {reservation_id : reservation.id});
+                    log.warn('Model', 'Reservation-insertSQL', `data insert to SQL failed : ${reservation.id}`);
                     throw new Error('Reservation insert to SQL failed');
                 }
+                result.rows[0].id = 'r' + result.rows[0]._id;
                 resolve(result.rows[0]);
             });
         });
@@ -214,11 +225,14 @@ class Reservation {
      */
     static cancelSQL(reservation) {
         return new Promise((resolve, reject) => {
-            const query = `UPDATE reservation SET canceled = true WHERE id = ${reservation.id}`;
+            const query = `UPDATE reservation SET canceled = true WHERE id = '${reservation.id}'`;
+            console.log('cancelSQL query : ',query)
+            console.log(reservation);
             sqlDB.query(query, (err, result) => {
+                console.log(result);
                 const bool = (result.command === 'UPDATE' && result.rowCount === 1);
                 if (err || !bool) {
-                    log.warn('WARN', 'SQL DB cancel fail', 'data update from SQL failed - make "cancel" column to TRUE', {reservation_id : reservation.id});
+                    log.warn('Model', 'Reservation-cancelSQL', 'data update from SQL failed - make "cancel" column to TRUE');
                     throw new Error('Reservation update from SQL failed');
                 }
                 resolve(result.rows[0]);
@@ -235,7 +249,8 @@ class Reservation {
     static newTeamBuild(reservation, data){
         const team = new Team();
         team.reservations[reservation.id] = reservation;
-        return fbDB.ref.child(data.date).child(reservation.productData.id).child('teams').push(team);
+        log.debug('Model', 'newTeamBuild', `new team for reservation id ${reservation.id} is being made`);
+        return fbDB.ref('v2Operation').child(data.date).child(data.productData.id).child('teams').push(team);
     }
 
     /**
@@ -247,20 +262,20 @@ class Reservation {
      * @returns {admin.database.ThenableReference}
      */
     static regularTeamBuild(reservation, data, operation) {
-        if (!operation.teams) operation.teams = [];
-        const fbReservation = Reservation.generateFirebaseObject(data);
-        const reservedPeopleNumber = data.adult + data.kid + data.infant;
+        if (!operation.teams) return Reservation.newTeamBuild(reservation, data);
+        const reservedPeopleNumber = Number(data.adult) + Number(data.kid) + Number(data.infant);
         let peopleCount;
+        let tempReservation;
         for (let teamId in operation.teams) {
-            let tempReservation;
             peopleCount = 0;
-            for (let reservationId in operation.teams[teamId].reservations) {
-                tempReservation = operation.teams[teamId][reservationId];
-                peopleCount += (tempReservation.adult + tempReservation.kid + tempReservation.infant);
+            for (let r_id in operation.teams[teamId].reservations) {
+                tempReservation = operation.teams[teamId].reservations[r_id];
+                peopleCount += Number(tempReservation.adult) + Number(tempReservation.kid) + Number(tempReservation.infant);
             }
             if (peopleCount + reservedPeopleNumber <= BUS_PEOPLE_MAX_NUMBER) {
-                return fbDB.ref.child(data.date).child(reservation.productData.id)
-                    .child('teams').child(teamId).child('reservations').child(reservation.id).update(fbReservation);
+                log.debug('Model', 'regularTeamBuild', `reservation ${reservation.id} is added to the teams : ${teamId}`);
+                return fbDB.ref('v2Operation').child(data.date).child(data.productData.id)
+                    .child('teams').child(teamId).child('reservations').child(reservation.id).update(reservation);
             }
         }
         return Reservation.newTeamBuild(reservation, data);
@@ -274,9 +289,9 @@ class Reservation {
     static insertFB(reservation, data) {
         const reservedPeopleNumber = data.adult + data.kid + data.infant;
         return new Promise((resolve, reject) => {
-            fbDB.ref.child(data.date).child(reservation.productData.id).once('value', (snapshot) => {
+            fbDB.ref('v2Operation').child(data.date).child(data.productData.id).once('value', (snapshot) => {
                 const operation = snapshot.val();
-                if (reservation.productData.name.match(/private/i)) {
+                if (data.productData.name.match(/private/i)) {
                     resolve(Reservation.newTeamBuild(reservation, data));
                 } else if (reservedPeopleNumber > BUS_PEOPLE_MAX_NUMBER) {
                     log.debug('DEBUG', 'Reservation people number', 'maximum people number exceeded in one reservation');
@@ -286,7 +301,9 @@ class Reservation {
                     resolve(Reservation.regularTeamBuild(reservation, data, operation));
                 }
             });
-        }).catch(err => {throw new Error(err)})
+        }).catch(err => {
+            console.log('insertFB - catch error')
+            return false})
     }
 
     /**
@@ -301,7 +318,7 @@ class Reservation {
         const teamId = operationArr[2];
         const reservationId = operationArr[3];
         return new Promise((resolve, reject) => {
-            fbDB.ref.child(date).child(productId).child('teams').child(teamId)
+            fbDB.ref('v2Operation').child(date).child(productId).child('teams').child(teamId)
                 .child('reservations').child(reservationId).remove(err => {
                 if (err) throw new Error(`reservation removed failed in firebase : ${reservationId}`);
                 resolve(true)})})
@@ -324,7 +341,7 @@ class Reservation {
                 body: reservation
             },(err, resp) => {
                 if (err || resp.result !== 'created' || resp._shards.successful <= 0) {
-                    log.warn('WARN', 'DB fail', 'insert into Elastic', {reservation_id : reservation.id});
+                    log.warn('Model', 'Reservation-insertElastic', `insert into Elastic failed : ${reservation.id}`);
                     throw new Error('Failed : insertElastic');
                 }
                 resolve(true);
@@ -345,7 +362,7 @@ class Reservation {
                 id : reservation.id
             }, (err, resp) => {
                 if (err || resp.result !== 'deleted' || resp._shards.successful <= 0) {
-                    log.warn('WARN', 'DB fail', 'delete from Elastic', {reservation_id : reservation.id});
+                    log.warn('Model', 'Reservation-cancelElastic', `delete from Elastic failed : ${reservation.id}`);
                     throw new Error('Failed : cancelElastic')}
                 resolve(resp)})})
             .then(() => {
@@ -371,7 +388,7 @@ class Reservation {
                 }
             }, (err, resp) => {
                 if (err || resp.timed_out) {
-                    log.warn('WARN', 'Search DB fail', 'query from Elastic', {query : query});
+                    log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
                     throw new Error('Failed : searchElastic',err);
                 }
                 if (resp._shards.successful <= 0) resolve(result);
@@ -410,7 +427,7 @@ function reservationCreateQuery(object) {
     let tempKeys = "";
     let tempValues = "";
     let value;
-    Object.keys(object).forEach((key, index) => {
+    Object.keys(object).forEach(key => {
         value = object[key];
         if (RESERVATION_KEY_MAP.includes(key) && key !== 'id') {
             if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
@@ -418,10 +435,8 @@ function reservationCreateQuery(object) {
             else { tempValues += value + ", "}
             tempKeys += key + ", ";
         }
-        if (index === Object.keys(object).length - 1) {
-            return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
-        }
     });
+    return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
 }
 
 function testById() {
@@ -529,20 +544,141 @@ const product = {
     area : 'BUSAN',
     geos : {
         place : '통영',
-        location : { lat : 35.11, lng : 96.84 }
+        location : { lat : 35.11, lon : 96.84 }
     }
 };
-example.create.productData = product;
-example.update.productData = product;
-const kk = new Reservation(example.create);
+// example.create.productData = product;
+// example.update.productData = product;
+// const kk = new Reservation(example.create);
 // console.log(kk.elasticData);
 // console.log(kk.sqlData);
-const Account = require('./account');
-const pp = new Account(example.create)
-pp.elasticData.id = 'testId2935'
-pp.elasticData.reservation.id = 'testI12391u60';
-console.log(pp.elasticData)
+// const Account = require('./account');
+// const pp = new Account(example.create)
+// pp.elasticData.id = 'testId2935'
+// pp.elasticData.reservation.id = 'testI12391u60';
+// console.log(pp.elasticData)
+const v2Reservation = require('../models/dataFiles/testV2ReservationForValidation.json');
+function bulkInsertSQL(data) {
+    const promiseArr = [];
+    Object.keys(data).forEach(key => {
+        promiseArr.push(Reservation.insertSQL(data[key]))
+    });
+    return Promise.all(promiseArr).then(() => console.log('done'));
+}
 
+const tempObj = {reservation_id : "16a12123a2",
+    operation : "2019-09-13/p000001/team1231232/16a12123a2",
+	product: "남쁘아",
+    agency: "Klook",
+    writer: "이진웅",
+    canceled : false,
+    team_notification : '가이드들 지침 : xxxxxx',
+	date: "2019-09-13",
+    pickup: "Myeongdong",
+    name: "Youngmo",
+    adult: 2,
+    kid: 0,
+    infant: 0,
+    option:[{name: "루지", number:2}],
+    phone : "+821038482278",
+    cash : true,
+    timezone : 'UTC+9',
+    email : "kdh7337@gmail.com",
+    messenger: "kakao:01038482278",
+	memo: "이것은 전송 될 것으로 예상되는 데이터 예제입니다.",
+	reservation_memo : "예약 메모",
+    account_memo : "회계 메모"
+}
+// console.log(JSON.stringify(tempObj))
+// fbDB.ref('v2Operation').push({'2018-09-13':{
+//         'p408':{
+//             'test_data':'test'
+//         }
+//     }});
+const reservation = {"id":"test case via POST MAN","product":"Seoul_Regular_남쁘아","agency":"Klook","agency_code":"test_agency_code","writer":"이진웅","canceled":false,"team_notification":"가이드들 지침 : xxxxxx","date":"2018-09-13","pickup":"Myeongdong","name":"Youngmo","adult":5,"kid":2,"infant":1,"option":[{"name":"루지","number":2}],"phone":"+821038482278","cash":true,"timezone":"UTC+9","email":"kdh7337@gmail.com","messenger":"kakao:01038482278","memo":"이것은 전송 될 것으로 예상되는 데이터 예제입니다.","reservation_memo":"예약 메모","account_memo":"회계 메모"
+};
+reservation.productData = { alias: '남쁘아',
+    area: 'Seoul',
+    category: 'Regular',
+    days: [ false, true, true, true, true, false, true ],
+    deadline: 14,
+    description: '',
+    expenses:
+        [ { expenses: [Array], name: 'Nami Island' },
+            { expenses: [Array], name: 'Petite France' },
+            { expenses: [Array], name: 'The Garden of Morning Calm' } ],
+    geos: { location: { lat: 34.584, lon: 85.125 }, place: 'Seoul' },
+    id: 'p408',
+    incoming:
+        [ 'Nami + Petite france + The Garden of Morning Calm / Nami Island, Petite France and The Garden of Morning Calm',
+            '남이+쁘띠+아침고요',
+            'Seoul_Regular_남쁘아',
+            'Nami Island &amp Petite France &amp Garden of Morning Calm Shuttle Package',
+            'Seoul Vicinity: NamiIsland + Petite France + Garden of Morning CalmDay Tour - From Dongdaemun History & Culture ParkStation',
+            'Nami Island, Garden of Morning Calm and More Nami + Petite France + The Garden of Morning Calm',
+            'Nami Island, Garden of Morning Calm & More Nami + Petite France + The Garden of Morning Calm',
+            'Nami Island, Garden of Morning Calm & More Nami + Petite France + Garden (From 27 March)',
+            'Nami Island, Garden of Morning Calm & More Nami + Petite France + Garden',
+            'Nami Island, Petite France and The Garden of Morning Calm Tour',
+            'Seoul Vicinity: NamiIsland + Petite France + Garden of Morning CalmDay Tour - From Hongik Univ. Station',
+            '아남쁘',
+            'Nami Island, Garden of Morning Calm & MoreNami + Petite France + Garden',
+            '겨울아남쁘',
+            'Seoul Vicinity: NamiIsland + Petite France + Garden of Morning CalmDay Tour - From Myeongdong Station',
+            'Nami Island& The Garden of Morning Calm One-day tour Nami + Petite France + The Garden of Morning Calm',
+            'Day Trip to Nami Island with Petite France and Garden of Morning Calm',
+            'Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour - From Dongdaemun History & Culture ParkStation',
+            'Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour - From Hongik Univ. Station',
+            'Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour - From Myeongdong Station',
+            'Gangwon-do Nami Island & The Garden of Morning Calm Day Tour Nami + Petite France + The Garden of Morning Calm' ],
+    memo:
+        'KK: https://www.kkday.com/ko/product/8974\nL: https://www.klook.com/activity/2528-nami-island-garden-morning-calm-seoul/\nF: https://www.indiway.com/en/prod/nami-island-petite-france-garden-of-morning-calm-shuttle-package\nT: https://www.trazy.com/experience/detail/nami-island-petite-france-the-garden-of-morning-calm-tour\nTE: https://www.koreatraveleasy.com/product/nami-island-petite-france-garden-of-morning-calm-1-day-shuttle-package-tour/\nBN: https://www.bnbhero.com/tours/587\nKR: http://korealtrip.com/tours/nami-island-petite-france-garden-morning-calm-day-trip/\nVE: https://www.veltra.com/en/asia/korea/seoul/a/142631\nVI: https://www.viator.com/tours/Seoul/Day-Tour-of-Nami-Island-with-Petite-France-and-Garden-of-Morning-Calm/d973-48881P5\nWG: https://www.waug.com/good/?idx=104931\nTL: https://touristly.com/offers/11585?trip=14629',
+    name: '남이섬+쁘띠프랑스+아침고요수목원',
+    on: 'ON',
+    pickups: [ { lat: 32.851, lon: 54.215, place: 'Dongdaemoon' } ],
+    reserve_begin: '2017-01-01',
+    reserve_end: '2018-12-31',
+    sales:
+        [ { agency: 'test Agency',
+            currency: 'KRW',
+            default: true,
+            name: 'DEFAULT',
+            reserve_begin: '2017-01-01 ',
+            reserve_end: ' 2018-12-31',
+            sales: [Array],
+            tour_begin: '2017-01-01 ',
+            tour_end: ' 2018-12-31' } ],
+    timezone: 'UTC+9',
+    tour_begin: '2017-01-01',
+    tour_end: '2018-12-31' };
+
+// const elData = Reservation.generateElasticObject(reservation);
+// elData.id = "testId001"
+// elData.message_id = "test Message Id";
+// elData.created_date = new Date();
+// elData.modified_date = new Date();
+// console.log(JSON.stringify(elData));
+
+// elasticDB.create({
+//     index : 'reservation',
+//     type : '_doc',
+//     id : elData.id,
+//     body: elData
+// },(err, resp) => {
+//     console.log(err, resp);
+// })
+// elasticDB.search({
+//     index:'reservation',
+//     type:'_doc',
+//     body:{
+//         query : {
+//             "match_all" : {}
+//         }
+//     }
+// }, (err, resp) => {
+//     console.log(err, resp)
+//     console.log(resp.hits.hits)
+// })
 module.exports = Reservation;
 
 

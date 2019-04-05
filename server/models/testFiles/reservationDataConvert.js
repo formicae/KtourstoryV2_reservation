@@ -83,7 +83,7 @@ class V2Reservation {
             name: data.product.split('_')[2],
             category: data.product.split('_')[1],
             area: data.area,
-            geos: [{place: data.area, lat: "", lng: ""}]
+            geos: [{place: data.area, lat: "", lon: ""}]
         };
         tempObj.agency = data.agency;
         tempObj.name = data.clientName;
