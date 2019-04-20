@@ -178,6 +178,7 @@ class Product {
  */
 function productMapProcessing(productMap, ignoreSet, product) {
     let areaCategoryalias = product.area + '_' + product.category + '_' + product.alias;
+    productMap.set(product.alias, product);
     productMap.set(areaCategoryalias, product);
     if (!!product.incoming) {
         product.incoming.forEach(incoming => { productMap.set(incoming, product) })

@@ -25,7 +25,7 @@
     "ejs": "^2.6.1",
     "elasticsearch": "^15.2.0",
     "firebase-admin": "^6.4.0",
-    "kintranet_lib": "git+https://d9c2c2bdc81132852d0b11614eac18455272bd26:x-oauth-basic@github.com/ktourstory/kintranet_lib.git",
+    "kintranet_lib": "git+https://8db0da6e2e42408d7da600718d8c9d2e08370cfa:x-oauth-basic@github.com/ktourstory/kintranet_lib.git",
     "lodash": "^4.17.11",
     "pg": "^7.9.0",
     "swagger": "^0.7.5",
@@ -41,5 +41,6 @@
     "test-bot": "cd bot/ && npm run test",
     "server": "cd server/ && npm run start",
     "bot": "cd bot/ && npm run start"
-  }
+  },
+  "NODE_ENV": "PRODUCTION"
 }

@@ -104,8 +104,9 @@ class Account {
     static insertReverseAccount(data) {
         let reverseSQLAccount;
         let reverseElasticAccount;
-        const queryColumns = 'account.id, writer, category, currency, income, expenditure, cash, account.memo, created_date, reservation_id';
-        const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = ${data.canceled_reservation_id}`;
+        const queryColumns = 'account.id, account.writer, category, currency, income, expenditure, cash, account.memo, account.created_date, reservation_id';
+        const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.canceled_reservation_id}'`;
+        console.log('insertReverseAccount - query :',query);
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
                 const bool = (result.command === 'SELECT' && result.rowCount > 0);

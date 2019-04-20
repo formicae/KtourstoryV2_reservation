@@ -35,6 +35,7 @@ function routerHandler(req, res, requestType) {
             return productFinder(data)})
         .then(productData => {
             data.productData = productData;
+            log.debug('Router', 'reservationHandler', 'productData load success');
             const reservation = new Reservation(data);
             log.debug('Router','reservationHandler','reservation object had been created without error')
             return reservationHandler(reservation, data, requestType)})
@@ -139,14 +140,11 @@ function reservationHandler(reservation, data, action) {
  * @returns {Promise<boolean | never>}
  */
 function createReservation(reservation, data) {
-    let fail = {sql:false, fb:false, elastic:false};
+    let task = {insertSQL:false, cancelSQL:false, cancelFB:false, insertFB:false, updateElastic:false, insertElastic:false};
     return Reservation.insertSQL(reservation.sqlData)
         .then(result => {
-            if (!result) {
-                log.warn('Router', 'createReservation', `insertSQL failed. result : ${JSON.stringify(result)}`);
-                fail.sql = true;
-                return false;
-            }
+            if (!result) return false;
+            task.insertSQL = true;
             log.debug('Router', 'createReservation', `insertSQL success! reservation id : ${result.id}`);
             data.reservation_id = result.id;
             reservation.fbData.id = result.id;
@@ -154,36 +152,35 @@ function createReservation(reservation, data) {
             reservation.elasticData.id = result.id;
             return Reservation.insertFB(reservation.fbData, data)})
         .then(result => {
-            if (!result && !fail.sql) {
-                fail.fb = true;
-                log.warn('Router', 'createReservation', `insertFB failed!`);
-                return false;
-            }
-            if (fail.sql) return true;
+            if (!result) return false;
+            task.insertFB = true;
             return Reservation.insertElastic(reservation.elasticData)})
         .then(result => {
             if (!result) {
-                if (!fail.fb) {
-                    log.warn('Router', 'createReservation', `insertElastic failed!`);
-                    return Reservation.cancelFB(reservation.fbData, data)
-                        .then(() => {
-                            log.debug('Router', 'createReservation', 'cancelFB success! this procedure is done due to insertElastic failure');
-                            return Reservation.cancelSQL(reservation.sqlData)})
-                        .then(() => {
-                            log.debug('Router', 'createReservation', 'cancelFB-cancelSQL success!');
-                            return false;
-                        });
-                } else {
-                    log.warn('Router', 'createReservation', `insertElastic passed due to firebase failure!`);
-                    return Reservation.cancelSQL(reservation.sqlData)
-                    .then(() => {
-                        log.debug('Router', 'createReservation', 'cancelFB-cancelSQL success!');
-                        return false
+                if (!task.insertFB) {
+                    return Reservation.cancelSQL(reservation.sqlData).then(result => {
+                        if (!result) return false;
+                        task.cancelSQL = true;
+                        log.debug('Router', 'createReservation', `cancelSQL success! this procedure is done due to insertFB failure. task : ${task}`);
+                        return false;
+                    });
+                } else if (!task.insertElastic) { return Reservation.cancelFB(reservation.fbData, data).then(result => {
+                        if (!result) return false;
+                        task.cancelFB = true;
+                        log.debug('Router', 'createReservation', `cancelFB success! this procedure is done due to insertElastic failure. task : ${task}`);
+                        return Reservation.cancelSQL(reservation.sqlData)})
+                    .then(result => {
+                        if (!result) return false;
+                        task.cancelSQL = true;
+                        log.debug('Router', 'createReservation', `cancelSQL success! this procedure is done due to insertElastic failure. task : ${task}`);
+                        return false;
                     });
                 }
+            } else {
+                log.debug('Router', 'createReservation', `all process success!`);
+                data.createReservationTask = task;
+                return data;
             }
-            log.debug('Router', 'createReservation', `insertElastic success!`);
-            return data;
         })
 }
 
@@ -196,29 +193,14 @@ function createReservation(reservation, data) {
  * @returns {Promise<boolean | never | never>}
  */
 function updateReservation(reservation, data) {
-    let fail = {sql:false, fb:false, elastic:false};
-    return Promise.resolve(Reservation.cancelSQL(reservation))
+    return Promise.resolve(Reservation.updateSQL(data.reservation_id))
         .then(result => {
-            if (!result) {
-                fail.sql = true;
-                return false;
-            }
-            data.canceled_reservation_id = result.id;
-            return Reservation.cancelFB(reservation, data)})
+            if (!result) return false;
+            data.canceled_reservation_id = data.reservation_id;
+            return Reservation.updateElastic(data.reservation_id)})
         .then(result => {
-            if (!result && !fail.sql) fail.fb = true;
-            if (fail.sql) log.warn('Router', 'updateReservation', `Reservation data update from SQL failed : ${reservation.id}`);
-            return Reservation.cancelElastic(reservation)})
-        .then(result => {
-            if (!result && !fail.fb) fail.elastic = true;
-            if (fail.fb) log.warn('Router', 'updateReservation', `Reservation data delete / create from / to FB failed : ${reservation.id}`);
-            if (fail.elastic) log.warn('Router', 'updateReservation', `Reservation data delete / create from / to Elastic failed : ${reservation.id}`);
-            delete reservation.sqlData.id;
-            delete reservation.elasticData.id;
-            return createReservation(reservation, data);
-        })
+            if (!result) return false;
+            log.debug('Router', 'updateReservation', `all process success!`);
+            return data;
+        });
 }
-
-// Product.getProduct('Seoul_Regular_남쁘아').then(result => {
-//     console.log(result);
-// })

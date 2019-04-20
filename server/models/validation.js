@@ -33,8 +33,8 @@ const RESERVATION_UPDATE_VALID_CHECK_LIST_MAP = {
     'kid':true,
     'infant':true,
     'canceled':true,
-    'created_date':true,
-    'modified_date':true,
+    'created_date':false,
+    'modified_date':false,
     'productCheck':true,
     'totalPeopleNumberCheck':true
 };
@@ -159,7 +159,7 @@ function ACCOUNT_VALID_CHECK_FUNCTION_MAP() {
  * @returns {Promise<boolean>} return true if table has objectId in certain field.
  */
 function validCheckObjectSQL(table, field, objectId) {
-    const tempValue = (typeof objectId === 'string') ? `"${objectId}"` : objectId;
+    const tempValue = (typeof objectId === 'string') ? `'${objectId}'` : objectId;
     const query = `SELECT EXISTS(SELECT 1 FROM ${table} WHERE ${field} = ${tempValue})`;
     return new Promise((resolve, reject) => {
         sqlDB.query(query, (err, result) => {
@@ -196,7 +196,7 @@ function validCheckProduct(product_id, tour_date) {
             return Product.getAvailablePriceGroup(tour_date, product) })
         .then(availablePriceGroup => {
             if (availablePriceGroup.length === 0) return false;
-            log.debug('Debug','validCheckProduct price group check', `availablePriceGroup check success with ${JSON.stringify(availablePriceGroup)}`);
+            log.debug('Debug','validCheckProduct price group check', `availablePriceGroup check success with ${availablePriceGroup[0].name}`);
             return availablePriceGroup.length > 0;
         });
 }
