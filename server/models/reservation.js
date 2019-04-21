@@ -319,15 +319,10 @@ class Reservation {
     }
 
     static bigTeamBuild(reservation, data) {
-        let subPeopleObj = {};
         let promiseArr = [];
-        const reservedPeopleNumber = Number(reservation.adult) + Number(reservation.kid) + Number(reservation.infant);
-        const numSubReservation = parseInt(reservedPeopleNumber / BUS_PEOPLE_MAX_NUMBER);
         return new Promise((resolve ,reject) => {
-            for (let cnt = 0; cnt < numSubReservation; cnt++) {
-                let subReservationName = reservation.id + `-${cnt + 1}`;
-                subPeopleObj = this.peopleDistribute(numSubReservation - cnt, Number(reservation.adult), Number(reservation.kid), Number(reservation.infant), subReservationName, subPeopleObj);
-            }
+            let subPeopleObj = Reservation.peopleDistribute(reservation.id, reservation.adult, reservation.kid, reservation.infant, {}, 1);
+            console.log(subPeopleObj);
             Object.keys(subPeopleObj).forEach(key => {
                 let tempReservation = reservation;
                 tempReservation.id = key;
@@ -370,29 +365,35 @@ class Reservation {
     }
 
     /**
-     * distribute total amount of people under BUS_PEOPLE_MAX_NUMBER with recursion function.
-     * @param div {Number} number to be divided
-     * @param totAdult {Number} number of total adult number
-     * @param totKid {Number} number of total kid number
-     * @param totInfant {Number} number of total infant number
-     * @param reservation_id {String} sub-reservation id (ex. r3951-3)
-     * @param obj {Object} temporary object for staging result of adult / kid / infant number
+     * distribute people to the bus
+     * @param id {String} reservation id
+     * @param adult {Number} number of adult
+     * @param kid {Number} number of kid
+     * @param infant {Number} number of infant
+     * @param obj {Object} result object
+     * @param count {Number} counter for subReservation naming
      * @returns {*}
      */
-    static peopleDistribute(div, totAdult, totKid, totInfant, reservation_id, obj) {
-        let curAdult = parseInt(totAdult / div);
-        let curKid = parseInt(totKid / div);
-        let curInfant = parseInt(totInfant / div);
-        let curPeople = (curAdult + curKid + curInfant);
+    static peopleDistribute(id, adult, kid, infant, obj, count) {
+        let curPeople = (adult + kid + infant);
         if (curPeople > BUS_PEOPLE_MAX_NUMBER) {
-            if (curAdult > 0) curAdult -= 1;
-            else if (curKid > 0) curKid -= 1;
-            else if (curInfant > 0) curInfant -= 1;
-            else this.peopleDistribute(div + 1, totAdult, totKid, totInfant, reservation_id, obj);
+            if (adult >= BUS_PEOPLE_MAX_NUMBER) {
+                obj[`${id}-${count}`] = {adult:BUS_PEOPLE_MAX_NUMBER, kid:0, infant:0};
+                return this.peopleDistribute(id, adult - BUS_PEOPLE_MAX_NUMBER, kid, infant, obj, count + 1);
+            } else if (kid >= BUS_PEOPLE_MAX_NUMBER) {
+                obj[`${id}-${count}`] = {adult:0, kid:BUS_PEOPLE_MAX_NUMBER, infant:0};
+                return this.peopleDistribute(id, adult, kid - BUS_PEOPLE_MAX_NUMBER, infant, obj, count + 1);
+            } else if (infant >= BUS_PEOPLE_MAX_NUMBER) {
+                obj[`${id}-${count}`] = {adult:0, kid:0, infant:BUS_PEOPLE_MAX_NUMBER};
+                return this.peopleDistribute(id, adult, kid, infant - BUS_PEOPLE_MAX_NUMBER, obj, count + 1);
+            } else {
+                obj[`${id}-${count}`] = {adult:parseInt(adult / 2) , kid:parseInt(kid / 2), infant : parseInt(infant / 2)};
+                return this.peopleDistribute(id, adult - parseInt( adult / 2), kid - parseInt( kid / 2), infant - parseInt( infant / 2), obj, count + 1);
+            }
+        } else {
+            obj[`${id}-${count}`] = {adult:adult, kid : kid, infant : infant};
+            return obj;
         }
-        if (curPeople > BUS_PEOPLE_MAX_NUMBER) return this.peopleDistribute(div + 1, totAdult, totKid, totInfant, reservation_id, obj);
-        obj[reservation_id] = {adult:curAdult, kid:curKid, infant:curInfant};
-        return obj;
     }
 
     /**
