@@ -97,7 +97,7 @@ class Reservation {
             modified_date : currentDate,
         };
         if (!!data.reservation_id) { result.id = data.reservation_id }
-        else { data.created_date = currentDate }
+        else { result.created_date = currentDate }
         return result;
     }
 
@@ -322,7 +322,6 @@ class Reservation {
         let promiseArr = [];
         return new Promise((resolve ,reject) => {
             let subPeopleObj = Reservation.peopleDistribute(reservation.id, reservation.adult, reservation.kid, reservation.infant, {}, 1);
-            console.log(subPeopleObj);
             Object.keys(subPeopleObj).forEach(key => {
                 let tempReservation = reservation;
                 tempReservation.id = key;
