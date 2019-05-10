@@ -7,7 +7,8 @@ const log = require('../../log');
 class Account {
     constructor(data) {
         if (!!data.id) this.id = data.id;
-        if (Math.abs(data.productData.income) + Math.abs(data.productData.expenditure) <= 0) Exceptor.report(Exceptor.TYPE.NO_PRICE_INFO, 'Total amount of money is zero');
+        if (Math.abs(data.productData.income) + Math.abs(data.productData.expenditure) <= 0)
+            log.warn('Model', 'Account-contructor', `no Money info : [income : ${data.productData.income}, expenditure : ${data.productData.expenditure}]`);
         const currentDate = Account.getGlobalDate();
         this.sqlData = Account.generateSQLObject(data, currentDate);
         this.elasticData = Account.generateElasticObject(data, currentDate);
@@ -83,57 +84,62 @@ class Account {
     /**
      * validation for account Object
      * @param account {Object} account object
-     * @param detail {Boolean} false : only validation result. true : include details
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static validation(account, detail) {
-        return validation.validAccountCheck(account)
-            .then(validation => {
-                console.log('Account validation - result : ',validation.result);
-                if (!detail) return validation.result;
-                else return validation;
-            })
+    static validation(account) {
+        return validation.validAccountCheck(account);
     }
 
     /**
-     * make reverse account when reservation is canceled.
-     * canceled reservation data is being used to make reverse account data
-     * @param data {Object} data from v2Reservation router. Reservation id is included.
-     * @returns {Promise<boolean | never>}
+     * process account data from productData
+     * @param prev_account {Object} previous account object
+     * @param data {Object} overall data object
+     * @returns {*}
      */
-    static insertReverseAccount(data) {
-        let reverseSQLAccount;
-        let reverseElasticAccount;
-        const queryColumns = 'account.id, account.writer, category, currency, income, expenditure, cash, account.memo, account.created_date, reservation_id';
-        const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.canceled_reservation_id}'`;
-        console.log('insertReverseAccount - query :',query);
+    static reverseAccountDataProcessing(prev_account, data) {
+        prev_account.date = data.date;
+        prev_account.agency = data.agency;
+        prev_account.nationality = data.nationality;
+        prev_account.writer = data.writer || prev_account.writer;
+        prev_account.account_memo = data.account_memo || prev_account.memo;
+        prev_account.productData = {
+            category : prev_account.category,
+            currency : prev_account.currency,
+            income : prev_account.income,
+            expenditure : prev_account.expenditure,
+            name : data.productData.name,
+            alias : data.productData.alias,
+            area : data.productData.area
+        };
+        prev_account.created_date = Account.getGlobalDate();
+        if (!prev_account.cash) prev_account.cash = data.cash;
+        return prev_account;
+    }
+
+    static processReverseAccount(data) {
+        const queryColumns = 'account.writer, category, currency, income, expenditure, cash, account.memo, reservation_id';
+        const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
-                const bool = (result.command === 'SELECT' && result.rowCount > 0);
-                if (err || !bool) throw new Error(`get data from Account database failed. ${data.canceled_reservation_id}`);
+                if (err) {
+                    log.warn('Model', 'processReverseAccount', `query from Account failed : ${query}`);
+                    return false;
+                }
+                log.debug('Model','processReverseAccount',`query from Account success! target reservation id : ${data.previous_reservation_id}`);
                 resolve(result.rows[0])})})
             .then(canceledData => {
-                const tempAccount = new Account(canceledData);
-                reverseSQLAccount = Account.reverseMoneyProcess(tempAccount.sqlData);
-                reverseElasticAccount = Account.reverseMoneyProcess(tempAccount.elasticData);
-                return Account.insertSQL(reverseSQLAccount)})
-            .then(result => {
-                const bool = (result.command === 'INSERT' && result.rowCount === 1);
-                if (err || !bool) {
-                    log.warn('Model','insertReverseAccount','insert SQL failed');
-                    throw new Error(`Reverse Account insert to SQL failed.`);
+                if (!canceledData) {
+                    log.warn('Model', 'processReverseAccount', `Account load from SQL failed`);
+                    return false;
                 }
-                log.debug('Model','insertReverseAccount','insert SQL success!');
-                return Account.insertElastic(reverseElasticAccount)})
-            .then(result => {
-                if (!result) {
-                    log.warn('Model', 'insertReverseAccount', 'insert Elastic failed');
-                    throw new Error(`Reverse Account insert to Elastic failed.`);
-                }
-                log.debug('Model', 'insertReverseAccount', 'insert Elastic success!');
-                return true;
-            })
-    }
+                const tempAccount = new Account(Account.reverseAccountDataProcessing(canceledData, data));
+                tempAccount.sqlData = Account.reverseMoneyProcess(tempAccount.sqlData);
+                tempAccount.elasticData = Account.reverseMoneyProcess(tempAccount.elasticData);
+                if (tempAccount.id) delete tempAccount.id;
+                log.debug('Model', 'processReverseAccount', 'reverse Account process success!');
+                return tempAccount;
+            });
+    };
 
     /**
      * insert account Object to postgreSQL database
@@ -145,12 +151,12 @@ class Account {
         const query = `INSERT INTO account (${text.keys}) VALUES (${text.values}) RETURNING *`;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
-                const bool = (result.command === 'INSERT' && result.rowCount === 1);
-                if (err || !bool) {
+                if (err) {
                     log.warn('Model','Account-insertSQL',`insert SQL failed query : ${query}`);
-                    throw new Error(`Account insert to SQL failed. Account ${account}`);
+                    resolve(false);
                 }
                 result.rows[0].id = 'a' + result.rows[0]._id;
+                log.debug('Model','Account-insertSQL', `insert to SQL success : ${result.rows[0].id}`);
                 resolve(result.rows[0]);
             });
         });
@@ -169,35 +175,16 @@ class Account {
                 id : account.id,
                 body: account
             },(err, resp) => {
-                if (err || resp.result !== 'created' || resp._shards.successful <= 0) {
+                if (err) {
                     log.warn('Model','Account-insertElastic', `insert Elastic failed : ${account.id}`);
-                    throw new Error('Failed : insert Account to Elastic');
+                    resolve(false);
                 }
+                log.debug('Model','Account-insertElastic', `insert to Elastic success : ${account.id}`);
                 resolve(true);
             });
         });
     }
 }
-
-// function accountCreateQuery(object) {
-//     let tempKeys = "";
-//     let tempValues = "";
-//     return new Promise((resolve, reject) => {
-//         let value;
-//         Object.keys(object).forEach((key, index) => {
-//             value = object[key];
-//             if (ACCOUNT_KEY_MAP.includes(key) && key !== 'id') {
-//                 if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
-//                 else if (typeof value === 'string') { tempValues += "'" + value + "'" + ", "}
-//                 else { tempValues += value + ", "}
-//                 tempKeys += key + ", ";
-//             }
-//             if (index === Object.keys(object).length - 1) {
-//                 resolve({keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)})
-//             }
-//         });
-//     })
-// }
 
 function accountCreateQuery(object) {
     let tempKeys = "";
@@ -214,35 +201,5 @@ function accountCreateQuery(object) {
     });
     return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
 }
-
-const testAccount = {
-    id: 'testId2935',
-    writer: 'Ktour || Formicae',
-    category: 'CATEGORY-39',
-    currency: 'KRW',
-    income: 45000,
-    expenditure: 0,
-    cash: true,
-    memo: 'pre-paid(account)',
-    created_date: '2019-03-09T08:10:18.87',
-    reservation: {
-        id: 'testI12391u60',
-        agency: 'Klook',
-        tour_date: new Date(2019,3,17,15,0,0),
-        nationality: 'Korea',
-        adult: 6,
-        kid: 2,
-        infant: 4,
-        product: {
-            name: '통영루지_스키',
-            alias: 'Busan_통영_루지_스키',
-            category: 'CATEGORY-39',
-            area: 'BUSAN'
-        },
-        options: { '0': {name:'LUGI',number:4}, '1': {name:'SKI',number:2} }
-    }
-};
-// const testFile = require('./test files/v2TEST_AccountData.json');
-// Account.validation(testFile['1']).then(result => console.log(result))
 
 module.exports = Account;

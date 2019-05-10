@@ -7,15 +7,21 @@ const log = require('../../log');
 sqlDB.connect();
 
 exports.post = (req, res) => {
-    if (!req.get('Content-Type')) return res.status(400).send("Content-Type should be json");
-    console.log('post request!');
-    routerHandler(req, res, 'POST').catch(err => { res.status(500).send(`POST error :${err.message}`)});
+    if (!req.get('Content-Type')) return res.status(400).json({message:"Content-Type should be json", task:{}});
+    routerHandler(req, res, 'POST')
+        .catch(err => {
+            log.error('Router', 'RESERVATION export-POST', `unhandled error occurred! error : ${err}`);
+            res.status(500).send('unhandled RESERVATION POST error')
+        });
 };
 
 exports.update = (req, res) => {
-    if (!req.get('Content-Type')) return res.status(400).send("Content-Type should be json");
-    console.log('update reqeust!');
-    routerHandler(req, res, 'UPDATE').catch(err => { res.status(500).send(`POST error :${err.message}`)});
+    if (!req.get('Content-Type')) return res.status(400).json("Content-Type should be json");
+    routerHandler(req, res, 'UPDATE')
+        .catch(err => {
+            log.error('Router', 'RESERVATION export-UPDATE', `unhandled error occurred! error : ${err}`);
+            res.status(500).send(`unhandled RESERVATION UPDATE error`)
+        });
 };
 
 /**
@@ -29,21 +35,29 @@ exports.update = (req, res) => {
  */
 function routerHandler(req, res, requestType) {
     let data = req.body;
+    data.reservationResult = false;
     return pickupPlaceFinder(data)
         .then(location => {
             data.pickupData = location;
             return productFinder(data)})
         .then(productData => {
             data.productData = productData;
-            log.debug('Router', 'reservationHandler', 'productData load success');
+            log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
             const reservation = new Reservation(data);
-            log.debug('Router','reservationHandler','reservation object had been created without error')
             return reservationHandler(reservation, data, requestType)})
-        .then(result => {
-            if (!result) throw new Error('reservationHandler failed');
-            req.body = result;
-            if (requestType === 'POST') return accountRouter.post(req, res);
-            else return accountRouter.update(req, res);
+        .then(resultData => {
+            if (!resultData.reservationResult) return res.status(500).json({
+                message:'reservationHandler failed',
+                reservationTask:resultData.reservationTask
+            });
+            req.body = resultData;
+            if (requestType === 'POST') {
+                log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
+                return accountRouter.post(req, res);
+            } else {
+                log.debug('Router', 'v2Reservation', 'all task done successfully [UPDATE]. goto v2Account router');
+                return accountRouter.update(req, res);
+            }
         });
 }
 
@@ -120,13 +134,22 @@ function priceCalculation(item, data) {
  * @returns {Promise<boolean | never | never>}
  */
 function reservationHandler(reservation, data, action) {
-    if (action === 'POST') { return Reservation.validationCreate(reservation, false)
+    const tempResult = {reservationResult:false, reservationTask:{validation:false}};
+    if (action === 'POST') { return Reservation.validationCreate(reservation)
         .then(validCheck => {
-            if (!validCheck) throw new Error(`ValidDataCheck create failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
+            if (!validCheck.result) {
+                log.warn('Router', 'reservationHandler', `ValidDataCheck create failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
+                tempResult.reservationTask.type = 'CREATE';
+                tempResult.reservationTask.validationDetail = validCheck.detail;
+                return tempResult;}
             return createReservation(reservation, data)})}
-    else { return Reservation.validationUpdate(reservation, false)
+    else { return Reservation.validationUpdate(reservation)
         .then(validCheck => {
-            if (!validCheck) throw new Error(`ValidDataCheck update failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
+            if (!validCheck.result) {
+                log.warn('Router', 'reservationHandler', `ValidDataCheck create failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
+                tempResult.reservationTask.type = 'UPDATE';
+                tempResult.reservationTask.validationDetail = validCheck.detail;
+                return tempResult;}
             return updateReservation(reservation, data)
         })}
 }
@@ -140,7 +163,7 @@ function reservationHandler(reservation, data, action) {
  * @returns {Promise<boolean | never>}
  */
 function createReservation(reservation, data) {
-    let task = {insertSQL:false, cancelSQL:false, cancelFB:false, insertFB:false, updateElastic:false, insertElastic:false};
+    let task = {type:'CREATE', router:'reservation', validation:true, insertSQL:false, insertFB:false, insertElastic:false, deleteFB:false, deleteSQL:false};
     return Reservation.insertSQL(reservation.sqlData)
         .then(result => {
             if (!result) return false;
@@ -151,36 +174,23 @@ function createReservation(reservation, data) {
             reservation.sqlData.id = result.id;
             reservation.elasticData.id = result.id;
             return Reservation.insertFB(reservation.fbData, data)})
-        .then(result => {
-            if (!result) return false;
+        .then(resultData => {
+            if (!resultData) return false;
+            data = resultData;
             task.insertFB = true;
             return Reservation.insertElastic(reservation.elasticData)})
         .then(result => {
+            data.reservationTask = task;
             if (!result) {
-                if (!task.insertFB) {
-                    return Reservation.cancelSQL(reservation.sqlData).then(result => {
-                        if (!result) return false;
-                        task.cancelSQL = true;
-                        log.debug('Router', 'createReservation', `cancelSQL success! this procedure is done due to insertFB failure. task : ${task}`);
-                        return false;
-                    });
-                } else if (!task.insertElastic) { return Reservation.cancelFB(reservation.fbData, data).then(result => {
-                        if (!result) return false;
-                        task.cancelFB = true;
-                        log.debug('Router', 'createReservation', `cancelFB success! this procedure is done due to insertElastic failure. task : ${task}`);
-                        return Reservation.cancelSQL(reservation.sqlData)})
-                    .then(result => {
-                        if (!result) return false;
-                        task.cancelSQL = true;
-                        log.debug('Router', 'createReservation', `cancelSQL success! this procedure is done due to insertElastic failure. task : ${task}`);
-                        return false;
-                    });
-                }
-            } else {
-                log.debug('Router', 'createReservation', `all process success!`);
-                data.createReservationTask = task;
-                return data;
+                return failureManager(reservation, data, task, 'POST').then(failureTask => {
+                    data.reservationTask = failureTask;
+                    return data;
+                });
             }
+            data.reservationTask.insertElastic = true;
+            data.reservationResult = true;
+            log.debug('Router', 'createReservation', `all process success!`);
+            return data;
         })
 }
 
@@ -193,14 +203,56 @@ function createReservation(reservation, data) {
  * @returns {Promise<boolean | never | never>}
  */
 function updateReservation(reservation, data) {
-    return Promise.resolve(Reservation.updateSQL(data.reservation_id))
+    const reservation_canceled = Boolean(data.canceled);
+    let task = {type:'UPDATE',router:'reservation', validation:true, reservation_canceled:reservation_canceled, cancelSQL:false, cancelElastic:false};
+    return Promise.resolve(Reservation.cancelSQL(data.reservation_id))
         .then(result => {
             if (!result) return false;
-            data.canceled_reservation_id = data.reservation_id;
-            return Reservation.updateElastic(data.reservation_id)})
+            task.cancelSQL = true;
+            data.previous_reservation_id = data.reservation_id;
+            return Reservation.cancelElastic(data.reservation_id)})
         .then(result => {
-            if (!result) return false;
-            log.debug('Router', 'updateReservation', `all process success!`);
+            data.reservationTask = task;
+            if (!result) {
+                return failureManager(reservation, data, task, type).then(failureTask => {
+                    data.reservationTask = failureTask;
+                    return data;
+                })
+            }
+            data.reservationTask.cancelElastic = true;
+            data.reservationResult = true;
+            log.debug('Router', 'updateReservation', 'all process success!');
             return data;
-        });
+        })
+}
+
+function failureManager(reservation, data, task, type) {
+    log.debug('Router', 'Reservation - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`)
+    if (type === 'POST') {
+        if (!task.insertElastic && task.insertFB) {
+            return Reservation.deleteFB(reservation.fbData, data)
+                .then(result => {
+                    if (!result) return false;
+                    task.deleteFB = true;
+                    log.debug('Router', 'Reservation-failureManager', `deleteFB success! type : ${type}. task : ${task}`);
+                    return Reservation.deleteSQL(reservation.sqlData.id)})
+                .then(result => {
+                    if (!result) return task;
+                    task.deleteSQL = true;
+                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${task}`);
+                    return task;
+                });
+        } else if (!task.insertFB && task.insertSQL) {
+            return Reservation.deleteSQL(reservation.sqlData.id)
+                .then(result => {
+                    if (!result) return task;
+                    task.deleteSQL = true;
+                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${task}`);
+                    return task;
+                });
+        } else { return Promise.resolve(task); }
+    } else {
+        return Promise.resolve(task);
+    }
+
 }

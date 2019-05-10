@@ -211,7 +211,7 @@ function changeProductToSQL(product_id, fbProduct) {
         // id 가 reservation, product에서 겹치지만 여기에서 나오는 id는 query 순서에 의해 reservation의 것이다.
         sqlDB.query(query, (err, result) => {
             const bool = (result.command === 'SELECT' && result.rowCount === 1);
-            if (err || bool) throw new Error('manageProductChanges - failed');
+            if (err || bool) reject();
             resolve(result.rows[0])})})
         .then(data => {
 

@@ -163,8 +163,7 @@ function validCheckObjectSQL(table, field, objectId) {
     const query = `SELECT EXISTS(SELECT 1 FROM ${table} WHERE ${field} = ${tempValue})`;
     return new Promise((resolve, reject) => {
         sqlDB.query(query, (err, result) => {
-            if (err) throw new Error(`validCheckObjectSQL failed : [${table}, ${field}, ${objectId}]`);
-            if (!result || result.rowCount <= 0 || !result.rows[0].exists) {
+            if (err || !result || result.rowCount <= 0 || !result.rows[0].exists) {
                 log.warn('Validation','validCheckObjectSQL', `sqlDB query failed : [query : ${query}, objectId : ${objectId}]`);
                 resolve(false)}
             resolve(true);
@@ -239,42 +238,39 @@ function validCheckOperationDateTime(tour_date, product_id) {
     let product;
     if (!tour_date) {
         log.warn('Validation', 'validCheckOperationDateTime', 'tour_date is undefined');
-        throw new Error(`operation date is undefined ${tour_date}`);
-    }
+        return Promise.resolve(false);}
     if (!product_id) {
         log.warn('Validation', 'validCheckOperationDateTime', 'product_id is undefined');
-        throw new Error(`product id is undefined ${product_id}`);
-    }
-    console.log('before validCheckOperationDateTime promise');
+        return Promise.resolve(false);}
     return validCheckSimpleDateTime(tour_date)
         .then(simpleLengthCheck => {
             if (!simpleLengthCheck) return false;
-            log.debug('Debug','validCheckOperationDateTime','validCheckSimpleDateTime passed');
+            log.debug('Validation','validCheckOperationDateTime','validCheckSimpleDateTime passed');
             return Product.getProduct(product_id)})
         .then(result => {
             product = result;
             if (!result) {
                 log.warn('Validation', 'validCheckOperationDateTime',`getProduct failed. [${product_id}] is not in productMap.`);
                 throw new Error('UNKNOWN_PRODUCT'); }
-            log.debug('Debug','validCheckOperationDateTime','get Product passed');
+            log.debug('Validation','validCheckOperationDateTime','get Product passed');
             return validCheckDayOfWeek(product, tour_date)})
         .then(dayCheck => {
             if (!dayCheck) {
                 log.warn('Validation', 'validCheckOperationDateTime', 'dayCheck failed. invalid operation day of week')
                 throw new Error('INVALID_OPERATION_DAY_OF_WEEK')}
-            log.debug('Debug','validCheckOperationDateTime','dayCheck passed');
+            log.debug('Validation','validCheckOperationDateTime','dayCheck passed');
             return Product.checkTourDateInValidRange(tour_date, product.tour_begin, product.tour_end, product.timezone)})
         .then(tourDateCheck => {
             if (!tourDateCheck) {
                 log.warn('Validation','validCheckOperationDateTime', 'tourDateCheck failed');
                 throw new Error('Invalid Operation date at tourDateCheck!');}
-            log.debug('Debug','validCheckOperationDateTime','tourDateCheck passed');
+            log.debug('Validation','validCheckOperationDateTime','tourDateCheck passed');
             return Product.getAvailablePriceGroup(tour_date, product)})
         .then((priceGroupCheck) => {
             if (!priceGroupCheck) {
                 log.warn('Valdation','validCheckOperationDateTime', 'priceGroupCheck failed. no existing price group in product');
                 throw new Error('price group check failed!');}
-            log.debug('Debug','validCheckOperationDateTime','priceGroupCheck passed');
+            log.debug('Validation','validCheckOperationDateTime','priceGroupCheck passed');
             if (env.released) return new Date().getTime() - tour_date.getTime() < product.deadline;
             return true;
         }).catch(err => {return false});
@@ -396,7 +392,6 @@ function validCheckTotalPeopleNumber(adult, kid, infant){
 function validCheckTotalMoneyAmount(income, expenditure){
     return new Promise((resolve, reject) => {
         if (income === 0 && expenditure === 0) {
-            // Exceptor.report(Exceptor.TYPE.NO_PRICE_INFO, 'sum of money is zero')
             resolve(false);
         } else { resolve(true) }
     });
@@ -436,7 +431,10 @@ function validDataCheck(object, paramMap ,checkList, functionMap) {
         .then(checkList => {
             checkList.forEach((bool, index) => {checkObject[checkKey[index]] = bool});
             return {result:!checkList.includes(false), detail:checkObject};
-        }).catch(err => console.log(err));
+        }).catch(err => {
+            log.error('Validation', 'validDataCheck', 'check failed due to rejection');
+            return {result:false, detail:'error'};
+        });
 }
 
 /**
@@ -445,12 +443,7 @@ function validDataCheck(object, paramMap ,checkList, functionMap) {
  * @returns {Promise<{result: boolean, detail} | never | boolean>}
  */
 function validReservationUpdateCheck(reservation) {
-    console.log('update validation!')
     return validDataCheck(reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_UPDATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
-        .catch(err => {
-            Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_RESERVATION, `Error occurred while update Reservation validation`);
-            return false;
-        });
 }
 
 /**
@@ -461,10 +454,6 @@ function validReservationUpdateCheck(reservation) {
 function validReservationCreateCheck(reservation) {
     console.log('reservation validation check!');
     return validDataCheck(reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_CREATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
-        .catch(err => {
-            Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_RESERVATION, `Error occurred while create Reservation validation`);
-            return false;
-        });
 }
 
 /**
@@ -475,10 +464,6 @@ function validReservationCreateCheck(reservation) {
 function validAccountCheck(account) {
     console.log('account validation check!');
     return validDataCheck(account.sqlData, ACCOUNT_VALID_CHECK_PARAMETER_MAP, ACCOUNT_VALID_CHECK_LIST_MAP, ACCOUNT_VALID_CHECK_FUNCTION_MAP)
-        .catch(err => {
-            Exceptor.report(Exceptor.TYPE.VALID_CHECK_FAIL_ACCOUNT, `Error occured while Account validation`);
-            return false;
-        });
 }
 
 exports.RESERVATION_KEY_MAP = RESERVATION_KEY_MAP;

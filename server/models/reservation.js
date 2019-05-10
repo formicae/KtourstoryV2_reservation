@@ -21,7 +21,6 @@ class Reservation {
     constructor(data) {
         if (data.adult + data.kid + data.infant <= 0) log.debug('INFO', 'Reservation people number', 'Total number of people is zero', {message_id:data.message_id});
         const currentDate = Reservation.getGlobalDate();
-        console.log('Reservation - productData : ',data.productData);
         this.sqlData = Reservation.generatePostgreSQLObject(data, currentDate);
         this.fbData =  Reservation.generateFirebaseObject(data);
         this.elasticData = Reservation.generateElasticObject(data, currentDate);
@@ -33,7 +32,6 @@ class Reservation {
      * @param currentDate {String} Time information without timezone information which is made in server.
      */
     static generateElasticObject(data, currentDate){
-        console.log('pickupData : ',data.pickupData)
         const result = {
             id : data.reservation_id,
             message_id : data.message_id,
@@ -167,32 +165,19 @@ class Reservation {
     /**
      * Validation for updating reservation before delete / insert data from / to databases.
      * @param reservation {Object} reservation object
-     * @param detail {Boolean} false : only validation result. true : include details
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static validationUpdate(reservation, detail) {
+    static validationUpdate(reservation) {
         return validation.validReservationUpdateCheck(reservation)
-            .then(validation => {
-                console.log('validationUpdate - result : ',validation.detail);
-                if (!detail) return validation.result;
-                else return validation;
-            });
     }
 
     /**
      * Validation for creating reservation before insert data to databases.
      * @param reservation {Object} reservation object
-     * @param detail {Boolean} false : only validation result. true : include details
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static validationCreate(reservation, detail) {
+    static validationCreate(reservation) {
         return validation.validReservationCreateCheck(reservation)
-            .then(validation => {
-                console.log(validation)
-                console.log('validationCreate - result : ',validation.result);
-                if (!detail) return validation.result;
-                else return validation;
-            });
     }
 
     /**
@@ -205,8 +190,7 @@ class Reservation {
         return new Promise((resolve, reject)=> {
             const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
             sqlDB.query(query, (err, result) => {
-                const bool = (result.command === 'INSERT' && result.rowCount === 1);
-                if (err || !bool) {
+                if (err) {
                     log.warn('Model', 'Reservation-insertSQL', `data insert to SQL failed : ${reservation.id}`);
                     resolve(false);
                 }
@@ -222,16 +206,15 @@ class Reservation {
      * @param reservation_id {String} reservation id to be deleted.
      * @returns {Promise<any>}
      */
-    static cancelSQL(reservation_id) {
+    static deleteSQL(reservation_id) {
         return new Promise((resolve, reject) => {
             const query = `DELETE FROM reservation WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
-                const bool = (result.command === 'DELETE' && result.rowCount === 1);
-                if (err || !bool) {
-                    log.warn('Model', 'Reservation-cancelSQL', 'delete reservation from SQL failed');
+                if (err) {
+                    log.warn('Model', 'Reservation-deleteSQL', 'delete reservation from SQL failed');
                     resolve(false);
                 }
-                log.debug('Model','Reservation-cancelSQL', 'data cancel from SQL success')
+                log.debug('Model','Reservation-deleteSQL', 'data delete from SQL success')
                 resolve(result.rows[0]);
             })
         });
@@ -242,16 +225,15 @@ class Reservation {
      * @param reservation_id {String} reservation id
      * @returns {Promise<any>}
      */
-    static updateSQL(reservation_id) {
+    static cancelSQL(reservation_id) {
         return new Promise((resolve, reject) => {
-            const query = `UPDATE reservation SET canceled = true WHERE id = '${reservation_id}' RETURNING *`;
+            const query = `UPDATE reservation SET canceled = true, modified_date = '${new Date().toISOString().slice(0,-2)}' WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
-                const bool = (result.command === 'UPDATE' && result.rowCount === 1);
-                if (err || !bool) {
-                    log.warn('Model', 'Reservation-updateSQL', 'data update from SQL failed - make "cancel" column to TRUE');
+                if (err) {
+                    log.warn('Model', 'Reservation-cancelSQL', 'data update from SQL failed - make "cancel" column to TRUE');
                     throw new Error('Reservation update from SQL failed');
                 }
-                log.debug('Model', 'Reservation-updateSQL', 'data update from SQL success - make "cancel" column to TRUE');
+                log.debug('Model', 'Reservation-cancelSQL', 'data update from SQL success - make "cancel" column to TRUE');
                 resolve(result.rows[0]);
             });
         });
@@ -272,10 +254,27 @@ class Reservation {
                     log.warn('Model', 'newTeamBuild', `v2Operation team push failed`);
                     resolve(false);
                 }
+            }).then(result => {
                 log.debug('Model', 'newTeamBuild', `new team build for reservation id ${reservation.id} success`);
-                resolve(true);
+                let path = result.path.pieces_;
+                data.operation = path[1] + '/' + path[2] + '/' + path[4] + '/' + reservation.id;
+                resolve(data);
             });
         })
+    }
+
+    /**
+     * team building function when teamId does not have any reservation.
+     * @param reservation {Object} reservation obeject
+     * @param data {Object} overall data
+     * @param teamId {String} team id
+     */
+    static async emptyTeamRebuild(reservation, data, teamId) {
+        const reservationObj = {};
+        reservationObj[reservation.id] = reservation;
+        const result = await fbDB.ref('v2Operation').child(data.date).child(data.productData.id).child('teams').child(teamId).update({reservations:reservationObj});
+        data.operation = data.date + '/' + data.productData.id + '/'+ teamId + '/' + reservation.id;
+        return data;
     }
 
     /**
@@ -297,6 +296,9 @@ class Reservation {
             }
             for (let teamId in operation.teams) {
                 peopleCount = 0;
+                if (!operation.teams[teamId].reservations) {
+                    resolve(this.emptyTeamRebuild(reservation, data, teamId));
+                }
                 for (let r_id in operation.teams[teamId].reservations) {
                     tempReservation = operation.teams[teamId].reservations[r_id];
                     peopleCount += Number(tempReservation.adult) + Number(tempReservation.kid) + Number(tempReservation.infant);
@@ -309,7 +311,8 @@ class Reservation {
                                 log.warn('Model', 'regularTeamBuild', `v2Operation reservation push failed`);
                                 resolve(false);
                             }
-                            resolve(true);
+                            data.operation = data.date + '/' + data.productData.id + '/'+ teamId + '/' + reservation.id;
+                            resolve(data);
                         });
                 }
             }
@@ -330,7 +333,7 @@ class Reservation {
                 tempReservation.infant = subPeopleObj[key].infant;
                 let team = new Team();
                 team.reservations[key] = tempReservation;
-                promiseArr.push(this.bigTeamBuildPromiseArray(data, team));
+                promiseArr.push(this.bigTeamBuildPromiseArray(data, team, tempReservation.id));
             });
             // todo : bus name, cost, size should be updated in team information later!
             // todo : guide id / name should be updated in team information later!
@@ -339,8 +342,9 @@ class Reservation {
                     log.warn('Model', 'regularTeamBuild', `BIG reservation insert failed : ${result}`);
                     resolve(false);
                 }
+                data.operation = [...result];
                 log.debug('Model', 'regularTeamBuild', `BIG reservation success`);
-                resolve(true);
+                resolve(data);
             });
         })
     }
@@ -349,16 +353,20 @@ class Reservation {
      * build promise array for big team insert to firebase
      * @param data {Object} raw data from router
      * @param team {Object} team object
+     * @param reservationId {String} reservation ID for big team.
      * @returns {Promise<any>}
      */
-    static bigTeamBuildPromiseArray(data, team) {
+    static bigTeamBuildPromiseArray(data, team, reservationId) {
         return new Promise((resolve, reject) => {
             fbDB.ref('v2Operation').child(data.date).child(data.productData.id).child('teams').push(team, err => {
                 if (err) {
                     log.warn('Model', 'bigTeamBuildPromiseArray', `BIG reservation insert failed : ${team.reservation}`);
                     resolve(false);
                 }
-                resolve(true);
+            }).then(result => {
+                let path = result.path.pieces_;
+                let operation = path[1] + '/' + path[2] + '/' + path[4] + '/' + reservationId;
+                resolve(operation);
             });
         })
     }
@@ -396,7 +404,8 @@ class Reservation {
     }
 
     /**
-     * Insert data to Firebase
+     * Insert data to Firebase.
+     * returns data with path of firebase where data had been stored.
      * @param reservation {Object} new reservation object
      * @param data {Object} tongjjabaegi data from Client server or BOT.
      */
@@ -425,26 +434,52 @@ class Reservation {
 
     /**
      * cancel FB : delete previous data in firebase.
+     * for Regular reservation & New team reservation case, type of data.operation is 'string'
+     * for Big reservation case, type of data.operation is 'object'
      * @param reservation {Object} reservation object
      * @param data {Object} tonjjabaegi data from Clinet server of BOT.
      */
-    static cancelFB(reservation, data) {
-        const operationArr = data.operation.split('/');
-        const date = operationArr[0];
-        const productId = operationArr[1];
-        const teamId = operationArr[2];
-        const reservationId = operationArr[3];
+    static deleteFB(reservation, data) {
+        if (typeof data.operation === 'string') {
+            const operationArr = data.operation.split('/');
+            const date = operationArr[0],
+                productId = operationArr[1],
+                teamId = operationArr[2],
+                reservationId = operationArr[3] || reservation.id;
+            return this.fbDeleteProcess(date, productId, teamId, reservationId);
+        } else {
+            const promiseArr = [];
+            data.operation.forEach(operation => {
+                const operationArr = operation.split('/');
+                const date = operationArr[0],
+                    productId = operationArr[1],
+                    teamId = operationArr[2],
+                    reservationId = operationArr[3] || reservation.id;
+                promiseArr.push(this.fbDeleteProcess(date, productId, teamId, reservationId));
+            });
+            return Promise.all(promiseArr).then(result => {
+                if (result.includes(false)) {
+                    log.warn('Model', 'deleteFB - bigTeamReservation', `firebase reservation delete failed! ${reservation.id}. result : ${result}`);
+                    return false;
+                }
+                log.debug('Model', 'deleteFB - bigTeamReservation', `all of firebase reservation delete success! number of deleted reservation : ${result.length}`);
+                return true;
+            })
+        }
+    }
+
+    static fbDeleteProcess(date, productId, teamId, reservationId) {
         return new Promise((resolve, reject) => {
             fbDB.ref('v2Operation').child(date).child(productId).child('teams').child(teamId)
                 .child('reservations').child(reservationId).remove(err => {
-                    if (err) {
-                        log.warn('Model', 'Reservation-cancelFB', `cancel reservation from FB failed : ${reservation.id}`);
-                        resolve(false);
-                    }
-                    log.debug('Model', 'Reservation-cancelFB', `cancel reservation from FB success : ${reservation.id}`);
-                    resolve(true);
-                });
+                if (err) {
+                    log.warn('Model', 'Reservation-deleteFB', `cancel reservation from FB failed : ${reservationId}`);
+                    resolve(false);
+                }
+                log.debug('Model', 'Reservation-deleteFB', `cancel reservation from FB success : ${reservationId}`);
+                resolve(true);
             });
+        });
     }
 
     /**
@@ -460,12 +495,11 @@ class Reservation {
                 id : reservation.id,
                 body: reservation
             },(err, resp) => {
-                console.log(err, resp)
-                if (err || resp.result !== 'created') {
+                if (err) {
                     log.warn('Model', 'Reservation-insertElastic', `insert into Elastic failed : ${reservation.id}`);
                     resolve(false);
                 }
-                log.debug('Model', 'Reservation-updateElastic', `insert to Elastic success : ${reservation.id}`);
+                log.debug('Model', 'Reservation-cancelElastic', `insert to Elastic success : ${reservation.id}`);
                 resolve(true);
             });
         });
@@ -476,7 +510,7 @@ class Reservation {
      * @param reservation_id {String} reservation id
      * @returns {Promise<any>}
      */
-    static updateElastic(reservation_id) {
+    static cancelElastic(reservation_id) {
         return new Promise((resolve, reject) => {
             elasticDB.update({
                 index : 'reservation',
@@ -488,12 +522,28 @@ class Reservation {
                     }
                 }
             }, (err, resp) => {
-                console.log(err, resp)
-                if (err || resp.result !== 'updated') {
-                    log.warn('Model', 'Reservation-updateElastic', `update from Elastic failed : ${reservation_id}`);
+                if (err) {
+                    log.warn('Model', 'Reservation-cancelElastic', `update from Elastic failed : ${reservation_id}`);
                     resolve(false);
                 }
-                log.debug('Model', 'Reservation-updateElastic', `update from Elastic success : ${reservation_id}`);
+                log.debug('Model', 'Reservation-cancelElastic', `update from Elastic success : ${reservation_id}`);
+                resolve(true);
+            })
+        })
+    }
+
+    static deleteElastic(reservation_id) {
+        return new Promise((resolve, reject) => {
+            elasticDB.delete({
+                index : 'reservation',
+                type : '_doc',
+                id : reservation_id,
+            }, (err, resp) => {
+                if (err) {
+                    log.warn('Model', 'Reservation-deleteElastic', `delete from Elastic failed : ${reservation_id}`);
+                    resolve(false);
+                }
+                log.debug('Model', 'Reservation-deleteElastic', `delete from Elastic success : ${reservation_id}`);
                 resolve(true);
             })
         })
@@ -562,7 +612,7 @@ function testById() {
     const TEST_FILE = require('./test files/v2TEST_ReservationData.json');
     const testReservation = TEST_FILE['106'];
     console.log(testReservation);
-    Reservation.validationCreate(testReservation, true)
+    Reservation.validationCreate(testReservation)
         .then(result => console.log('validation result : ',result));
 }
 function dataBaseToTestData() {
@@ -662,4 +712,36 @@ function bulkInsertSQL(data) {
     return Promise.all(promiseArr).then(() => console.log('done'));
 }
 
+// const kkk = () => {
+//     return new Promise((resolve, reject) => {
+//         fbDB.ref('v2Operation').child('2018-09-13').child('p408').child('teams').child('-Ldmnk2ZB_wcxIHh6Tkt').child('test01').update('hello')
+//             .then((result) => {
+//                 resolve(result);
+//             });
+//     })
+// }
+// kkk().then(result => console.log('result : ',result))
+// fbDB.ref('v2Operation').child('2018-09-13').child('p408').child('teams').child('-Ldmnk2ZB_wcxIHh6Tkt').once('value', snapshot => {
+//     console.log(snapshot.val())
+// })
+// const mmm = fbDB.ref('v2Operation').child('2018-09-13').child('p408').child('teams').push('hello', (err,result) => {
+//     console.log(err, result)
+// }).then(result => console.log('result : ',result));
+// // console.log(mmm, Object.keys(mmm));
+// // console.log(mmm.path.pieces_)
+// mmm
+// fbDB.ref('v2Operation').child('2018-09-13').child('p408').child('teams').push({title:'nono',reservations:{r0001:{name:'test',age:30}}});
+
+// fbDB.ref('v2Operation').child('2018-09-13').child('p408').child('teams')
+//     .child('-LeXJTGHgaktuhbR_f3i').child('reservations').child('r0001').remove(err => {
+//     fbDB.ref('v2Operation').child('2018-09-13').child('p408').child('teams')
+//         .child('-LeXJTGHgaktuhbR_f3i').update('reservations', result => {
+//             console.log('done');
+//     });
+// })
+
+// fbDB.ref('v2Operation').child('2018-09-13').child('p408').child('teams')
+//     .child('-LeXKDCFzyAqgv7aAX60').update({reservations:{r0001:{name:'test',age:20}}}, result => {
+//     console.log('done', result);
+// });
 module.exports = Reservation;
