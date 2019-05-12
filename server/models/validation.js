@@ -50,7 +50,7 @@ const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
     'adult':true,
     'kid':true,
     'infant':true,
-    'canceled':true,
+    'canceled':false,
     'created_date':false,
     'modified_date':false,
     'productCheck':true,
