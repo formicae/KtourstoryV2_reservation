@@ -119,6 +119,12 @@ class Account {
         return prev_account;
     }
 
+    /**
+     * get account data from SQL using reservation id.
+     * if multiple account data is present, oldest account will be selected.
+     * @param data
+     * @returns {Promise<any | never>}
+     */
     static processReverseAccount(data) {
         const queryColumns = 'account.writer, category, currency, income, expenditure, cash, account.memo, reservation_id';
         const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
@@ -204,5 +210,9 @@ function accountCreateQuery(object) {
     });
     return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
 }
+
+sqlDB.query(`SELECT * from account where reservation_id='r1187'`, (err, result) => {
+    console.log('result : ',result.rows);
+})
 
 module.exports = Account;

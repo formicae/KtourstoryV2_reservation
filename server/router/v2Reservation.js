@@ -202,7 +202,15 @@ function createReservation(reservation, data, requestType) {
  */
 function updateReservation(reservation, data, requestType) {
     let task = {type:'UPDATE',router:'reservation', validation:true, cancelSQL:false, cancelElastic:false};
-    return Promise.resolve(Reservation.cancelSQL(data.reservation_id))
+    return Reservation.checkSQLcanceled(data.reservation_id)
+        .then(result => {
+            if (typeof result.canceled === 'boolean' && !!result.canceled) {
+                log.warn('Router', 'updateReservation', `reservation ${data.reservation_id} is already canceled in SQL!`);
+                task.validation = false;
+                task.validationDetail = {canceled:result.canceled, message:'already canceled reservation'};
+                return false;
+            }
+            return Reservation.cancelSQL(data.reservation_id)})
         .then(result => {
             if (!result) return false;
             task.cancelSQL = true;

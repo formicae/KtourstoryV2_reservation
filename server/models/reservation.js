@@ -237,9 +237,28 @@ class Reservation {
             sqlDB.query(query, (err, result) => {
                 if (err) {
                     log.warn('Model', 'Reservation-cancelSQL', 'data update from SQL failed - make "cancel" column to TRUE');
-                    throw new Error('Reservation update from SQL failed');
+                    resolve(false);
                 }
                 log.debug('Model', 'Reservation-cancelSQL', 'data update from SQL success - make "cancel" column to TRUE');
+                resolve(result.rows[0]);
+            });
+        });
+    }
+
+    /**
+     * check if reservation is canceled
+     * @param reservation_id {String} reservation id ex) r1199
+     * @returns {Promise<any>}
+     */
+    static checkSQLcanceled(reservation_id) {
+        return new Promise((resolve, reject) => {
+            const query = `SELECT canceled from reservation where id = '${reservation_id}'`;
+            sqlDB.query(query, (err, result) => {
+                if (err) {
+                    log.warn('Model', 'Reservation-checkSQLcanceled', 'get "canceled" information from SQL failed');
+                    resolve(false);
+                }
+                log.warn('Model', 'Reservation-checkSQLcanceled', `"canceled" information from SQL : ${result.rows[0].canceled}`);
                 resolve(result.rows[0]);
             });
         });
