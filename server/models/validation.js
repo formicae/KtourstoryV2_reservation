@@ -208,7 +208,8 @@ function validCheckProduct(product_id, tour_date) {
  */
 function validCheckSimpleItem(item, type) {
     return new Promise((resolve, reject) => {
-        if (typeof item === type) resolve(true);
+        if (typeof item !== 'boolean' && !item) resolve(false);
+        else if (typeof item === type) resolve(true);
         else resolve(false);
     });
 }
@@ -462,7 +463,6 @@ function validReservationCreateCheck(reservation) {
  * @returns {Promise<{result: boolean, detail} | never | boolean>}
  */
 function validAccountCheck(account) {
-    console.log('account validation check!');
     return validDataCheck(account.sqlData, ACCOUNT_VALID_CHECK_PARAMETER_MAP, ACCOUNT_VALID_CHECK_LIST_MAP, ACCOUNT_VALID_CHECK_FUNCTION_MAP)
 }
 

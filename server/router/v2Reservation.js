@@ -130,27 +130,23 @@ function priceCalculation(item, data) {
  * Reservation handler for inserting data to SQL, EL, FB
  * @param reservation {Object} reservation
  * @param data {Object} raw requested data
- * @param action {String} GET / POST / EDIT
+ * @param requestType {String} POST / PUT
  * @returns {Promise<boolean | never | never>}
  */
-function reservationHandler(reservation, data, action) {
-    const tempResult = {reservationResult:false, reservationTask:{validation:false}};
-    if (action === 'POST') { return Reservation.validationCreate(reservation)
+function reservationHandler(reservation, data, requestType) {
+    const tempResult = {type:requestType, reservationResult:false, reservationTask:{validation:false}};
+    if (requestType === 'POST') { return Reservation.validationCreate(reservation)
         .then(validCheck => {
             if (!validCheck.result) {
-                log.warn('Router', 'reservationHandler', `ValidDataCheck create failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
-                tempResult.reservationTask.type = 'CREATE';
                 tempResult.reservationTask.validationDetail = validCheck.detail;
                 return tempResult;}
-            return createReservation(reservation, data)})}
+            return createReservation(reservation, data, requestType)})}
     else { return Reservation.validationUpdate(reservation)
         .then(validCheck => {
             if (!validCheck.result) {
-                log.warn('Router', 'reservationHandler', `ValidDataCheck create failed [Reservation - ${action}], [${reservation.mail_id},${reservation.id}]`);
-                tempResult.reservationTask.type = 'UPDATE';
                 tempResult.reservationTask.validationDetail = validCheck.detail;
                 return tempResult;}
-            return updateReservation(reservation, data)
+            return updateReservation(reservation, data, requestType)
         })}
 }
 
@@ -160,9 +156,10 @@ function reservationHandler(reservation, data, action) {
  * if EL insert fail, SQL data will be canceled and FB data will be deleted.
  * @param reservation {Object} reservation object
  * @param data {Object} raw requested data
+ * @param requestType {String} request type : POST / UPDATE
  * @returns {Promise<boolean | never>}
  */
-function createReservation(reservation, data) {
+function createReservation(reservation, data, requestType) {
     let task = {type:'CREATE', router:'reservation', validation:true, insertSQL:false, insertFB:false, insertElastic:false, deleteFB:false, deleteSQL:false};
     return Reservation.insertSQL(reservation.sqlData)
         .then(result => {
@@ -182,7 +179,7 @@ function createReservation(reservation, data) {
         .then(result => {
             data.reservationTask = task;
             if (!result) {
-                return failureManager(reservation, data, task, 'POST').then(failureTask => {
+                return failureManager(reservation, data, task, requestType).then(failureTask => {
                     data.reservationTask = failureTask;
                     return data;
                 });
@@ -200,11 +197,11 @@ function createReservation(reservation, data) {
  * if update fail is present for SQL / FB / Elastic, only log will be called because original data will not be modified due to error.
  * @param reservation {Object} reservation
  * @param data {Object} raw requested data
+ * @param requestType {String} request type POST / UPDATE
  * @returns {Promise<boolean | never | never>}
  */
-function updateReservation(reservation, data) {
-    const reservation_canceled = Boolean(data.canceled);
-    let task = {type:'UPDATE',router:'reservation', validation:true, reservation_canceled:reservation_canceled, cancelSQL:false, cancelElastic:false};
+function updateReservation(reservation, data, requestType) {
+    let task = {type:'UPDATE',router:'reservation', validation:true, cancelSQL:false, cancelElastic:false};
     return Promise.resolve(Reservation.cancelSQL(data.reservation_id))
         .then(result => {
             if (!result) return false;
@@ -214,7 +211,7 @@ function updateReservation(reservation, data) {
         .then(result => {
             data.reservationTask = task;
             if (!result) {
-                return failureManager(reservation, data, task, type).then(failureTask => {
+                return failureManager(reservation, data, task, requestType).then(failureTask => {
                     data.reservationTask = failureTask;
                     return data;
                 })

@@ -78,7 +78,7 @@ function accountHandler(req, res, requestType) {
                 return Account.insertElastic(reverseAccount.elasticData)})
             .then(result => {
                 data.accountTask = task;
-                if (!result) return failureManager(reverseAccount, data, task, requestType).then(failureTask => {
+                if (!result) return failureManager(reverseAccount.sqlData, data, task, requestType).then(failureTask => {
                     data.accountTask = failureTask;
                     return data;
                 });
@@ -90,7 +90,11 @@ function accountHandler(req, res, requestType) {
         const task = {validation : false, insertSQL : false, insertElastic: false};
         return Account.validation(account)
             .then(validCheck => {
-                if (!validCheck) return false;
+                if (!validCheck.result) {
+                    log.warn('Router', 'accountHandler', `ValidDataCheck failed [Account - ${requestType}], [${data.reservation_id}]`);
+                    task.validationDetail = validCheck.detail;
+                    return false;
+                }
                 task.validation = true;
                 return Account.insertSQL(account.sqlData)})
             .then(result => {
@@ -101,7 +105,6 @@ function accountHandler(req, res, requestType) {
                 return Account.insertElastic(account.elasticData)})
             .then(result => {
                 data.accountTask = task;
-                console.log('result of Account.insertElastic', result, task);
                 if (!result) return failureManager(account.sqlData, data, task, requestType).then(failureTask => {
                     data.accountTask = failureTask;
                     return data;
@@ -139,6 +142,7 @@ function failureManager(account, data, task, type){
     } else {
         if (task.insertSQL && !task.insertElastic) {
             const originalSQLAccount = Account.reverseMoneyProcess(account);
+            console.log('failuremanager reverse account : ',JSON.stringify(originalSQLAccount));
             if (originalSQLAccount.id) delete originalSQLAccount.id;
             return Account.insertSQL(originalSQLAccount)
                 .then(result => {

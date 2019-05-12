@@ -167,8 +167,11 @@ class Reservation {
      * @param reservation {Object} reservation object
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static validationUpdate(reservation) {
-        return validation.validReservationUpdateCheck(reservation)
+    static async validationUpdate(reservation) {
+        const val = await validation.validReservationUpdateCheck(reservation);
+        if (!val.result) log.warn('Model', 'Reservation - validationUpdate', `reservation update validation failed. detail : ${val.detail}`);
+        else log.debug('Model', 'Reservation - validationUpdate', `reservation update validation success`);
+        return val;
     }
 
     /**
@@ -176,8 +179,11 @@ class Reservation {
      * @param reservation {Object} reservation object
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static validationCreate(reservation) {
-        return validation.validReservationCreateCheck(reservation)
+    static async validationCreate(reservation) {
+        const val = await validation.validReservationCreateCheck(reservation);
+        if (!val.result) log.warn('Model', 'Reservation - validationCreate', `reservation create validation failed. detail : ${val.detail}`);
+        else log.debug('Model', 'Reservation - validationCreate', `reservation create validation success`);
+        return val;
     }
 
     /**
@@ -528,8 +534,8 @@ class Reservation {
                 }
                 log.debug('Model', 'Reservation-cancelElastic', `update from Elastic success : ${reservation_id}`);
                 resolve(true);
-            })
-        })
+            });
+        });
     }
 
     static deleteElastic(reservation_id) {

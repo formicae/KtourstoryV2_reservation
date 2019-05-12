@@ -16,13 +16,13 @@ class Account {
 
     static generateSQLObject(data, currentDate) {
         const result = {
-            writer : data.writer,
-            category : data.productData.category,
-            currency : data.productData.currency,
-            income : Account.moneyPreprocess(data.productData.income) || 0.00,
-            expenditure : Account.moneyPreprocess(data.productData.expenditure) || 0.00,
+            writer : data.writer || '',
+            category : data.productData.category || '',
+            currency : data.productData.currency || 'KRW',
+            income : Account.moneyPreprocess(data.productData.income),
+            expenditure : Account.moneyPreprocess(data.productData.expenditure),
             cash : data.cash,
-            memo : data.account_memo,
+            memo : data.account_memo || '',
             created_date : currentDate,
             reservation_id : data.reservation_id
         };
@@ -86,8 +86,11 @@ class Account {
      * @param account {Object} account object
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static validation(account) {
-        return validation.validAccountCheck(account);
+    static async validation(account) {
+        const val = await validation.validAccountCheck(account);
+        if (!val.result) log.warn('Model', 'Account - validation', `account validation failed. detail : ${JSON.stringify(val.detail)}`);
+        else log.debug('Model', 'Account - validation', `account validation success`);
+        return val;
     }
 
     /**
