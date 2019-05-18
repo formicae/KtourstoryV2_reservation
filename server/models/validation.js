@@ -364,7 +364,7 @@ function validCheckDayOfWeek(product, date) {
  */
 function validCheckMoney(money) {
     return new Promise((resolve, reject) => {
-        if (typeof money === 'number' && money !== 'NaN') resolve(true);
+        if (typeof money === 'number' && money !== 'NaN' && money >= 0) resolve(true);
         resolve(false);
     });
 }

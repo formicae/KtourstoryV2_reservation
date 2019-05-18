@@ -634,7 +634,7 @@ function reservationQueryProcessing(object, type) {
 }
 
 function testById() {
-    const TEST_FILE = require('./test files/v2TEST_ReservationData.json');
+    const TEST_FILE = require('./test files/test_validation_v2Reservation_create.json');
     const testReservation = TEST_FILE['106'];
     console.log(testReservation);
     Reservation.validationCreate(testReservation)
@@ -651,7 +651,7 @@ function dataBaseToTestData() {
     });
 }
 function makeElasticObject(){
-    const v2Reservation = require('./test files/v2TEST_ReservationData.json');
+    const v2Reservation = require('./test files/test_validation_v2Reservation_create.json');
     const product = require('./test files/v2ProductData.json');
     const elasticObj = {};
     Object.keys(v2Reservation).forEach(id => {

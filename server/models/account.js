@@ -72,10 +72,10 @@ class Account {
 
     static reverseMoneyProcess(account) {
         if (account.income > 0) {
-            account.expenditure = (-1) * account.income;
+            account.expenditure = account.income;
             account.income = 0
         } else {
-            account.income = (-1) * account.expenditure;
+            account.income = account.expenditure;
             account.expenditure = 0;
         }
         return account;
