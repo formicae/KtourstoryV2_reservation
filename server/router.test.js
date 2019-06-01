@@ -1,144 +1,149 @@
 const app = require('./app');
 const supertest = require('supertest')(app);
-const Product = require('./models/product');
 const chai = require('chai');
 const expect = chai.expect;
-const TEST_REQUEST = {
-    GET : [{"mail_id":"test case GET - 1","product_id":"Busan_Regular_태감송해","agency_id":"LE","timezone":"UTC+9","reserved_name":"Youngmo - GET 1","nationality":"PHILIPPINES","tour_date":"2018-06-14T23:46:22","pickup":"Myungdong","name":"태감오해","option":{"pay":"later"},"adult":3,"kid":0,"infant":0,"memo":"This is Test data for update data","phone":"+639065532345","email":"-","messenger":"Whatsapp+639065532345","canceled":false,"cancel_comment":"not canceled","currency":"Won","category":"test","card_income":300000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"},
-        {"mail_id":"test case GET - 2","product_id":"Busan_Regular_통영","agency_id":"UH","timezone":"UTC+9","reserved_name":"Youngmo GET 2","nationality":"Korea","tour_date":"2018-10-02T12:22:30","pickup":"Dongdaemun","name":"통영루지","option":{"pay":"later"},"adult":3,"kid":0,"infant":0,"memo":"This is Test data for create data","phone":"+639065532345","email":"adfadv@naver.com","messenger":"Whatsapp+639065532345","canceled":false,"cancel_comment":"not canceled","currency":"$","category":"test","card_income":3000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"},
-        {"mail_id":"test case GET - 3","product_id":"Seoul_Summer_진도","agency_id":"MMF","timezone":"UTC+9","reserved_name":"Youngmo - GET 3","nationality":"PHILIPPINES","tour_date":"2018-07-11T23:55:46","pickup":"Myungdong","name":"벛꽃랜덤","option":{"pay":"later"},"adult":42,"kid":0,"infant":0,"memo":"This is Test data for create data","phone":"+639065532345","email":"req35fdfa@naver.com","messenger":"Whatsapp+639065532345","canceled":false,"cancel_comment":"not canceled","currency":"Won","category":"test","card_income":8200000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"}
-    ],
-    POST : [{"mail_id":"test case POST - 1","product_id":"Busan_Regular_태감송해","agency_id":"LE","timezone":"UTC+9","reserved_name":"Yougnmo - POST 1","nationality":"Japan","tour_date":"2018-06-14T23:46:22","pickup":"Myungdong","name":"태감오해","option":{"pay":"later"},"adult":3,"kid":0,"infant":0,"memo":"This is Test data for update data","phone":"+639065532345","email":"-","messenger":"Whatsapp+639065532345","canceled":false,"cancel_comment":"not canceled","currency":"Won","category":"test","card_income":300000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"},
-        {"mail_id":"test case POST - 2","product_id":"Busan_Regular_통영","agency_id":"UH","timezone":"UTC+9","reserved_name":"Youngmo - POST 2","nationality":"PHILIPPINES","tour_date":"2018-10-02T05:22:52","pickup":"Dongdaemun","name":"통영루지","option":{"pay":"later"},"adult":3,"kid":0,"infant":0,"memo":"This is Test data for create data","phone":"+639065532345","email":"adfadv@naver.com","messenger":"Whatsapp+639065532345","canceled":false,"cancel_comment":"not canceled","currency":"$","category":"test","card_income":3000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"},
-        {"mail_id":"test case POST - 3","product_id":"Seoul_Summer_진도","agency_id":"MMF","timezone":"UTC+9","reserved_name":"Youngmo - POST 3","nationality":"PHILIPPINES","tour_date":"2018-07-11T23:55:46","pickup":"Myungdong","name":"벛꽃랜덤","option":{"pay":"later"},"adult":42,"kid":0,"infant":0,"memo":"This is Test data for create data","phone":"+639065532345","email":"req35fdfa@naver.com","messenger":"Whatsapp+639065532345","canceled":false,"cancel_comment":"not canceled","currency":"Won","category":"test","card_income":8200000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"}
-    ],
-    EDIT : [{"id":112,"mail_id":"test case UPDATE - 1","product_id":"Busan_Regular_태감송해","agency_id":"LE","timezone":"UTC+9","reserved_name":"Youngmo - EDIT 1","nationality":"PHILIPPINES","tour_date":"2018-06-14T23:46:22","pickup":"Myungdong","name":"태감오해","option":{"pay":"later"},"adult":3,"kid":0,"infant":0,"memo":"This is Test data for update data","phone":"+639065532345","email":"-","messenger":"Whatsapp+639065532345","canceled":false,"cancel_comment":"not canceled","currency":"Won","category":"test","card_income":300000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"},
-        {"id":113,"mail_id":"test case UPDATE - 2","product_id":"Busan_Regular_통영","agency_id":"UH","timezone":"UTC+9","reserved_name":"Youngmo EDIT 2","nationality":"Korea","tour_date":"2018-10-02T06:22:39","pickup":"Dongdaemun","name":"통영루지","option":{"pay":"later"},"adult":3,"kid":0,"infant":0,"memo":"Cancel","phone":"+639065532345","email":"adfadv@naver.com","messenger":"Whatsapp+639065532345","canceled":true,"cancel_comment":"not canceled","currency":"$","category":"test","card_income":3000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"},
-        {"id":114,"mail_id":"test case UPDATE - 3","product_id":"Seoul_Summer_진도","agency_id":"MMF","timezone":"UTC+9","reserved_name":"Youngmo EDIT 3","nationality":"PHILIPPINES","tour_date":"2018-07-11T23:55:46","pickup":"Myungdong","name":"벛꽃랜덤","option":{"pay":"later"},"adult":42,"kid":0,"infant":0,"memo":"Cancel ","phone":"+639065532345","email":"req35fdfa@naver.com","messenger":"Whatsapp+639065532345","canceled":true,"cancel_comment":"not canceled","currency":"Won","category":"test","card_income":8200000,"card_expenditure":0,"cash_income":0,"cash_expenditure":0,"writer":"youngmo"}
-    ]
-};
+const Reservation = require('./models/reservation');
+const RESERVATION_CREATE_TEST_CASE = require('./models/validationTestFile/test_validation_v2Reservation_create.json');
+const RESERVATION_UPDATE_TEST_CASE = require('./models/validationTestFile/test_validation_v2Reservation_update.json');
+const ACCOUNT_TEST_CASE = require('./models/validationTestFile/test_validation_v2Account.json');
+const TEST_CASE_RESULT = require('./models/validationTestFile/test_validation_result.json');
 
-function testCaseGet(count, done){
-    supertest.get('/v2/reservation')
-        .query(TEST_REQUEST.GET[count])
-        .expect(201)
-        .expect(res => { expect(res.text).to.equal('Reservation saved properly : GET')})
-        .end(done);
-}
-
-function testCasePost(count, done){
-    supertest.post('/v2/reservation')
-        .send(TEST_REQUEST.POST[count])
-        .expect(201)
-        .expect(res => { expect(res.text).to.equal('Reservation saved properly : POST')})
-        .end(done);
-}
-
-function testCaseEdit(count, done){
-    supertest.get('/v2/reservation/edit')
-        .query(TEST_REQUEST.EDIT[count])
-        .expect(201)
-        .expect(res => { expect(res.text).to.equal('Reservation saved properly : EDIT')})
-        .end(done);
-}
-
-describe('v2Reservation router', () => {
-    for (let count=1; count<3; count++){
-        it (`GET test case ${count}`, (done) => {
-            testCaseGet(count, done);
+describe('v2Reservation CREATE test, ', function() {
+    this.timeout(10000);
+    const RCT_RESULT = TEST_CASE_RESULT.rct;
+    Object.keys(RESERVATION_CREATE_TEST_CASE).forEach(test_case => {
+        it(`test case : ${test_case}`, (done) => {
+            supertest.post('/v2/reservation')
+                .send(RESERVATION_CREATE_TEST_CASE[test_case])
+                .set('Accept', 'application/json')
+                // .expect(201)
+                .then(res => {
+                    let resTask = JSON.parse(res.text).reservationTask;
+                    let taskResult = RCT_RESULT[test_case].reservationTask;
+                    // console.log(`${test_case} : ${JSON.stringify(resTask)} // ${JSON.stringify(taskResult)}`);
+                    Object.keys(taskResult).forEach(key => {
+                        if (key === 'validationDetail') {
+                            Object.keys(taskResult.validationDetail).forEach(subKey => {
+                                expect(resTask.validationDetail[subKey]).to.equal(taskResult.validationDetail[subKey]);
+                                // console.log(`response : ${resTask[key][subKey]} :: result : ${taskResult[key][subKey]}`);
+                            })
+                        } else {
+                            expect(resTask[key]).to.equal(taskResult[key]);
+                            // console.log(`response : ${resTask[key]} :: result : ${taskResult[key]}`);
+                        }
+                    });
+                    done()
+                }).catch(err => console.log(err));
         });
-    }
-    for (let count=1; count<3; count++){
-        it (`POST test case ${count}`, (done) => {
-            testCasePost(count, done);
-        });
-    }
-    for (let count=1; count<3; count++){
-        it (`Edit test case ${count}`, (done) => {
-            testCaseEdit(count, done);
-        });
-    }
+    });
 });
-//
-// // describe('v2Reservation router [GET]', () => {
-// //     let request;
-// //     beforeEach(() => request = supertest(app).get('http://127.0.0.1:3000/v2/reservation'));
-// //     Object.keys(TEST_REQUEST.GET).forEach(key => {
-// //         it(`test case ${key}`, (done) => {
-// //             request.query(TEST_REQUEST.GET[key])
-// //                 .expect('Content-Type', 'text/html; charset=utf-8')
-// //                 .set('Connection', 'keep-alive')
-// //                 .expect(201)
-// //                 .expect(res => {
-// //                     expect(res.text).to.equal('Reservation saved properly : GET');
-// //                     done();
-// //                 });
-// //         });
-// //     });
-// // });
-//
-// describe('v2Reservation router [POST]', () => {
-//     let request;
-//     it('GET v2 Reservation', (done) => {
-//         supertest.post('/v2/reservation')
-//             .send(TEST_REQUEST.POST['1'])
-//             .set('Content-Type', 'application/json')
-//             .set('Accept', 'application/json')
-//             .expect(201)
-//             .expect((res) => {
-//                 expect(res.text).to.equal('Reservation saved properly : POST');
-//             })
-//             .end(done)
-//     });
-// });
-//
-// describe('v2Reservation router [EDIT]', () => {
-//     let request;
-//     beforeEach(() => request = supertest.get('/v2/reservation/edit'));
-//     Object.keys(TEST_REQUEST.EDIT).forEach(key => {
-//         it('UPDATE v2 Reservation', (done) => {
-//             request.query(TEST_REQUEST.EDIT[key])
-//                 .expect('Content-Type', 'text/html; charset=utf-8')
-//                 .expect(201)
-//                 .expect(res => {
-//                     expect(res.text).to.equal('Reservation saved properly : EDIT');
-//                     done();
-//                 });
-//         });
-//     });
-// });
-//
-//
-// // let request;
-// // describe('v2Reservation router [POST]', () => {
-// //     beforeEach(() => request = supertest(app).post('/v2/reservation'));
-// //     Object.keys(TEST_REQUEST.POST).forEach(key => {
-// //         it('GET v2 Reservation', (done) => {
-// //             request.set('Accept', 'application/json; charset=utf-8')
-// //                 .set('Content-Type', 'application/json; charset=utf-8')
-// //                 .send(TEST_REQUEST.POST['1'])
-// //                 // .set('Accept', 'application/json')
-// //                 // .expect(201)
-// //                 .expect((res) => {
-// //                     expect(res.text).to.equal('Reservation saved properly : POST');
-// //                     console.log('target data : ',TEST_REQUEST.POST[key])
-// //                     done();
-// //                 })
-// //         });
-// //     });
-// // });
-// //
-// // beforeEach(() => request = supertest(app).get('/v2/reservation/edit'));
-// // describe('v2Reservation router [EDIT]', () => {
-// //     Object.keys(TEST_REQUEST.EDIT).forEach(key => {
-// //         it('UPDATE v2 Reservation', (done) => {
-// //             request.query(TEST_REQUEST.EDIT[key])
-// //                 .expect('Content-Type', 'text/html; charset=utf-8')
-// //                 .expect(201)
-// //                 .expect(res => {
-// //                     expect(res.text).to.equal('Reservation saved properly : EDIT');
-// //                     done();
-// //                 });
-// //         });
-// //     });
-// // });
+
+describe('v2Reservation UPDATE test , ', function() {
+    this.timeout(10000);
+    before(function() {
+        const promiseArr = [];
+        Object.keys(RESERVATION_UPDATE_TEST_CASE).forEach(key => {
+            let testTask = TEST_CASE_RESULT.rut[key].reservationTask;
+            if (testTask.hasOwnProperty('checkSQLcanceled') && !testTask.checkSQLcanceled) {
+                console.log('no canceled reset!! : ', key)
+            } else {
+                let reservation_id = RESERVATION_UPDATE_TEST_CASE[key].reservation_id;
+                promiseArr.push(Reservation.undoCancelSQL(reservation_id));
+                promiseArr.push(Reservation.undoCancelElastic(reservation_id));
+            }
+        });
+        Promise.all(promiseArr).then(result => {
+            if (result.includes(false)) console.log(`failure exist : ${result}`);
+            else console.log(`all SQL & Elastic test cases's canceled column data changed to true. ready to test!`);
+        });
+    });
+    const RUT_RESULT = TEST_CASE_RESULT.rut;
+    Object.keys(RESERVATION_UPDATE_TEST_CASE).forEach(test_case => {
+        it(`test case : ${test_case}`, (done) => {
+            supertest.put('/v2/reservation')
+                .send(RESERVATION_UPDATE_TEST_CASE[test_case])
+                .set('Accept', 'application/json')
+                // .expect(201)
+                .then(res => {
+                    let resTask = JSON.parse(res.text).reservationTask;
+                    let taskResult = RUT_RESULT[test_case].reservationTask;
+                    Object.keys(taskResult).forEach(key => {
+                        if (key === 'validationDetail') {
+                            Object.keys(taskResult.validationDetail).forEach(subKey => {
+                                expect(resTask.validationDetail[subKey]).to.equal(taskResult.validationDetail[subKey]);
+                                // console.log(`response : ${resTask[key][subKey]} :: result : ${taskResult[key][subKey]}`);
+                            })
+                        } else {
+                            expect(resTask[key]).to.equal(taskResult[key]);
+                            // console.log(`response : ${resTask[key]} :: result : ${taskResult[key]}`);
+                        }
+                    });
+                    done()
+                }).catch(err => console.log(err));
+        });
+    });
+});
+
+describe('v2Account test, ', function() {
+    this.timeout(10000);
+    before(function() {
+        Object.keys(ACCOUNT_TEST_CASE).forEach(test_case => {
+            if (TEST_CASE_RESULT.at[test_case].reservationTask.type === 'UPDATE') {
+                Reservation.undoCancelSQL(ACCOUNT_TEST_CASE[test_case].reservation_id);
+                Reservation.undoCancelElastic(ACCOUNT_TEST_CASE[test_case].reservation_id);
+            }
+        });
+    });
+    const AT_RESULT = TEST_CASE_RESULT.at;
+    Object.keys(ACCOUNT_TEST_CASE).forEach(test_case => {
+        if (AT_RESULT[test_case].reservationTask.type === 'UPDATE'){
+            it(`test case : ${test_case}`, (done) => {
+                supertest.put('/v2/reservation')
+                    .send(ACCOUNT_TEST_CASE[test_case])
+                    .set('Accept', 'application/json')
+                    .then(res => {
+                        let resTask = JSON.parse(res.text).reservationTask;
+                        let accTask = JSON.parse(res.text).accountTask;
+                        let taskResult = {res:AT_RESULT[test_case].reservationTask, acc:AT_RESULT[test_case].accountTask};
+                        // console.log(`${test_case} : ${JSON.stringify(JSON.parse(res.text))} // ${JSON.stringify(JSON.parse(taskResult.res))}`);
+                        Object.keys(taskResult.res).forEach(key => {
+                            expect(resTask[key]).to.equal(taskResult.res[key]);
+                        });
+                        Object.keys(taskResult.acc).forEach(key => {
+                            expect(accTask[key]).to.equal(taskResult.acc[key]);
+                            // console.log(`response : ${resTask[key]} :: result : ${taskResult[key]}`);
+                        });
+                        done()
+                    }).catch(err => console.log(err));
+            });
+        } else {
+            it(`test case : ${test_case}`, (done) => {
+                supertest.post('/v2/reservation')
+                    .send(ACCOUNT_TEST_CASE[test_case])
+                    .set('Accept', 'application/json')
+                    // .expect(201)
+                    .then(res => {
+                        let resTask = JSON.parse(res.text).reservationTask;
+                        let accTask = JSON.parse(res.text).accountTask;
+                        let taskResult = {res:AT_RESULT[test_case].reservationTask,acc:AT_RESULT[test_case].accountTask};
+                        // console.log(`${test_case} : ${JSON.stringify(resTask)} // ${JSON.stringify(taskResult)}`);
+                        Object.keys(taskResult.res).forEach(key => {
+                            expect(resTask[key]).to.equal(taskResult.res[key]);
+                        });
+                        Object.keys(taskResult.acc).forEach(key => {
+                            if (key === 'validationDetail') {
+                                Object.keys(taskResult.acc.validationDetail).forEach(subKey => {
+                                    expect(accTask.validationDetail[subKey]).to.equal(taskResult.acc.validationDetail[subKey]);
+                                    // console.log(`response : ${resTask[key][subKey]} :: result : ${taskResult[key][subKey]}`);
+                                })
+                            } else {
+                                expect(accTask[key]).to.equal(taskResult.acc[key]);
+                                // console.log(`response : ${resTask[key]} :: result : ${taskResult[key]}`);
+                            }
+                        });
+                        done()
+                    }).catch(err => console.log(err));
+            });
+        }
+    });
+});

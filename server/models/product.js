@@ -25,7 +25,7 @@ class Product {
         this.tour_end = data.tour_end;
         this.ignore_options = data.ignore_options;
         this.options = [];
-        if (!!data.options) {
+        if (!!data.options && typeof data.options === 'object') {
             data.options.forEach(option => {
                 let tempData = {
                     price : option.price,
@@ -226,21 +226,21 @@ function monitorProduct() {
     // 4. 해당 product_id를 가지는 reservation 을 Elasticsearch에서 불러오기
     // 5. Reservation.updateProduct 실행 (reservation 가서 만들어야 함.)
     // 6. 업데이트 된 Reservation -> SQL / Elasticsearch로 다시 보냄.
-    fbDB.ref('v2Product').on('child_added', (snapshot, key) => {
+    fbDB.ref('product').on('child_added', (snapshot, key) => {
         let newProduct = snapshot.val();
         let ignoreSet = new Set(newProduct.ignore_options);
         productMap = productMapProcessing(productMap, ignoreSet, newProduct);
         // Promise.resolve(changeProductToSQL(newProduct.id, newProduct))
     });
 
-    fbDB.ref('v2Product').on('child_changed', (snapshot) => {
+    fbDB.ref('product').on('child_changed', (snapshot) => {
         let changedProduct = snapshot.val();
         let ignoreSet = new Set(changedProduct.ignore_options);
         productMap = productMapProcessing(productMap, ignoreSet, changedProduct);
         // changeProductToSQL(changedProduct.id, changedProduct);
     });
 
-    fbDB.ref('v2Product').on('child_removed', (snapshot) => {
+    fbDB.ref('product').on('child_removed', (snapshot) => {
         let deletedProduct = snapshot.val();
         let ignoreSet = new Set(deletedProduct.ignore_options);
         if (!ignoreSet.has(deletedProduct.id)) { productMap.delete(deletedProduct.id) }
@@ -322,14 +322,14 @@ function testOperationDateCheck(){
             console.log('final result : ',result)
         });
 }
-// const v2productObject = {};
+// const productObject = {};
 // sqlDB.query('SELECT id, name, alias, category, area FROM product', (err, result) => {
 //     result.rows.forEach(each => {
-//         v2productObject[each.id] = each;
+//         productObject[each.id] = each;
 //     });
-//     console.log(JSON.stringify(v2productObject))
+//     console.log(JSON.stringify(productObject))
 // })
-// fbDB.ref('v2Geos').child("areas").push({
+// fbDB.ref('geos').child("areas").push({
 //     name:"Seoul",
 //     pickups:[
 //         {

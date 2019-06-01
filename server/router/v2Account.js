@@ -1,6 +1,7 @@
 const sqlDB = require('../auth/postgresql');
 const Account = require('../models/account');
 const log = require('../../log');
+const env = require('../../package.json').env;
 sqlDB.connect();
 
 exports.post = (req, res) => {
@@ -35,7 +36,8 @@ exports.update = (req, res) => {
             log.debug('Router', 'v2Account', 'all task done successfully [UPDATE]');
             return res.status(201).json({
                 message:'Account saved properly : UPDATE',
-                accountTask:{reservation : resultData.reservationTask, account:resultData.accountTask}})})
+                reservationTask : resultData.reservationTask,
+                accountTask: resultData.accountTask})})
         .catch(err => {
             log.error('Router', 'ACCOUNT export-UPDATE', `unhandled error occurred! error : ${err}`);
             res.status(500).send(`unhandled ACCOUNT POST error`)
@@ -51,11 +53,12 @@ exports.update = (req, res) => {
  */
 function accountHandler(req, res, requestType) {
     const data = req.body;
+    const testObj = testManager(req, env);
     data.accountResult = false;
     const account = new Account(data);
     if (requestType === 'UPDATE') {
         let reverseAccount;
-        const task = {validation : false, reverseDataProcess:false, insertSQL : false, insertElastic: false};
+        const task = {validation : false, processReverseAccount:false, insertSQL : false, insertElastic: false};
         return Account.validation(account)
             .then(validCheck => {
                 if (!validCheck.result) {
@@ -64,24 +67,28 @@ function accountHandler(req, res, requestType) {
                     return false;
                 }
                 task.validation = true;
-                return Account.processReverseAccount(data)})
+                return Account.processReverseAccount(data, testObj)})
             .then(account => {
+                console.log('after processReverseAccount, testObj : ',JSON.stringify(testObj));
                 if (!account) return false;
                 reverseAccount = account;
-                task.reverseDataProcess = true;
-                return Account.insertSQL(reverseAccount.sqlData)})
+                task.processReverseAccount = true;
+                return Account.insertSQL(reverseAccount.sqlData, testObj)})
             .then(result => {
                 if (!result) return false;
                 task.insertSQL = true;
                 reverseAccount.sqlData.id = result.id;
                 reverseAccount.elasticData.id = result.id;
-                return Account.insertElastic(reverseAccount.elasticData)})
+                return Account.insertElastic(reverseAccount.elasticData, testObj)})
             .then(result => {
                 data.accountTask = task;
-                if (!result) return failureManager(reverseAccount.sqlData, data, task, requestType).then(failureTask => {
+                if (!result && !task.reverseDataProcess) { return failureManager(account, data, task, requestType, testObj).then(failureTask => {
+                    data.accountTask = failureTask;
+                    return data;})}
+                else if (!result) { return failureManager(reverseAccount.sqlData, data, task, requestType, testObj).then(failureTask => {
                     data.accountTask = failureTask;
                     return data;
-                });
+                });}
                 data.accountTask.insertElastic = true;
                 data.accountResult = true;
                 log.debug('Router','accountHandler [UPDATE]', 'all process success!');
@@ -96,16 +103,16 @@ function accountHandler(req, res, requestType) {
                     return false;
                 }
                 task.validation = true;
-                return Account.insertSQL(account.sqlData)})
+                return Account.insertSQL(account.sqlData, testObj)})
             .then(result => {
                 if (!result) return false;
                 task.insertSQL = true;
                 account.sqlData.id = result.id;
                 account.elasticData.id = result.id;
-                return Account.insertElastic(account.elasticData)})
+                return Account.insertElastic(account.elasticData, testObj)})
             .then(result => {
                 data.accountTask = task;
-                if (!result) return failureManager(account.sqlData, data, task, requestType).then(failureTask => {
+                if (!result) return failureManager(account.sqlData, data, task, requestType, testObj).then(failureTask => {
                     data.accountTask = failureTask;
                     return data;
                 });
@@ -123,16 +130,17 @@ function accountHandler(req, res, requestType) {
  * @param data {Object} data object
  * @param task {Object} task from AccountHandler
  * @param type {String} POST / UPDATE
+ * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
  * @returns {*}
  */
-function failureManager(account, data, task, type){
+function failureManager(account, data, task, type, testObj){
     log.debug('Router', 'Account - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`)
     task.insertReverseSQL = false;
     if (type === 'POST') {
         if (!task.insertElastic && task.insertSQL) {
-            const reverseSQLAccount = Account.reverseMoneyProcess(account);
+            const reverseSQLAccount = Account.reverseMoneyProcess(account, testObj);
             if (reverseSQLAccount.id) delete reverseSQLAccount.id;
-            return Account.insertSQL(reverseSQLAccount)
+            return Account.insertSQL(reverseSQLAccount, testObj)
                 .then(result => {
                     if (!result) return task;
                     task.insertReverseSQL = true;
@@ -141,10 +149,10 @@ function failureManager(account, data, task, type){
         } else { return Promise.resolve(task); }
     } else {
         if (task.insertSQL && !task.insertElastic) {
-            const originalSQLAccount = Account.reverseMoneyProcess(account);
+            const originalSQLAccount = Account.reverseMoneyProcess(account, testObj);
             console.log('failuremanager reverse account : ',JSON.stringify(originalSQLAccount));
             if (originalSQLAccount.id) delete originalSQLAccount.id;
-            return Account.insertSQL(originalSQLAccount)
+            return Account.insertSQL(originalSQLAccount, testObj)
                 .then(result => {
                     if (!result) return task;
                     task.insertReverseSQL = true;
@@ -153,4 +161,27 @@ function failureManager(account, data, task, type){
                 });
         } else { return Promise.resolve(task); }
     }
+}
+
+
+/**
+ * generate test object for account considering product release status
+ * @param req {Object} requested object from router
+ * @param env {Object} environmental object from package.json
+ * @returns {Object}
+ */
+function testManager(req, env){
+    const result = {isTest:false, fail:false, detail:{
+            insertSQL:false, insertElastic:false, processReverseAccount: false
+        }};
+    if (!env.released) {
+        const obj = req.body.testObj;
+        if (!obj || obj.target !== 'account') return result;
+        result.isTest = true;
+        result.fail = obj.fail;
+        Object.keys(obj.detail).forEach(key => {
+            if (result.detail.hasOwnProperty(key)) result.detail[key] = obj.detail[key];
+        });
+    }
+    return result;
 }

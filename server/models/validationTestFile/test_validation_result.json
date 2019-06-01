@@ -1,0 +1,435 @@
+{
+  "rct": {
+    "rct1": {
+      "reservationTask" : {
+        "type" : "CREATE",
+        "router" : "reservation",
+        "validation" : true,
+        "insertSQL" : true,
+        "insertFB" : true,
+        "insertElastic" : true,
+        "deleteFB" : false,
+        "deleteSQL" : false
+      }
+    },
+    "rct2": {
+      "reservationTask" : {
+        "type" : "CREATE",
+        "router" : "reservation",
+        "validation" : true,
+        "insertSQL" : true,
+        "insertFB" : true,
+        "insertElastic" : true,
+        "deleteFB" : false,
+        "deleteSQL" : false
+      }
+    },
+    "rct3": {
+      "reservationTask" : {
+        "type" : "CREATE",
+        "router" : "reservation",
+        "validation" : true,
+        "insertSQL" : true,
+        "insertFB" : true,
+        "insertElastic" : true,
+        "deleteFB" : false,
+        "deleteSQL" : false
+      }
+    },
+    "rct4": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"writer" : false}
+      }
+    },
+    "rct5": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"options" : false}
+      }
+    },
+    "rct6": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"message_id" : false}
+      }
+    },
+    "rct7": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"agency" : false}
+      }
+    },
+    "rct8": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"agency_code" : false}
+      }
+    },
+    "rct9": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"tour_date" : false}
+      }
+    },
+    "rct10": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"tour_date" : false}
+      }
+    },
+    "rct11": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"tour_date" : false}
+      }
+    },
+    "rct12": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"tour_date" : false}
+      }
+    },
+    "rct13": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"adult" : false}
+      }
+    },
+    "rct14": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"kid" : false}
+      }
+    },
+    "rct15": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"infant" : false}
+      }
+    },
+    "rct16": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"productCheck" : false}
+      }
+    },
+    "rct17": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "validation" : false,
+        "validationDetail" : {"totalPeopleNumberCheck" : false}
+      }
+    },
+    "rct18": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "router": "reservation",
+        "validation" : true,
+        "insertSQL" : false
+      }
+    },
+    "rct19": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "router": "reservation",
+        "validation" : true,
+        "insertSQL" : true,
+        "insertFB" : false,
+        "deleteSQL" : true
+      }
+    },
+    "rct20": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "router": "reservation",
+        "validation" : true,
+        "insertSQL" : true,
+        "insertFB" : true,
+        "insertElastic" : false,
+        "deleteFB" : true,
+        "deleteSQL" : true
+      }
+    },
+    "rct21": {
+      "reservationTask" : {
+        "type": "CREATE",
+        "router": "reservation",
+        "validation" : true,
+        "insertSQL" : true,
+        "insertFB" : true,
+        "insertElastic" : false,
+        "deleteFB" : true,
+        "deleteSQL" : false
+      }
+    },
+    "rct22" : {
+      "reservationTask" : {
+        "type": "CREATE",
+        "router": "reservation",
+        "validation" : true,
+        "insertSQL" : true,
+        "insertFB" : true,
+        "insertElastic" : false,
+        "deleteFB" : false,
+        "deleteSQL" : false
+      }
+    }
+  },
+  "rut": {
+    "rut1": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "router": "reservation",
+        "validation": true,
+        "checkSQLcanceled": true,
+        "cancelSQL": true,
+        "cancelElastic": true
+      }
+    },
+    "rut2": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "router": "reservation",
+        "validation": true,
+        "checkSQLcanceled": true,
+        "cancelSQL": true,
+        "cancelElastic": true
+      }
+    },
+    "rut3": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "router": "reservation",
+        "validation": true,
+        "checkSQLcanceled": true,
+        "cancelSQL": true,
+        "cancelElastic": true
+      }
+    },
+    "rut4": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"id": false}
+      }
+    },
+    "rut5": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"writer": false}
+      }
+    },
+    "rut6": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"options": false}
+      }
+    },
+    "rut7": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"message_id": false}
+      }
+    },
+    "rut8": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"agency": false}
+      }
+    },
+    "rut9": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"agency_code": false}
+      }
+    },
+    "rut10": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"tour_date": false}
+      }
+    },
+    "rut11": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"tour_date": false}
+      }
+    },
+    "rut12": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"tour_date": false}
+      }
+    },
+    "rut13": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"tour_date": false}
+      }
+    },
+    "rut14": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"adult": false}
+      }
+    },
+    "rut15": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"kid": false}
+      }
+    },
+    "rut16": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"infant": false}
+      }
+    },
+    "rut17": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "router": "reservation",
+        "validation": true,
+        "checkSQLcanceled": true,
+        "cancelSQL": true,
+        "cancelElastic": true
+      }
+    },
+    "rut18": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": false,
+        "validationDetail": {"totalPeopleNumberCheck": false}
+      }
+    },
+    "rut19": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": true,
+        "checkSQLcanceled": false
+      }
+    },
+    "rut20": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": true,
+        "checkSQLcanceled": true,
+        "cancelSQL": false
+      }
+    },
+    "rut21": {
+      "reservationTask" : {
+        "type": "UPDATE",
+        "validation": true,
+        "checkSQLcanceled": true,
+        "cancelSQL": true,
+        "cancelElastic": false
+      }
+    }
+  },
+  "at" : {
+    "at1": {
+      "reservationTask": {
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": true,
+        "insertSQL": true,
+        "insertElastic": true
+      }
+    },
+    "at2": {
+      "reservationTask": {
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": true,
+        "insertSQL": true,
+        "insertElastic": true
+      }
+    },
+    "at3": {
+      "reservationTask": {
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": true,
+        "insertSQL": true,
+        "insertElastic": true
+      }
+    },
+    "at4": {
+      "reservationTask": {
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": false,
+        "validationDetail": {"memo": false}
+      }
+    },
+    "at5": {
+      "reservationTask": {
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": false,
+        "validationDetail": {"cash": false}
+      }
+    },
+    "at6": {
+      "reservationTask": {
+        "type": "UPDATE",
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": true,
+        "processReverseAccount": false
+      }
+    },
+    "at7": {
+      "reservationTask": {
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": true,
+        "insertSQL": false
+      }
+    },
+    "at8": {
+      "reservationTask": {
+        "router": "reservation",
+        "validation": true
+      }, "accountTask": {
+        "validation": true,
+        "insertSQL": true,
+        "insertElastic": false
+      }
+    }
+  }
+}

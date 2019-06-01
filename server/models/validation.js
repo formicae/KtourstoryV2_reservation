@@ -194,7 +194,11 @@ function validCheckProduct(product_id, tour_date) {
             log.debug('Debug','validCheckProduct status check', `statusCheck success with ${product_id}`);
             return Product.getAvailablePriceGroup(tour_date, product) })
         .then(availablePriceGroup => {
-            if (availablePriceGroup.length === 0) return false;
+            if (!availablePriceGroup) return false;
+            if (availablePriceGroup.length === 0) {
+                log.warn('Validation','validCheckProduct', `availablePriceGroup failed number of available price group : ${availablePriceGroup.length}`);
+                return false;
+            }
             log.debug('Debug','validCheckProduct price group check', `availablePriceGroup check success with ${availablePriceGroup[0].name}`);
             return availablePriceGroup.length > 0;
         });
@@ -285,7 +289,7 @@ function validCheckOperationDateTime(tour_date, product_id) {
 function validCheckPeopleNumber(number) {
     return new Promise((resolve, reject) => {
         if (number === 'NaN') resolve(false);
-        if (typeof number === 'number') resolve(true);
+        else if (typeof number === 'number' && number >= 0) resolve(true);
         else resolve(false);
     });
 }
@@ -343,7 +347,8 @@ function validCheckSimpleDateTime(input) {
 }
 
 /**
- *
+ * check weekday schedule of each product.
+ * 0 : Monday, 6 : Sunday
  * @param product {Object} product object
  * @param date {Date} operation date
  * @returns {*}
@@ -379,7 +384,8 @@ function validCheckMoney(money) {
  */
 function validCheckTotalPeopleNumber(adult, kid, infant){
     return new Promise((resolve, reject) => {
-        resolve(adult + kid + infant > 0);
+        if (adult + kid + infant > 0) resolve(true)
+        resolve(false)
     });
 }
 

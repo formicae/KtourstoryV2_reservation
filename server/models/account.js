@@ -122,10 +122,12 @@ class Account {
     /**
      * get account data from SQL using reservation id.
      * if multiple account data is present, oldest account will be selected.
-     * @param data
+     * @param data {Object} raw data object
+     * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
      * @returns {Promise<any | never>}
      */
-    static processReverseAccount(data) {
+    static processReverseAccount(data, testObj) {
+        if (testObj.isTest && testObj.fail && testObj.detail.processReverseAccount) return Promise.resolve(false);
         const queryColumns = 'account.writer, category, currency, income, expenditure, cash, account.memo, reservation_id';
         const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
         return new Promise((resolve, reject) => {
@@ -153,9 +155,11 @@ class Account {
     /**
      * insert account Object to postgreSQL database
      * @param account {Object}
+     * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
      * @returns {Promise<any | never>}
      */
-    static insertSQL(account) {
+    static insertSQL(account, testObj) {
+        if (testObj.isTest && testObj.fail && testObj.detail.insertSQL) return Promise.resolve(false);
         const text = accountCreateQuery(account);
         const query = `INSERT INTO account (${text.keys}) VALUES (${text.values}) RETURNING *`;
         return new Promise((resolve, reject) => {
@@ -174,9 +178,11 @@ class Account {
     /**
      * Insert data to Elastic search
      * @param account {Object} account object
+     * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
      * @returns {Promise<any>}
      */
-    static insertElastic(account) {
+    static insertElastic(account, testObj) {
+        if (testObj.isTest && testObj.fail && testObj.detail.insertElastic) return Promise.resolve(false);
         return new Promise((resolve, reject)=> {
             elasticDB.create({
                 index : 'account',
@@ -210,9 +216,5 @@ function accountCreateQuery(object) {
     });
     return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
 }
-
-sqlDB.query(`SELECT * from account where reservation_id='r1187'`, (err, result) => {
-    console.log('result : ',result.rows);
-})
 
 module.exports = Account;
