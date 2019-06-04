@@ -358,7 +358,7 @@ function validCheckDayOfWeek(product, date) {
     // console.log('validCheckDayOfWeek : ', date, ' correctedDate -> ', correctedDate);
     let tourDay = new Date(correctedDate).getDay() - 1;
     tourDay = (tourDay < 0) ? 6 : tourDay;
-    // console.log(`tourDay : ${tourDay}, operation day : ${product.days}`);
+    log.debug('Validation', 'validCheckDayOfWeek', `tourDay : ${tourDay}, operation day : ${JSON.stringify(product.days)}`)
     return product.days[tourDay];
 }
 
