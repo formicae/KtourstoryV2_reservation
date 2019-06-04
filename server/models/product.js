@@ -163,8 +163,11 @@ class Product {
     }
 
     static getReverseTimezoneDate(date, utc) {
-        if (typeof date === 'string') return new Date(new Date(date) - ((-1) * Number(Product.getTimeOffset(utc)) * 60000));
-        else return new Date(date - ((-1) * Number(Product.getTimeOffset(utc)) * 60000));
+        let timeOffset;
+        if (typeof utc === 'number') timeOffset = utc;
+        else timeOffset = Number(Product.getTimeOffset(utc));
+        if (typeof date === 'string') return new Date(new Date(date) - ((-1) * timeOffset * 60000));
+        else return new Date(date - ((-1) * timeOffset * 60000));
     }
 }
 

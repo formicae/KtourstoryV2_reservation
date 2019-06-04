@@ -362,7 +362,7 @@ function validCheckSimpleDateTime(input) {
 function validCheckDayOfWeek(product, date) {
     let correctedDate;
     if (new Date().getTimezoneOffset() === 0) correctedDate = new Date(date);
-    else correctedDate = Product.getReverseTimezoneDate(date, product.timezone);
+    else correctedDate = Product.getReverseTimezoneDate(date, new Date().getTimezoneOffset());
     // console.log('validCheckDayOfWeek : ', date, ' correctedDate -> ', correctedDate);
     let tourDay = new Date(correctedDate).getDay() - 1;
     tourDay = (tourDay < 0) ? 6 : tourDay;
