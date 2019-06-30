@@ -2,12 +2,12 @@ const sqlDB = require('../../auth/postgresql');
 const v1ProductData = require('../testFiles/v1ProductData');
 const fbDB = require('../../auth/firebase').database;
 
-class V2ProductConveter {
+class productConveter {
     constructor(v1ProductData, v2SQLData) {
         this.v1ProductData = v1ProductData;
         this.v2SQLData = v2SQLData;
-        this.fbData = V2ProductConveter.generateFBObject(v1ProductData, v2SQLData);
-        this.elasticData = V2ProductConveter.generateElasticObject(v1ProductData, v2SQLData);
+        this.fbData = productConveter.generateFBObject(v1ProductData, v2SQLData);
+        this.elasticData = productConveter.generateElasticObject(v1ProductData, v2SQLData);
     }
     static generateFBObject(v1ProductData, v2SQLData) {
         const result = {
@@ -140,9 +140,9 @@ function test(sqlID, fbID) {
     return importSQLData(sqlID).then(result => {
         if (result.__proto__ === [].__proto__) result.map(p => v2SQLData[p.alias]=p);
         else v2SQLData = result;
-        const V2ProductConveter = new V2ProductConveter(v1ProductData[fbID], v2SQLData);
-        console.log('elastic data : ',V2ProductConveter.elasticData);
-        console.log('fb data : ',V2ProductConveter.fbData);
+        const productConveter = new productConveter(v1ProductData[fbID], v2SQLData);
+        console.log('elastic data : ',productConveter.elasticData);
+        console.log('fb data : ',productConveter.fbData);
     });
 }
 // test('p357', '-Kxq-TuaU1DVVULpL2LU');
@@ -151,19 +151,19 @@ const productNameMap = require('../dataFiles/productNameV1toV2.json');
 function makePromise(data){
     return new Promise((resolve, reject) => {
         console.log('agency : ',data.sales[0].agency);
-        fbDB.ref('v2Product').push(data).then(result => {resolve(result);})
+        fbDB.ref('product').push(data).then(result => {resolve(result);})
     });
 }
 
 const v1Product = require('../testFiles/v1ProductData.json');
-const v2SQLData = require('../dataFiles/v2ProductSQLDataByV1ID.json')
+const v2SQLData = require('../dataFiles/productSQLDataByV1ID.json')
 function insertV2DataToFirebase(v1Data){
     let v2Data;
     const promiseArr = [];
     Object.keys(v1Data).forEach(key => {
         if (productNameMap[v1Data[key].id]) {
             let v2NameFromV1 = productNameMap[v1Data[key].id];
-            v2Data = new V2ProductConveter(v1Data[key], v2SQLData[v2NameFromV1]);
+            v2Data = new productConveter(v1Data[key], v2SQLData[v2NameFromV1]);
             promiseArr.push(makePromise(v2Data.fbData));
         } else {
             console.log('exception : ',v1Data[key].id);
@@ -173,8 +173,8 @@ function insertV2DataToFirebase(v1Data){
         console.log('done');
     })
 }
-// fbDB.ref('v2Product').remove().then(result => console.log(result))
-// fbDB.ref('v2Product').push({'d':'fa'})
+// fbDB.ref('product').remove().then(result => console.log(result))
+// fbDB.ref('product').push({'d':'fa'})
 // insertV2DataToFirebase(v1Product);
 const exceptionList = ['Busan_Regular_통영루지', 'Seoul_Regular_전주railbike', 'Seoul_Spring_벛꽃랜덤', 'Seoul_Mud_머드-편도',
 'Seoul_Mud_머드-편도ticket주중',
@@ -183,4 +183,4 @@ const exceptionList = ['Busan_Regular_통영루지', 'Seoul_Regular_전주railbi
 'Seoul_Autumn_일산패키지투어',
 'Seoul_Ski_비발디(레슨)',
 'Seoul_Summer_여름포천']
-module.exports = V2ProductConveter;
+module.exports = productConveter;

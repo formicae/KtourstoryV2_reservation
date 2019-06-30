@@ -37,7 +37,7 @@ class ScoreTable {
         };
         this.name = reservation.name;
         this.product_id = reservation.product_id;
-        this.operation_date = reservation.operation_date;
+        this.tour_date = reservation.tour_date;
         this.timezone = (!reservation.timezone) ? 'UTC+9' : reservation.timezone;
         this.rebuildCount = 0;
         this.isModifiable = true;
@@ -61,7 +61,7 @@ class ScoreTable {
         }
     }
     static selectBusSize(reservation) {
-        const numPeople = Number(reservation.adult) + Number(reservation.child) + Number(reservation.infant);
+        const numPeople = Number(reservation.adult) + Number(reservation.kid) + Number(reservation.infant);
         const tempArr = [];
         Bus.getSimpleData().then(busObj => {
             Object.keys(busObj).forEach(id => {
@@ -75,11 +75,11 @@ class ScoreTable {
         })
     }
     static validCheck(scoreTable) {
-        scoreTable.isModifiable = (scoreTable.operation_date < new Date());
+        scoreTable.isModifiable = (scoreTable.tour_date < new Date());
         return scoreTable;
     }
     static scoreManager(scoreTable, reservation) {
-        const numPeople = Number(reservation.adult) + Number(reservation.child) + Number(reservation.infant);
+        const numPeople = Number(reservation.adult) + Number(reservation.kid) + Number(reservation.infant);
         const previousTotalScore = scoreTable.totalScore;
         const possibleScores = {};
         const previousScores = {};

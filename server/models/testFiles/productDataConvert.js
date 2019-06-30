@@ -5,7 +5,7 @@ const LANGUAGE_MAP = { // 1 : THAI, 3 : VIETNAMESE, 5: TAGALOG, ... (Ktourstory 
     '2':'ENGLISH',
     '4':'CHINESE'
 };
-class V2Product {
+class product {
     constructor(data) {
         this.id = data.id;
         this.name = data.info.name;
@@ -92,7 +92,7 @@ function getFbData() {
 function convert(testFile) {
     const newProduct = {};
     Object.keys(testFile).forEach(id => {
-        newProduct[testFile[id].id] = new V2Product(testFile[id]);
+        newProduct[testFile[id].id] = new product(testFile[id]);
     });
     console.log(JSON.stringify(newProduct));
 }
@@ -114,14 +114,14 @@ function insertToFB(data){
         console.log(result);
     });
 }
-const v2Product = require('./v2ProductData.json');
+const product = require('./productData.json');
 const Product = require('../product');
 const elasticProduct = {};
-Object.keys(v2Product).forEach(id => {
-    elasticProduct[id] = Product.generateElasticObject(v2Product[id]);
+Object.keys(product).forEach(id => {
+    elasticProduct[id] = Product.generateElasticObject(product[id]);
 });
 console.log(JSON.stringify(elasticProduct));
-// const dataForInsert = require('./v2ProductData');
+// const dataForInsert = require('./productData');
 // insertToFB(dataForInsert);
 
 

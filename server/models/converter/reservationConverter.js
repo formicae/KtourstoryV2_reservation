@@ -18,10 +18,10 @@ class V2ReservationConverter {
         const promiseArr = [];
         const keyArr = [];
         let reservation;
-        let v2ProductData;
-        return V2ReservationConverter.findV2Product(v1Data.info.name)
+        let productData;
+        return V2ReservationConverter.findproduct(v1Data.info.name)
             .then(v2Data => {
-                v2ProductData = v2Data;
+                productData = v2Data;
                 result[date][v2Data.id] = {
                     product_name : v2Data.name,
                     product_alias : v2Data.alias,
@@ -53,7 +53,7 @@ class V2ReservationConverter {
                     reservation.teams[team_id][promiseResult[i].id] = {
                         id : promiseResult[i].id,
                         agency_code : promiseResult[i].agency_code,
-                        name : v2ProductData.name,
+                        name : productData.name,
                         nationality : v1Reservation.nationality,
                         agency : promiseResult[i].agency,
                         writer : promiseResult[i].writer,
@@ -82,7 +82,7 @@ class V2ReservationConverter {
             v1ProductName = temp[0] + temp[1];
         }
         if (productIdExceptions.has(v1Data.product)) v1ProductName = productIdExceptions.get(v1Data.product);
-        return V2ReservationConverter.findV2Product(v1ProductName)
+        return V2ReservationConverter.findproduct(v1ProductName)
             .then(product => {
                 const result = {
                     message_id : v1Data.id,
@@ -104,7 +104,7 @@ class V2ReservationConverter {
             });
     }
 
-    static findV2Product(v1ProductName) {
+    static findproduct(v1ProductName) {
         return new Promise((resolve, reject) => {
             const query = `SELECT * FROM product WHERE alias = '${v1ProductName}'`;
             sqlDB.query(query, (err, result) => {
@@ -153,4 +153,4 @@ function testConvert(v1Operation){
     })
 }
 testConvert(testV1OperationData);
-// V2ReservationConverter.findV2ProductId('레송감국').then(result => console.log(`result : ${result}`));
+// V2ReservationConverter.findproductId('레송감국').then(result => console.log(`result : ${result}`));

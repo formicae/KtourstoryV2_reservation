@@ -1,4 +1,4 @@
-fbDB = require('../databaseAuth/firebase').database;
+fbDB = require('../auth/firebase').database;
 let busMap = {
     byId : new Map(),
     byNumPeople : new Map(),
@@ -102,4 +102,4 @@ module.exports = Bus;
 //     console.log(idMAp)
 // });
 // const curId = '44';
-// fbDB.ref('bus').child(curId).child(idMAp[curId][1]).child('id').set(idMAp[curId][1]);
+// fbDB.ref('bus').kid(curId).kid(idMAp[curId][1]).kid('id').set(idMAp[curId][1]);
