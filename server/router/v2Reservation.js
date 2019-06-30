@@ -110,8 +110,15 @@ function productFinder(data) {
                     geos : product.geos,
                     currency : item.currency,
                     income : incomeCalculation(data, product, item),
-                    expenditure : 0
+                    expenditure : 0,
+                    bus : {}
                 }}});
+            if (!!productData.bus) result.bus = productData.bus;
+            else result.bus = {
+                company : 'busking',
+                size : 43,
+                cost : 0
+            }
             return result;
         })
 }

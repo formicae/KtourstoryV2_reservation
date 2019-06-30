@@ -42,7 +42,8 @@ class Reservation {
                 alias : data.productData.alias,
                 category : data.productData.category,
                 area : data.productData.area,
-                geos : this.locationPreprocess(data.productData.geos)
+                geos : this.locationPreprocess(data.productData.geos),
+                bus : data.productData.bus
             },
             agency : data.agency || '',
             agency_code : data.agency_code || '',
@@ -297,6 +298,7 @@ class Reservation {
         return new Promise((resolve, reject) => {
             const team = new Team();
             team.reservations[reservation.id] = reservation;
+            team.bus = data.productData.bus;
             fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').push(team, err => {
                 if (err) {
                     log.warn('Model', 'newTeamBuild', `operation team push failed`);
@@ -306,7 +308,8 @@ class Reservation {
                 log.debug('Model', 'newTeamBuild', `new team build for reservation id ${reservation.id} success`);
                 let path = result.path.pieces_;
                 data.operation = path[1] + '/' + path[2] + '/' + path[4] + '/' + reservation.id;
-                resolve(data);
+                fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').child(path[4])
+                    .update({id:path[4]}).then(() => {resolve(data);})
             });
         })
     }
