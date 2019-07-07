@@ -11,6 +11,9 @@ api.put('/account', accountRouter.update);
 if (!env.released) {
     api.get('/', (req, res) => {res.render('../views/tempTemplate',{data:'local/v2'})});
     api.get('/reservation', (req, res) => {res.render('../views/tempTemplate',{data:'local/v2/reservation'})});
+} else {
+    api.get('/', (req, res) => {res.render('../views/tempTemplate',{data:'server/v2'})});
+    api.get('/reservation', (req, res) => {res.render('../views/tempTemplate',{data:'server/v2/reservation'})});
 }
 
 module.exports = api;
