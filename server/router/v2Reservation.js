@@ -312,14 +312,12 @@ function testManager(req, env){
             insertFB:false, deleteFB:false,
             insertElastic:false, cancelElastic:false, deleteElastic:false
         }};
-    if (!env.released) {
-        const obj = req.body.testObj;
-        if (!obj || obj.target !== 'reservation') return result;
-        result.isTest = true;
-        result.fail = obj.fail;
-        Object.keys(obj.detail).forEach(key => {
-            if (result.detail.hasOwnProperty(key)) result.detail[key] = obj.detail[key];
-        });
-    }
+    const obj = req.body.testObj;
+    if (!obj || obj.target !== 'reservation') return result;
+    result.isTest = true;
+    result.fail = obj.fail;
+    Object.keys(obj.detail).forEach(key => {
+        if (result.detail.hasOwnProperty(key)) result.detail[key] = obj.detail[key];
+    });
     return result;
 }

@@ -62,7 +62,7 @@ class Reservation {
             email : data.email || '',
             messenger : data.messenger || '',
             memo : data.reservation_memo || '',
-            canceled : data.canceled,
+            canceled : data.canceled || false,
             modified_date : currentDate,
             timezone : data.timezone,
         };

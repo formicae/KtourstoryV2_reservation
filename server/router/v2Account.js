@@ -174,14 +174,12 @@ function testManager(req, env){
     const result = {isTest:false, fail:false, detail:{
             insertSQL:false, insertElastic:false, processReverseAccount: false
         }};
-    if (!env.released) {
-        const obj = req.body.testObj;
-        if (!obj || obj.target !== 'account') return result;
-        result.isTest = true;
-        result.fail = obj.fail;
-        Object.keys(obj.detail).forEach(key => {
-            if (result.detail.hasOwnProperty(key)) result.detail[key] = obj.detail[key];
-        });
-    }
+    const obj = req.body.testObj;
+    if (!obj || obj.target !== 'account') return result;
+    result.isTest = true;
+    result.fail = obj.fail;
+    Object.keys(obj.detail).forEach(key => {
+        if (result.detail.hasOwnProperty(key)) result.detail[key] = obj.detail[key];
+    });
     return result;
 }

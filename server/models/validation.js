@@ -274,7 +274,7 @@ function validCheckOperationDateTime(tour_date, product_id) {
             if (!priceGroupCheck) return false;
             tourDateCheckTask.getAvailablePriceGroup = true;
             log.debug('Validation','validCheckOperationDateTime','priceGroupCheck passed');
-            if (env.released) return new Date().getTime() - tour_date.getTime() < product.deadline;
+            if (env.released) return ((new Date(tour_date).getTime() - new Date(2018,4,13).getTime()) / (60 * 60 * 1000)) >= product.deadline;
             return true;})
         .then(result => {
             if (result) return true;
@@ -447,6 +447,7 @@ function validDataCheck(object, paramMap ,checkList, functionMap) {
             checkList.forEach((bool, index) => {checkObject[checkKey[index]] = bool});
             return {result:!checkList.includes(false), detail:checkObject};
         }).catch(err => {
+            console.log(err);
             log.error('Validation', 'validDataCheck', 'check failed due to rejection');
             return {result:false, detail:'error'};
         });
