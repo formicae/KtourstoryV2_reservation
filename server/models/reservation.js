@@ -65,6 +65,7 @@ class Reservation {
             canceled : data.canceled || false,
             modified_date : currentDate,
             timezone : data.timezone,
+            language : data.language || 'English'
         };
         if (!data.created_date) {
             result.created_date = currentDate;
@@ -118,7 +119,8 @@ class Reservation {
             messenger : data.messenger || '',
             memo : data.reservation_memo || '',
             g : data.g || false,
-            o : data.o || false
+            o : data.o || false,
+            language : data.language || 'English'
         };
     }
 
@@ -463,7 +465,7 @@ class Reservation {
      */
     static insertFB(reservation, data, testObj) {
         if (testObj.isTest && testObj.fail && testObj.detail.insertFB) return Promise.resolve(false);
-        const reservedPeopleNumber = data.adult + data.kid + data.infant;
+        const reservedPeopleNumber = reservation.adult + reservation.kid + reservation.infant;
         return new Promise((resolve, reject) => {
             fbDB.ref('operation').child(data.date).child(data.productData.id).once('value', (snapshot) => {
                 const operation = snapshot.val();
@@ -483,6 +485,18 @@ class Reservation {
                 }
             });
         });
+    }
+
+    static insertFBforConvert(reservation, date) {
+        return new Promise((resolve, reject) => {
+            fbDB.ref('operation').child(date).update(reservation, err => {
+                if (err) {
+                    console.log('insertFBforConvert error : ', date);
+                    resolve(false);
+                }
+                resolve(true);
+            })
+        })
     }
 
     /**
@@ -555,6 +569,7 @@ class Reservation {
             },(err, resp) => {
                 if (err) {
                     log.warn('Model', 'Reservation-insertElastic', `insert into Elastic failed : ${reservation.id}`);
+                    console.log('error : ', JSON.stringify(err))
                     resolve(false);
                 }
                 log.debug('Model', 'Reservation-cancelElastic', `insert to Elastic success : ${reservation.id}`);
@@ -652,15 +667,15 @@ class Reservation {
         const result = {exist:false, score:{}, result:{}};
         return new Promise((resolve, reject) => {
             elasticDB.search({
-                index:'ktour_story',
-                type:'reservation',
+                index:'reservation',
+                type:'_doc',
                 body:{
                     query : { match : query }
                 }
             }, (err, resp) => {
                 if (err || resp.timed_out) {
                     log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
-                    throw new Error('Failed : searchElastic',err);
+                    throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
                 }
                 if (resp._shards.successful <= 0) resolve(result);
                 result.exist = true;

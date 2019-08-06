@@ -17,7 +17,7 @@ class Account {
     static generateSQLObject(data, currentDate) {
         const result = {
             writer : data.writer || '',
-            category : data.productData.category || '',
+            category : data.category || 'Reservation',
             currency : data.productData.currency || 'KRW',
             income : Account.moneyPreprocess(data.productData.income),
             expenditure : Account.moneyPreprocess(data.productData.expenditure),
@@ -34,7 +34,7 @@ class Account {
         return {
             id : data.account_id,
             writer : data.writer || '',
-            category : data.productData.category || '',
+            category : data.category || 'Reservation',
             currency : data.productData.currency || 'KRW',
             income : data.productData.income,
             expenditure : data.productData.expenditure,
@@ -216,5 +216,7 @@ function accountCreateQuery(object) {
     });
     return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
 }
+
+
 
 module.exports = Account;

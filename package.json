@@ -33,7 +33,7 @@
     "swagger-ui-express": "^4.0.2"
   },
   "env": {
-    "released": false
+    "released": true
   },
   "scripts": {
     "test": "mocha **/*.test.js --timeout 5000",
