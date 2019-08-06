@@ -42,7 +42,7 @@ function routerHandler(req, res, requestType) {
     return pickupPlaceFinder(data)
         .then(location => {
             data.pickupData = location;
-            return productFinder(data)})
+            return Product.productDataExtractFromFB(data)})
         .then(productData => {
             if (!productData) return {
                 type:requestType,
@@ -88,65 +88,6 @@ function pickupPlaceFinder(data){
             resolve({lat:0.00,lon:0.00});
         })
     })
-}
-
-function productFinder(data) {
-    let product;
-    let result;
-    return Product.getProduct(data.product)
-        .then(productData => {
-            if (!productData) {
-                log.warn('Router', 'productFinder', `product find failed. product : ${data.product}`);
-                return false;
-            }
-            product = productData;
-            productData.sales.forEach(item => { if (item.default) {
-                result = {
-                    id : product.id,
-                    name : item.name,
-                    alias : product.alias,
-                    category : product.category,
-                    area : product.area,
-                    geos : product.geos,
-                    currency : item.currency,
-                    income : incomeCalculation(data, product, item),
-                    expenditure : 0,
-                    bus : {}
-                }}});
-            if (!!productData.bus) result.bus = productData.bus;
-            else result.bus = {
-                company : 'busking',
-                size : 43,
-                cost : 0
-            }
-            return result;
-        })
-}
-
-function incomeCalculation(data, product, targetItem) {
-    let income = 0;
-    targetItem.sales.forEach(priceItem => {
-        let price = priceCalculation(priceItem, data);
-        income += price;
-    });
-    if (!!data.options && typeof data.options === 'object' && !!product.options) {
-        if (data.options.length > 0 && product.options.length > 0) {
-            data.options.forEach(option => {
-                product.options.forEach(productOption => {
-                    if (productOption.name === option.name) income += productOption.price * option.number;
-                });
-            });
-        }
-    }
-    return income;
-}
-
-function priceCalculation(item, data) {
-    if (item.type === 'adult' && !!Number(data.adult)) return Number(item.net * data.adult) || 0;
-    else if (item.type === 'adolescent' && !!Number(data.adolescent)) return Number(item.net * data.adolescent) || 0;
-    else if (item.type === 'kid' && !!Number(data.kid)) return Number(item.net * data.kid) || 0;
-    else if (item.type === 'infant' && !!Number(data.infant)) return Number(item.net * data.infant) || 0;
-    else return 0;
 }
 
 /**

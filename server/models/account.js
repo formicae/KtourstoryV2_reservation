@@ -16,7 +16,7 @@ class Account {
 
     static generateSQLObject(data, currentDate) {
         const result = {
-            writer : data.writer || '',
+            writer : data.writer || data.agency,
             category : data.category || 'Reservation',
             currency : data.productData.currency || 'KRW',
             income : Account.moneyPreprocess(data.productData.income),
@@ -33,7 +33,7 @@ class Account {
     static generateElasticObject(data, currentDate) {
         return {
             id : data.account_id,
-            writer : data.writer || '',
+            writer : data.writer || data.agency,
             category : data.category || 'Reservation',
             currency : data.productData.currency || 'KRW',
             income : data.productData.income,
