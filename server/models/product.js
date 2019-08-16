@@ -2,6 +2,54 @@ const fbDB = require('../auth/firebase').database;
 const sqlDB = require('../auth/postgresql');
 const log = require('../../log');
 const TIME_OFFSET_MAP = {'UTC0':0,'UTC+1':-60,'UTC+2':-120,'UTC+3':-180,'UTC+4':-240,'UTC+5':-300,'UTC+6':-360, 'UTC+7':-420,'UTC+8':-480,'UTC+9':-540,'UTC+10':-600,'UTC+11':-660,'UTC+12':-720,'UTC-1':60,'UTC-2':120,'UTC-3':180,'UTC-4':240,'UTC-5':300,'UTC-6':360,'UTC-7':420,'UTC-8':480,'UTC-9':540,'UTC-10':600,'UTC-11':660};
+const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
+    ['Seoul_Regular_전주railbike', '전주'],
+    ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
+    ['Seoul_Spring_진해', '서울진해'],
+    ['Seoul_Summer_진도', '서울진도'],
+    ['Seoul_Spring_보성녹차축제', '서울보성녹차'],
+    ['Seoul_Ski_남이엘리시안', '남이엘리'],
+    ['Busan_Private_PRIVATE', '부산프라이빗'],
+    ['Seoul_Spring_서울-광양구례', '서울광양구례'],
+    ['Busan_Spring_부산-광양구례', '부산광양구례'],
+    ['Busan_Summer_진도부산출발', '부산진도'],
+    ['Seoul_Regular_민속촌-레일', '민속촌레일'],
+    ['Busan_Regular_대구EWORLD', '대구이월드'],
+    ['Busan_Regular_해인사-일루미아', '일루미아'],
+    ['Seoul_Regular_민속촌레일광명', '민속촌레일광명'],
+    ['Busan_Regular_통영루지', '통영'],
+    ['Busan_Spring_대구벚꽃(주)', '대구벚꽃주'],
+    ['Busan_Spring_대구벚꽃(야)', '대구벚꽃야'],
+    ['Busan_Regular_동부산 에덴루지', '동부산에덴루지'],
+    ['Seoul_Private_Private', '서울프라이빗'],
+    ['Seoul_Mud_머드서울', '머드'],
+    ['Seoul_Mud_머드-공연일', '머드공연일'],
+    ['Seoul_Summer_포항불꽃축제', '서울포항불꽃'],
+    ['Busan_Summer_포항불꽃-부산', '부산포항불꽃'],
+    ['Seoul_Summer_봉화은어축제', '봉화은어'],
+    ['Seoul_Autumn_대천Skybike', '대천스카이바이크'],
+    ['Seoul_Autumn_포천사과', '포천'],
+    ['Seoul_Strawberry_포천딸기', '포천'],
+    ['Seoul_Summer_여름포천', '포천'],
+    ['Seoul_Autumn_설악산단풍', '설악단풍'],
+    ['Seoul_Autumn_덕유산_closed', '덕유산'],
+    ['Busan_Spring_부산-보성녹차', '부산보성녹차'],
+    ['Seoul_Autumn_단풍랜덤', '서울단풍랜덤'],
+    ['Busan_Autumn_단풍랜덤부산', '부산단풍랜덤'],
+    ['Seoul_Mud_머드-편도', '머드편도'],
+    ['Seoul_Mud_머드-편도ticket주중', '머드편도'],
+    ['Seoul_Mud_머드-편도ticket주말', '머드편도'],
+    ['Seoul_Summer_남맥', '남맥'],
+    ['Seoul_Autumn_일산패키지투어', '일산'],
+    ['Seoul_Ski_비발디(레슨)', '비발디레슨'],
+    ['Seoul_Regular_캐베-미드', '캐배미드'],
+    ['Seoul_Regular_캐베-골드', '캐배골드'],
+    ['Seoul_Regular_해돋이', '서울해돋이'],
+    ['Seoul_Regular_민속촌-우주', '민속촌우주'],
+    ['Seoul_Regular_스킨케어', '스킨케어'],
+    ['Busan_Regular_서부산', '서부산'],
+    ['Busan_Regular_안동', '안동']
+]);
 let productMap = new Map();
 
 class Product {
@@ -51,8 +99,9 @@ class Product {
                 tempObj.sales = saleObj.sales;
                 this.sales.push(tempObj);
             }
-        })
+        });
     }
+
     static getTimeOffset(utc) {
         return TIME_OFFSET_MAP[utc.toUpperCase()];
     }
@@ -66,7 +115,9 @@ class Product {
             if (productMap.size === 0) {
                 setTimeout(() => { resolve(Product.getProduct(input)) }, 200);
             } else {
-                resolve(productMap.get(input));
+                let target = input;
+                if (V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.has(input)) target = V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.get(input);
+                resolve(productMap.get(target));
             }
         })
     }
@@ -268,7 +319,6 @@ function changeProductToSQL(product_id, fbProduct) {
 }
 
 function monitorProduct() {
-    // todo : important task!!!!
     // 1. SQL 에 product 업데이트하러 보내기.
     // 2. Elasticsearch 에 product 업데이트하러 보내기
     // 3. 해당 product_id를 가지는 reservation 을 SQL에서 불러오기
@@ -371,34 +421,6 @@ function testOperationDateCheck(){
             console.log('final result : ',result)
         });
 }
-// const productObject = {};
-// sqlDB.query('SELECT id, name, alias, category, area FROM product', (err, result) => {
-//     result.rows.forEach(each => {
-//         productObject[each.id] = each;
-//     });
-//     console.log(JSON.stringify(productObject))
-// })
-// fbDB.ref('geos').child("areas").push({
-//     name:"Seoul",
-//     pickups:[
-//         {
-//             name: "Dongdaemoon",
-//             incoming: ["동대문", "동대문역","Dongdaemun"],
-//             location: {
-//                 lat: 37.5713101,
-//                 lon: 127.0074567
-//             }
-//         },
-//         {
-//             name : "Myeongdong",
-//             incoming : ["명동","명동역","명동역 4번출구","Myungdong"],
-//             location : {
-//                 lat:37.5609892,
-//                 lon:126.9839981
-//             }
-//         }
-//     ]
-// })
 
 monitorProduct();
 module.exports = Product;

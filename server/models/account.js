@@ -35,6 +35,7 @@ class Account {
             id : data.account_id,
             writer : data.writer || data.agency,
             category : data.category || 'Reservation',
+            date : data.date ||currentDate,
             currency : data.productData.currency || 'KRW',
             income : data.productData.income,
             expenditure : data.productData.expenditure,
@@ -199,6 +200,36 @@ class Account {
             });
         });
     }
+
+    /**
+     * get elastic Data with query
+     * @param query {Object} query string. example : {id : "a1409"}
+     * @returns {Promise<any>}
+     */
+    static getElastic(query) {
+        const result = {exist:false, score:{}, result:{}};
+        return new Promise((resolve, reject) => {
+            elasticDB.search({
+                index:'account',
+                type:'_doc',
+                body:{
+                    query : { match : query }
+                }
+            }, (err, resp) => {
+                if (err || resp.timed_out) {
+                    log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                    throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
+                }
+                if (resp._shards.successful <= 0) resolve(result);
+                result.exist = true;
+                resp.hits.hits.forEach(item => {
+                    result.result[item._source.id] = item._source;
+                    result.score[item._source.id] = item._score;
+                });
+                resolve(result.result);
+            });
+        })
+    }
 }
 
 function accountCreateQuery(object) {
@@ -208,7 +239,10 @@ function accountCreateQuery(object) {
     Object.keys(object).forEach((key, index) => {
         value = object[key];
         if (ACCOUNT_KEY_MAP.includes(key) && key !== 'id') {
-            if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
+            if (typeof value === 'object') {
+                if (!value) tempValues += null + ", ";
+                else tempValues += "'" + JSON.stringify(value) + "'" + ", "
+            }
             else if (typeof value === 'string') { tempValues += "'" + value + "'" + ", "}
             else { tempValues += value + ", "}
             tempKeys += key + ", ";
@@ -216,7 +250,5 @@ function accountCreateQuery(object) {
     });
     return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
 }
-
-
 
 module.exports = Account;

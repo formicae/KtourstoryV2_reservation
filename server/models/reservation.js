@@ -35,7 +35,7 @@ class Reservation {
         const result = {
             id : data.reservation_id,
             message_id : data.message_id,
-            writer : data.writer || '',
+            writer : data.writer || data.agency,
             product : {
                 id : data.productData.id,
                 name : data.productData.name,
@@ -84,7 +84,7 @@ class Reservation {
     static generatePostgreSQLObject(data, currentDate) {
         const result = {
             message_id: data.message_id,
-            writer : data.writer,
+            writer : data.writer || data.agency,
             product_id : data.productData.id,
             agency : data.agency,
             agency_code : data.agency_code,
@@ -193,13 +193,12 @@ class Reservation {
         const text = reservationQueryProcessing(reservation, 'create');
         return new Promise((resolve, reject)=> {
             const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
-            console.log('query ::',query);
             sqlDB.query(query, (err, result) => {
                 if (err) {
                     log.warn('Model', 'Reservation-insertSQL', `data insert to SQL failed : ${reservation.id}`);
                     resolve(false);
                 }
-                log.debug('Model','Reservation-insertSQL', 'data insert to SQL success')
+                log.debug('Model','Reservation-insertSQL', `${ result.rows[0].id = 'r' + result.rows[0]._id} data insert to SQL success`);
                 result.rows[0].id = 'r' + result.rows[0]._id;
                 resolve(result.rows[0]);
             });
@@ -224,6 +223,20 @@ class Reservation {
                 log.debug('Model','Reservation-deleteSQL', 'data delete from SQL success')
                 resolve(result.rows[0]);
             })
+        });
+    }
+
+    static getSQL(reservation_id) {
+        return new Promise((resolve, reject) => {
+            const query = `SELECT * FROM reservation WHERE id = '${reservation_id}'`;
+            sqlDB.query(query, (err, result) => {
+                if (err) {
+                    log.warn('Model', 'Reservation-getSQL', 'get reservation from SQL failed');
+                    resolve(false);
+                }
+                log.debug('Model','Reservation-getSQL', 'get data from SQL success')
+                resolve(result.rows[0]);
+            });
         });
     }
 
@@ -560,6 +573,7 @@ class Reservation {
      */
     static insertElastic(reservation, testObj) {
         if (testObj.isTest && testObj.fail && testObj.detail.insertElastic) return Promise.resolve(false);
+        if(reservation._id) delete reservation._id;
         return new Promise((resolve, reject)=> {
             elasticDB.create({
                 index : 'reservation',
