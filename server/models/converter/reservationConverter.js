@@ -2,6 +2,7 @@ const Product = require('../../models/product');
 const Reservation = require('../../models/reservation');
 const sqlDB = require('../../auth/postgresql');
 const fbDB = require('../../auth/firebase').database;
+const elasticDB = require('../../auth/elastic');
 const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Busan_Regular_부산 Scenic', '부산Scenic'],
     ['Seoul_Regular_에버', '서울에버'],
@@ -11,6 +12,7 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Summer_진도', '서울진도'],
     ['Seoul_Spring_보성녹차축제', '서울보성녹차'],
     ['Seoul_Ski_남이엘리시안', '남이엘리'],
+    ['Busan_Private_PRIVATE', '부산프라이빗'],
     ['Busan_Private_Private(B)', '부산프라이빗'],
     ['Seoul_Spring_서울-광양구례', '서울광양구례'],
     ['Busan_Spring_부산-광양구례', '부산광양구례'],
@@ -70,7 +72,7 @@ class v2ReservationConverter {
             id: v2SqlReservation.id,
             agency_code: v1Reservation.agency_code,
             name: v1Reservation.clientName,
-            nationality: v1Reservation.nationality,
+            nationality: v1Reservation.nationality.toUpperCase(),
             agency: v2SqlReservation.agency,
             writer: v2SqlReservation.writer || v2SqlReservation.agency,
             pickup: v1Reservation.pickupPlace,
@@ -138,8 +140,8 @@ class v2ReservationConverter {
                         if (v1Data.teams[key].reservations) {
                             Object.keys(v1Data.teams[key].reservations).forEach(r_id => {
                                 keyArr.push({team_id: key, v1_r_id: r_id});
-                                // SQL에서 먼저 reservation id 를 만든 후에 firebase에 넣어야 하기 때문에 아래의 findV2Reservation이 필요 v2 product id를 찾는것이 목표.
-                                promiseArr.push(v2ReservationConverter.findV2Reservation(v1Data.teams[key].reservations[r_id], v2ProductData, r_id));
+                                // SQL에서 먼저 reservation id 를 만든 후에 firebase에 넣어야 하기 때문에 아래의 findV2ReservationInSQL이 필요 v2 product id를 찾는것이 목표.
+                                promiseArr.push(v2ReservationConverter.findV2ReservationInSQL(v1Data.teams[key].reservations[r_id], v2ProductData, r_id));
                             });
                         }
                     });
@@ -156,7 +158,7 @@ class v2ReservationConverter {
                                 id: promiseResult[i].id,
                                 agency_code: promiseResult[i].agency_code,
                                 name: v1Reservation.clientName,
-                                nationality: v1Reservation.nationality,
+                                nationality: v1Reservation.nationality.toUpperCase(),
                                 agency: promiseResult[i].agency,
                                 writer: promiseResult[i].writer || 'writer unknown',
                                 pickup: v1Reservation.pickupPlace,
@@ -169,7 +171,7 @@ class v2ReservationConverter {
                                 messenger: v1Reservation.messenger || '',
                                 memo: v1Reservation.memo || '',
                                 o: v1Reservation.oCheck || false,
-                                g: v1Reservation.gCheck || v1Reservation.oChekc || false
+                                g: v1Reservation.gCheck || v1Reservation.oChekc || false,
                             };
                             if (promiseResult[i].options) {
                                 reservation.teams[team_id].reservations[promiseResult[i].id].options = promiseResult[i].options
@@ -203,52 +205,100 @@ class v2ReservationConverter {
      * @param v1Reservation {Object} v1 Reservation data
      * @param v2ProductData {Object} v2 Product Data from postgreSQL
      * @param v2SQLData {Object} v2 Reservation Data from postgreSQL
+     * @param v2ElasticReservation {Object} v2 Elastic object when v1Reservation does not exist
      * @returns {{product: {area: *, bus: {cost: number, size: number, company: string}, geos: {location: {lon: number, lat: number}, place: *}, name: *, alias: *, id: *, category: *}, agency: (*|Array|boolean), agency_code: string, timezone: string, kid: (*|number|Number|string|boolean), pickup: {location: {lon: number, lat: number}, place: string}, memo: *, message_id: *, language: (*|string|string), infant: (string|*|number|Number|boolean), modified_date: (*|*|string|boolean|String|*), canceled: boolean, total: *, nationality: (string|*), phone: string, messenger: (string|*), options: *, tour_date: *, id: *, writer: string, created_date: (*|*|boolean|Date|string|*), adult: (boolean|string|*|number|Number), email: *}}
      */
-    static elasticDataMatch(v1Reservation, v2ProductData, v2SQLData) {
-        const result = {
-            id: v2SQLData.id,
-            message_id: v1Reservation.id,
-            writer: v1Reservation.writer || v1Reservation.agency,
-            product : {
-                id: v2ProductData.id,
-                name: v2ProductData.name,
-                bus: { company: 'busking', size: 43, cost: 0},
-                alias: v2ProductData.alias,
-                category: v2ProductData.category,
-                area: v2ProductData.area,
-                geos: { place: v2ProductData.alias, location: { lat: 0.0, lon: 0.0 }}
-            },
-            agency: v1Reservation.agency,
-            agency_code: v1Reservation.agencyCode,
-            name: v1Reservation.clientName,
-            nationality: v1Reservation.nationality,
-            tour_date: v1Reservation.date,
-            pickup: { place: v1Reservation.pickupPlace, location:{ lat: 0.0, lon: 0.0 }},
-            options : v2SQLData.options,
-            adult: v1Reservation.adult,
-            kid: v1Reservation.kid,
-            infant: v1Reservation.infant,
-            total: v1Reservation.adult + v1Reservation.kid + v1Reservation.infant,
-            phone: v1Reservation.tel || '',
-            email: v1Reservation.email || '',
-            messenger: v1Reservation.messenger || '',
-            memo: v1Reservation.memo || '',
-            canceled: false,
-            created_date: v2SQLData.created_date,
-            modified_date: v2SQLData.modified_date,
-            timezone : 'UTC+9',
-            language : v1Reservation.language
-        };
-        if (v1Reservation.option) result.options.name = v1Reservation.option[0].option;
-        if (!v1Reservation.language) {
-            result.language = 'English'
-        } else if (v1Reservation.language === 'N/A') {
-            result.language = 'English'
+    static elasticDataMatch(v1Reservation, v2ProductData, v2SQLData, v2ElasticReservation) {
+        if (v1Reservation) {
+            const result = {
+                id: v2SQLData.id,
+                message_id: v1Reservation.id,
+                writer: v1Reservation.writer || v1Reservation.agency,
+                product : {
+                    id: v2ProductData.id,
+                    name: v2ProductData.name,
+                    alias: v2ProductData.alias,
+                    category: v2ProductData.category,
+                    area: v2ProductData.area
+                },
+                agency: v1Reservation.agency,
+                agency_code: v1Reservation.agencyCode,
+                name: v1Reservation.clientName,
+                nationality: v1Reservation.nationality.toUpperCase(),
+                tour_date: v1Reservation.date,
+                pickup: { place: v1Reservation.pickupPlace, location:{ lat: 0.0, lon: 0.0 }},
+                options : v2SQLData.options || [],
+                adult: v1Reservation.adult,
+                kid: v1Reservation.kid,
+                infant: v1Reservation.infant,
+                total: v1Reservation.adult + v1Reservation.kid + v1Reservation.infant,
+                phone: v1Reservation.tel || '',
+                email: v1Reservation.email || '',
+                messenger: v1Reservation.messenger || '',
+                memo: v1Reservation.memo || '',
+                memo_history : [],
+                canceled: v2SQLData.canceled,
+                created_date: v2SQLData.created_date,
+                modified_date: v2SQLData.modified_date,
+                timezone : 'UTC+9',
+                language : v1Reservation.language,
+                star : false
+            };
+            if (!!result.memo) {
+                result.memo_history.push({
+                    writer : result.writer,
+                    memo : result.memo,
+                    date : v2SQLData.created_date
+                })
+            }
+            if (v1Reservation.option) result.options.name = v1Reservation.option[0].option;
+            if (!v1Reservation.language) {
+                result.language = 'English'
+            } else if (v1Reservation.language === 'N/A') {
+                result.language = 'English'
+            } else {
+                result.language = v1Reservation.language
+            }
+            if (!!v1Reservation.memo.match('중국어')) result.language = 'CHINESE';
+            return result;
         } else {
-            result.language = v1Reservation.language
+            const result = {
+                id: v2SQLData.id,
+                message_id: v2SQLData.message_id,
+                writer: v2SQLData.writer,
+                product: v2ElasticReservation.product,
+                agency: v2SQLData.agency,
+                agency_code: v2SQLData.agency_code,
+                name: v2ElasticReservation.name,
+                nationality: v2SQLData.nationality.toUpperCase(),
+                tour_date: v2ElasticReservation.tour_date,
+                pickup: v2ElasticReservation.pickup,
+                options: v2SQLData.options || [],
+                adult: v2SQLData.adult,
+                kid: v2SQLData.kid,
+                infant: v2SQLData.infant,
+                total: v2SQLData.adult + v2SQLData.kid + v2SQLData.infant,
+                phone: v2ElasticReservation.phone,
+                email: v2ElasticReservation.email,
+                messenger: v2ElasticReservation.messenger,
+                memo: v2SQLData.memo,
+                memo_history: [],
+                canceled: v2SQLData.canceled,
+                created_date: v2SQLData.created_date,
+                modified_date: v2SQLData.modified_date,
+                timezone: 'UTC+9',
+                language: v2SQLData.language,
+                star: false
+            };
+            if (!!result.memo) {
+                result.memo_history.push({
+                    writer : result.writer,
+                    memo : result.memo,
+                    date : v2SQLData.created_date
+                })
+            }
+            return result;
         }
-        return result;
     };
 
     /**
@@ -267,7 +317,6 @@ class v2ReservationConverter {
             v1ProductName = V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.get(v1Reservation.product);
         }
         // return Product.getProduct()
-        // todo : v1 Product를 모두 v2로 바꾼 후 firebase에 올려놓은 후에 진행해야 한다.
         return v2ReservationConverter.findProduct(v1Reservation.product, v1ProductName)
             .then(product => {
                 if (product) {
@@ -282,6 +331,7 @@ class v2ReservationConverter {
                         adult : v1Reservation.adult,
                         kid : v1Reservation.kid,
                         infant : v1Reservation.infant,
+                        nationality : (v1Reservation.nationality || 'unknown').toUpperCase(),
                         canceled : canceled,
                         created_date : Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9'),
                         modified_date : Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9')
@@ -320,7 +370,28 @@ class v2ReservationConverter {
             })
         })
     }
-
+    
+    static findV2ReservationInElastic(v1ReservationId) {
+        return new Promise((resolve, reject) => {
+            elasticDB.search({
+                index:'reservation',
+                type:'_doc',
+                body:{
+                    query : { match : { id : v1ReservationId } }
+                }
+            }, (err, resp) => {
+                if (err || resp.timed_out) {
+                    log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                    throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
+                }
+                console.log('find task done');
+                if (resp._shards.successful <= 0) resolve(resp);
+                if (resp.hits.total === 0) console.log('search failed! : ',v1ReservationId, JSON.stringify(resp));
+                resolve(resp.hits.hits[0]._source);
+            });
+        })
+    }
+    
     /**
      * find v2 reservation object from postgreSQL with v1 data
      * @param v1ReservationData
@@ -328,12 +399,12 @@ class v2ReservationConverter {
      * @param r_id {String} v1 reservation id (message_id in v2 Reservation)
      * @returns {Promise<any>}
      */
-    static findV2Reservation(v1ReservationData, v2Data, r_id) {
+    static findV2ReservationInSQL(v1ReservationData, v2Data, r_id) {
         return new Promise((resolve, reject) => {
             const tourDate = new Date(v1ReservationData.date);
             const query = `SELECT * FROM reservation WHERE message_id = '${v1ReservationData.id}' and product_id = '${v2Data.id}' and adult=${v1ReservationData.adult} and kid=${v1ReservationData.kid} and infant=${v1ReservationData.infant} and agency_code = '${v1ReservationData.agencyCode.trim()}'`;
             sqlDB.query(query, (err, result) => {
-                if (err) throw new Error(`findV2Reservation in SQL : ${r_id} ${tourDate}, ${v1ReservationData.date} ${v2Data.id} \n query : ${query}`);
+                if (err) throw new Error(`findV2ReservationInSQL in SQL : ${r_id} ${tourDate}, ${v1ReservationData.date} ${v2Data.id} \n query : ${query}`);
                 resolve(result.rows[0])
             })
         })
@@ -480,6 +551,7 @@ class v2ReservationConverter {
                 else console.log (`   error : ${v2ElasticData.id} insert to Elastic failed`);
             }
         }
+        return true;
     }
 
     /**
@@ -507,6 +579,7 @@ class v2ReservationConverter {
                 return Promise.all(firebaseTaskArr)})
             .then(finalResult => {
                 if (!finalResult.includes(false)) {
+                    console.log(' >> FB insert all success!');
                     return this.insertElasticBulkData(data);
                 };
             });
@@ -547,37 +620,6 @@ class v2ReservationConverter {
      * @returns {Promise<void>}
      */
     static async mainConverter(v1OperationData) {
-        //     const taskObj = {};
-    //     for (let temp0 of Object.entries(v1OperationData)) {
-    //         let date = temp0[0];
-    //         let v1Operation = temp0[1];
-    //         for (let temp1 in Object.entries(v1Operation)) {
-    //             let v1ProductId = temp1[0];
-    //             let v1Product = temp1[1];
-    //             if (v1Product.teams) {
-    //                 for (let temp2 of Object.entries(v1Product.teams)) {
-    //                     let v1TeamId = temp2[0];
-    //                     let v1Team = temp2[1];
-    //                     if (v1Team.reservations) {
-    //                         for (let temp3 of Object.entries(v1Team.reservations)) {
-    //                             let v1ReservationId = temp3[0];
-    //                             let v1Reservation = temp3[1];
-    //                             let v2Reservation = await this.generateSQLObject(v1Reservation, false);
-    //                             let sqlCheck = this.checkSameReservationExist(v2Reservation);
-    //                             if (sqlCheck.result) this.taskManager('Pass - 1', sqlCheck.data.id, v1ReservationId, v1ProductId, v1TeamId, [], null,'already same reservation exist in postgreSQL');
-    //                             else {
-    //                                 let v2SQLReservation = await Reservation.insertSQL(v2Reservation, {});
-    //                                 let v2FbData = await this.generateSimpleFbData(date, v1ProductId, v1TeamId, v1ReservationId, v1Reservation, v2SQLReservation);
-    //                                 await Reservation.insertFB(v2FbData.reservation, v2FbData.data, {});
-    //                                 let v2ElasticData =
-    //                                 await Reservation.insertElastic()
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
         console.log(' >> SQL process');
         let isSQLDataInsertSuccess = await this.convertAndInsertV1OperationToSQLBulk(v1OperationData);
         if (!isSQLDataInsertSuccess) return console.log('SQL data insert failed!');
@@ -605,11 +647,53 @@ class v2ReservationConverter {
                 return writeFile(outputFilePath, elasticData, 'function : convertElasticToFile')
             })
     }
+
+    /**
+     * data separate by year / month.
+     * if month data is null, it means all data of input year will be stored to the target path.
+     * @param v1OperationBulkData {Object} v1 Operation bulk data from firebase
+     * @param year {Number} year
+     * @param month {any} month
+     * @param path {String} file path to be stored
+     * @returns {Promise<any>}
+     */
+    static operationDataExtractByMonth(v1OperationBulkData, year, month, path) {
+        let result = {};
+        Object.entries(v1OperationBulkData).forEach(temp => {
+            let date = temp[0];
+            let v1Operation = temp[1];
+            let dateArr = date.trim().split('-');
+            if (!month) {
+                if (Number(dateArr[0]) === year) result[date] = v1Operation;
+            } else if (month === '~3') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 3) result[date] = v1Operation;
+            } else if (month === '4~6') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 4 && Number(dateArr[1]) <= 6) result[date] = v1Operation;
+            } else if (month === '~6') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 6) result[date] = v1Operation;
+            } else if (month === '7~9') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 7 && Number(dateArr[1]) <= 9) result[date] = v1Operation;
+            } else if (month === '7~') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 7) result[date] = v1Operation;
+            } else if (month === '10~'){
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 10) result[date] = v1Operation;
+            } else {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) === month) result[date] = v1Operation;
+            }
+        });
+        return new Promise((resolve, reject) => {
+            fs.writeFile(path, JSON.stringify(result), err => {
+                if (err) resolve(console.log('error in file write : ',JSON.stringify(err)));
+                resolve(console.log('done'));
+            });
+        })
+    }
+
 }
 
 /**
  * file write
- * @param filePath {String} example : 'server/models/dataFiles/temporaryV2ReservationElasticFBData.json'
+ * @param filePath {String} example : 'server/models/tempDataFiles/temporaryV2ReservationElasticFBData.json'
  * @param object {Object} object
  */
 function writeFile(filePath, object, message) {
@@ -643,21 +727,16 @@ function deleteFirebaseData(){
         })
     }
 }
-// sqlDB.query(`SELECT * FROM reservation WHERE id = 'r1734'`, (err,result) => {
-//     console.log(result.rows[0]);
-//     let text = reservationQueryProcessing(result.rows[0]);
-//     console.log(text);
-//     const query = `SELECT * FROM reservation WHERE ${text}`;
-//     sqlDB.query(query, (err, result) => {
-//         if(err) console.log('error : ',JSON.stringify(err))
-//         console.log('final result : ',result);
-//     })
-// })
 
-// let result = v2ReservationConverter.mainConverter(require('../testFiles/v1OperationData_2019_July'));
+const v1OperationBulkData = require('../dataFiles/intranet-64851-operation-export.json');
+const v1Operation_2019_July = require('../dataFiles/v1OperationData_2019_July.json');
+const v1Operation_2019_October = require('../dataFiles/v1OperationData_2019_October.json');
+// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, 8, 'server/models/dataFiles/v1OperationData_2019_October.json');
+// let result = v2ReservationConverter.mainConverter(v1Operation_2019_October);
 // deleteFirebaseData()
-// v2ReservationConverter.convertElasticToFile(require('../testFiles/v1OperationData_2019_July'), 'server/models/dataFiles/v2ConvertedElasticData.json')
+// v2ReservationConverter.convertElasticToFile(require('../dataFiles/v1OperationData_2019_July'), 'server/models/tempDataFiles/v2ConvertedElasticData.json')
 //     .then(result => console.log('result : ',result));
+// v2ReservationConverter.findV2ReservationInElastic('r13777').then(result => console.log(result));
 
 module.exports = v2ReservationConverter;
 

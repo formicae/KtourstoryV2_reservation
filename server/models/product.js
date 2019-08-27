@@ -1,8 +1,10 @@
 const fbDB = require('../auth/firebase').database;
 const sqlDB = require('../auth/postgresql');
 const log = require('../../log');
-const TIME_OFFSET_MAP = {'UTC0':0,'UTC+1':-60,'UTC+2':-120,'UTC+3':-180,'UTC+4':-240,'UTC+5':-300,'UTC+6':-360, 'UTC+7':-420,'UTC+8':-480,'UTC+9':-540,'UTC+10':-600,'UTC+11':-660,'UTC+12':-720,'UTC-1':60,'UTC-2':120,'UTC-3':180,'UTC-4':240,'UTC-5':300,'UTC-6':360,'UTC-7':420,'UTC-8':480,'UTC-9':540,'UTC-10':600,'UTC-11':660};
+const TIME_OFFSET_MAP = require('../models/validation').TIME_OFFSET_MAP;
 const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
+    ['Busan_Regular_부산 Scenic', '부산Scenic'],
+    ['Seoul_Regular_에버', '서울에버'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
     ['Seoul_Spring_진해', '서울진해'],
@@ -10,6 +12,7 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Spring_보성녹차축제', '서울보성녹차'],
     ['Seoul_Ski_남이엘리시안', '남이엘리'],
     ['Busan_Private_PRIVATE', '부산프라이빗'],
+    ['Busan_Private_Private(B)', '부산프라이빗'],
     ['Seoul_Spring_서울-광양구례', '서울광양구례'],
     ['Busan_Spring_부산-광양구례', '부산광양구례'],
     ['Busan_Summer_진도부산출발', '부산진도'],
@@ -48,7 +51,8 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_민속촌-우주', '민속촌우주'],
     ['Seoul_Regular_스킨케어', '스킨케어'],
     ['Busan_Regular_서부산', '서부산'],
-    ['Busan_Regular_안동', '안동']
+    ['Busan_Regular_안동', '안동'],
+    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리']
 ]);
 let productMap = new Map();
 
@@ -278,20 +282,25 @@ class Product {
  */
 function productMapProcessing(productMap, ignoreSet, product) {
     let areaCategoryalias = product.area + '_' + product.category + '_' + product.alias;
-    productMap.set(product.alias, product);
-    productMap.set(areaCategoryalias, product);
-    if (!!product.incoming) {
-        product.incoming.forEach(incoming => { productMap.set(incoming, product) })
-    }
-    if (!ignoreSet.has(product.id)) { productMap.set(product.id, product) }
-    if (!!product.options) {
-        product.options.forEach(option => {
-            if (!!option.incoming) {
-                option.incoming.forEach(incoming => {
-                    if (!ignoreSet.has(incoming)) { productMap.set(incoming, product) }
-                });
-            }
-        });
+    if (!ignoreSet.has(product.name) && !ignoreSet.has(product.alias)) {
+        productMap.set(product.alias, product);
+        productMap.set(areaCategoryalias, product);
+        productMap.set(product.name, product);
+        productMap.set(product.id, product);
+        if (!!product.incoming) {
+            product.incoming.forEach(incoming => {
+                if (!ignoreSet.has(incoming)) productMap.set(incoming, product);
+            })
+        }
+        if (!!product.options) {
+            product.options.forEach(option => {
+                if (!!option.incoming) {
+                    option.incoming.forEach(incoming => {
+                        if (!ignoreSet.has(incoming)) { productMap.set(incoming, product) }
+                    });
+                }
+            });
+        }
     }
     return productMap;
 }

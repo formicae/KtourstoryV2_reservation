@@ -24,9 +24,9 @@ exports.post = (req, res) => {
         });
 };
 
-exports.update = (req, res) => {
+exports.delete = (req, res) => {
     if (!req.get('Content-Type')) return res.status(400).send("Content-Type should be json");
-    accountHandler(req, res, 'UPDATE')
+    accountHandler(req, res, 'REVERSE_CREATE')
         .then((resultData) => {
             if (!resultData.accountResult) return res.status(500).json({
                 message:'accountHandler failed',
@@ -39,7 +39,7 @@ exports.update = (req, res) => {
                 reservationTask : resultData.reservationTask,
                 accountTask: resultData.accountTask})})
         .catch(err => {
-            log.error('Router', 'ACCOUNT export-UPDATE', `unhandled error occurred! error : ${err}`);
+            log.error('Router', 'ACCOUNT export-REVERSE_CREATE', `unhandled error occurred! error : ${err}`);
             res.status(500).send(`unhandled ACCOUNT POST error`)
         });
 };
@@ -56,7 +56,7 @@ function accountHandler(req, res, requestType) {
     const testObj = testManager(req, env);
     data.accountResult = false;
     const account = new Account(data);
-    if (requestType === 'UPDATE') {
+    if (requestType === 'REVERSE_CREATE') {
         let reverseAccount;
         const task = {validation : false, processReverseAccount:false, insertSQL : false, insertElastic: false};
         return Account.validation(account)

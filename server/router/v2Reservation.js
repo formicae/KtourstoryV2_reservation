@@ -54,6 +54,7 @@ function routerHandler(req, res, requestType) {
                 }
             };
             data.productData = productData;
+            data.requestType = requestType;
             log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
             const reservation = new Reservation(data);
             return reservationHandler(reservation, data, requestType, testObj)})
@@ -77,15 +78,18 @@ function pickupPlaceFinder(data){
     return new Promise((resolve, reject) => {
         fbDB.ref('geos').once('value', (snapshot) => {
             const geos = snapshot.val();
-            Object.keys(geos.areas).forEach(key => {
-                geos.areas[key].pickups.forEach(area => {
-                    if (area.name === data.pickup) resolve(area.location);
-                    area.incoming.forEach(incoming => {
-                        if (incoming === data.pickup) resolve(area.location);
-                    });
-                })
-            });
-            resolve({lat:0.00,lon:0.00});
+            if (!geos) resolve({lat:0.00,lon:0.00});
+            else {
+                Object.keys(geos.areas).forEach(key => {
+                    geos.areas[key].pickups.forEach(area => {
+                        if (area.name === data.pickup) resolve(area.location);
+                        area.incoming.forEach(incoming => {
+                            if (incoming === data.pickup) resolve(area.location);
+                        });
+                    })
+                });
+                resolve({lat:0.00,lon:0.00});
+            }
         })
     })
 }

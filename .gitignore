@@ -10,11 +10,11 @@
 # Logs
 logs
 *.log
-server/models/dataFiles/*.json
+server/models/tempDataFiles/*.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-server/models/testFiles/*.json
+server/models/dataFiles/*.json
 server/auth/keys/*.json
 *.pem
 

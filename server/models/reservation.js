@@ -48,7 +48,7 @@ class Reservation {
             agency : data.agency || '',
             agency_code : data.agency_code || '',
             name : data.name || '',
-            nationality : data.nationality || '',
+            nationality : (data.nationality || 'unknown').toUpperCase(),
             tour_date : data.date,
             pickup : {
                 place : data.pickup || '',
@@ -62,15 +62,24 @@ class Reservation {
             email : data.email || '',
             messenger : data.messenger || '',
             memo : data.reservation_memo || '',
+            memo_history : [],
             canceled : data.canceled || false,
             modified_date : currentDate,
-            timezone : data.timezone,
-            language : data.language || 'English'
+            timezone : data.timezone || 'UTC+9',
+            language : data.language,
+            star : false
         };
-        if (!data.created_date) {
-            result.created_date = currentDate;
-        } else { result.created_date = data.reservation_created_date }
-        if (!!data.timezone) result.timezone = 'UTC+9';
+        if (!!data.memo.match('중국어')) result.language = 'CHINESE';
+        if (data.requestType === 'POST') {result.created_date = currentDate } 
+        else { result.created_date = data.reservation_created_date }
+        if (data.memo_history) {result.memo_history = data.memo_history;}
+        if (!!result.memo) {
+            result.memo_history.push({
+                writer : result.writer,
+                memo : result.memo,
+                date : result.created_date
+            })
+        }
         result.total = result.adult + result.kid + result.infant;
         return result;
     }
@@ -93,19 +102,22 @@ class Reservation {
             adult : this.peopleNumberPreprocess(data.adult),
             kid : this.peopleNumberPreprocess(data.kid),
             infant : this.peopleNumberPreprocess(data.infant),
+            nationality : (data.nationality || 'unknown').toUpperCase(),
             canceled : data.canceled,
             modified_date : currentDate,
         };
         if (!!data.reservation_id) { result.id = data.reservation_id }
-        else { result.created_date = currentDate }
+        if (!!data.memo.match('중국어')) result.language = 'CHINESE';
+        if (data.requestType === 'POST') { result.created_date = currentDate }
+        else {result.created_date = data.reservation_created_date}
         return result;
     }
 
     static generateFirebaseObject(data) {
-        return {
+        const result = {
             id : data.reservation_id,
             name : data.name || '',
-            nationality : data.nationality || '',
+            nationality : (data.nationality || 'unknown').toUpperCase(),
             agency : data.agency || '',
             agency_code : data.agency_code || '',
             writer : data.writer || '',
@@ -122,10 +134,13 @@ class Reservation {
             o : data.o || false,
             language : data.language || 'English'
         };
+        if (!!data.memo.match('중국어')) result.language = 'CHINESE';
+        return result;
     }
 
     static getGlobalDate() {
-        return new Date().toISOString().slice(0,-2);
+        // return new Date().toISOString().slice(0,-2);
+        return new Date(new Date() - ((validation.TIME_OFFSET_MAP['UTC+9']) * 60000));
     }
 
     static getTimeOffset(utc) {
@@ -249,7 +264,7 @@ class Reservation {
     static cancelSQL(reservation_id, testObj) {
         if (testObj.isTest && testObj.fail && testObj.detail.cancelSQL) return Promise.resolve(false);
         return new Promise((resolve, reject) => {
-            const query = `UPDATE reservation SET canceled = true, modified_date = '${new Date().toISOString().slice(0,-2)}' WHERE id = '${reservation_id}' RETURNING *`;
+            const query = `UPDATE reservation SET canceled = true, modified_date = '${Reservation.getGlobalDate()}' WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
                     log.warn('Model', 'Reservation-cancelSQL', 'data update from SQL failed - make "cancel" column to TRUE');
@@ -607,7 +622,8 @@ class Reservation {
                 id : reservation_id,
                 body : {
                     doc : {
-                        canceled : true
+                        canceled : true,
+                        modified_date : Reservation.getGlobalDate()
                     }
                 }
             }, (err, resp) => {

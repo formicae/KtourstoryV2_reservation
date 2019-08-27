@@ -24,29 +24,37 @@ class Account {
             cash : data.cash,
             memo : data.account_memo || '',
             created_date : currentDate,
-            reservation_id : data.reservation_id
+            reservation_id : data.reservation_id,
+            card_number : data.card_number || '',
+            sub_category: data.sub_category || '',
+            contents : data.contents || ''
         };
         if (!!data.account_id) result.id = data.account_id;
         return result;
     }
 
     static generateElasticObject(data, currentDate) {
-        return {
+        const result = {
             id : data.account_id,
             writer : data.writer || data.agency,
             category : data.category || 'Reservation',
-            date : data.date ||currentDate,
+            sub_category : data.sub_category || '',
+            card_number : data.card_number || '',
+            date : data.date || currentDate,
             currency : data.productData.currency || 'KRW',
             income : data.productData.income,
             expenditure : data.productData.expenditure,
             cash : data.cash,
             memo : data.account_memo || '',
+            memo_history : [],
+            contents : data.contents || '',
             created_date: currentDate,
+            star : false,
             reservation : {
                 id : data.reservation_id,
                 agency : data.agency || '',
                 tour_date : data.date,
-                nationality : data.nationality || '',
+                nationality : (data.nationality || 'unknown').toUpperCase(),
                 adult : data.adult,
                 kid : data.kid,
                 infant : data.infant,
@@ -57,12 +65,26 @@ class Account {
                     area : data.productData.area
                 },
                 options : data.options || {}
+            },
+            operation : {
+                teamId : '',
+                guide : '',
+                messages : []
             }
+        };
+        if (!!result.memo) {
+            result.memo_history.push({
+                writer : result.writer,
+                memo : result.memo,
+                date : result.created_date
+            })
         }
+        return result;
     }
 
     static getGlobalDate() {
-        return new Date().toISOString().slice(0,-2);
+        // return new Date().toISOString().slice(0,-2);
+        return new Date(new Date() - ((validation.TIME_OFFSET_MAP['UTC+9']) * 60000));
     }
 
     static moneyPreprocess(money) {
@@ -115,8 +137,10 @@ class Account {
             alias : data.productData.alias,
             area : data.productData.area
         };
+        prev_account.contents = `previous account id : ${prev_account.id} / date : ${prev_account.date} / category : ${prev_account.category} / sub_category : ${prev_account.sub_category}`
         prev_account.created_date = Account.getGlobalDate();
         if (!prev_account.cash) prev_account.cash = data.cash;
+        if (prev_account.memo !== data.account_memo) prev_account.contents += ` / previous account memo : ${prev_account.memo}`;
         return prev_account;
     }
 

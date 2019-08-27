@@ -421,7 +421,7 @@ class v2ProductConveter {
 const oneMore = ['레남아','레남쁘','쁘남레아','엘리시안','남이엘리','지산','베어스타운','남이비발디','에덴','에덴감천','남쁘비','통영','비발디레슨','대구시티투어'];
 // console.log(oneMore.indexOf('엘리시안3'))
 
-const v1ProductBulkData = require('../testFiles/intranet-64851-product-export.json');
+const v1ProductBulkData = require('../dataFiles/intranet-64851-product-export.json');
 // let result = v2ProductConveter.mainConverter(v1ProductBulkData);
 // fbDB.ref('product').remove().then(result => console.log(result));
 // v2ProductConveter.checkEmptyElasticProduct();

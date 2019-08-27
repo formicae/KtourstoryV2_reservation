@@ -7,7 +7,7 @@ const env = require('../../package.json').env;
 api.post('/reservation', reservationRouter.post);
 api.put('/reservation', reservationRouter.update);
 api.post('/account', accountRouter.post);
-api.put('/account', accountRouter.update);
+api.delete('/account', accountRouter.delete);
 if (!env.released) {
     api.get('/', (req, res) => {res.render('../views/tempTemplate',{data:'local/v2'})});
     api.get('/reservation', (req, res) => {res.render('../views/tempTemplate',{data:'local/v2/reservation'})});
