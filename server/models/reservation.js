@@ -61,22 +61,26 @@ class Reservation {
             phone : this.phoneNumberPreprocess(data.phone),
             email : data.email || '',
             messenger : data.messenger || '',
-            memo : data.reservation_memo || '',
+            guide_memo : data.guide_memo || '',
+            operation_memo : data.operation_memo || '',
             memo_history : [],
             canceled : data.canceled || false,
             modified_date : currentDate,
             timezone : data.timezone || 'UTC+9',
             language : data.language,
-            star : false
+            star : false,
+            team_id : data.team_id
         };
-        if (!!data.memo.match('중국어')) result.language = 'CHINESE';
+        if (!!data.operation_memo) {
+            if (data.operation_memo.match('중국어')) result.language = 'CHINESE';
+        }
         if (data.requestType === 'POST') {result.created_date = currentDate } 
         else { result.created_date = data.reservation_created_date }
         if (data.memo_history) {result.memo_history = data.memo_history;}
-        if (!!result.memo) {
+        if (!!result.operation_memo) {
             result.memo_history.push({
                 writer : result.writer,
-                memo : result.memo,
+                memo : result.operation_memo,
                 date : result.created_date
             })
         }
@@ -107,7 +111,9 @@ class Reservation {
             modified_date : currentDate,
         };
         if (!!data.reservation_id) { result.id = data.reservation_id }
-        if (!!data.memo.match('중국어')) result.language = 'CHINESE';
+        if (!!data.operation_memo) {
+            if (!!data.operation_memo.match('중국어')) result.language = 'CHINESE';
+        }
         if (data.requestType === 'POST') { result.created_date = currentDate }
         else {result.created_date = data.reservation_created_date}
         return result;
@@ -129,18 +135,19 @@ class Reservation {
             phone : data.phone || '',
             email : data.email || '',
             messenger : data.messenger || '',
-            memo : data.reservation_memo || '',
+            guide_memo : data.guide_memo || '',
+            operation_memo : data.operation_memo || '',
             g : data.g || false,
             o : data.o || false,
             language : data.language || 'English'
         };
-        if (!!data.memo.match('중국어')) result.language = 'CHINESE';
+        if (!!data.operation_memo.match('중국어')) result.language = 'CHINESE';
         return result;
     }
 
     static getGlobalDate() {
         // return new Date().toISOString().slice(0,-2);
-        return new Date(new Date() - ((validation.TIME_OFFSET_MAP['UTC+9']) * 60000));
+        return new Date(new Date() - ((validation.TIME_OFFSET_MAP['UTC+9']) * 60000)).toISOString().slice(0,-2);
     }
 
     static getTimeOffset(utc) {
@@ -171,6 +178,26 @@ class Reservation {
         if (phone.charAt(0) === "0") result = phone.slice(1, phone.length);
         if (phone.charAt(0) !== "+") result = "+" + result;
         return result;
+    }
+
+    static pickupPlaceFinder(data){
+        return new Promise((resolve, reject) => {
+            fbDB.ref('geos').once('value', (snapshot) => {
+                const geos = snapshot.val();
+                if (!geos) resolve({lat:0.00,lon:0.00});
+                else {
+                    Object.keys(geos.areas).forEach(key => {
+                        geos.areas[key].pickups.forEach(area => {
+                            if (area.name === data.pickup) resolve(area.location);
+                            area.incoming.forEach(incoming => {
+                                if (incoming === data.pickup) resolve(area.location);
+                            });
+                        })
+                    });
+                    resolve({lat:0.00,lon:0.00});
+                }
+            })
+        })
     }
 
     /**
@@ -267,11 +294,12 @@ class Reservation {
             const query = `UPDATE reservation SET canceled = true, modified_date = '${Reservation.getGlobalDate()}' WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    log.warn('Model', 'Reservation-cancelSQL', 'data update from SQL failed - make "cancel" column to TRUE');
+                    log.warn('Model', 'Reservation-cancelSQL', `data update from SQL failed - make "cancel" column to TRUE. query : ${query}`);
                     resolve(false);
+                } else {
+                    log.debug('Model', 'Reservation-cancelSQL', 'data update from SQL success - make "cancel" column to TRUE');
+                    resolve(result.rows[0]);
                 }
-                log.debug('Model', 'Reservation-cancelSQL', 'data update from SQL success - make "cancel" column to TRUE');
-                resolve(result.rows[0]);
             });
         });
     }
@@ -328,7 +356,6 @@ class Reservation {
         return new Promise((resolve, reject) => {
             const team = new Team();
             team.reservations[reservation.id] = reservation;
-            team.bus = data.productData.bus;
             fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').push(team, err => {
                 if (err) {
                     log.warn('Model', 'newTeamBuild', `operation team push failed`);
@@ -338,6 +365,7 @@ class Reservation {
                 log.debug('Model', 'newTeamBuild', `new team build for reservation id ${reservation.id} success`);
                 let path = result.path.pieces_;
                 data.operation = path[1] + '/' + path[2] + '/' + path[4] + '/' + reservation.id;
+                data.team_id = path[4];
                 fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').child(path[4])
                     .update({id:path[4]}).then(() => {resolve(data);})
             });
@@ -355,6 +383,7 @@ class Reservation {
         reservationObj[reservation.id] = reservation;
         const result = await fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').child(teamId).update({reservations:reservationObj});
         data.operation = data.date + '/' + data.productData.id + '/'+ teamId + '/' + reservation.id;
+        data.team_id = teamId;
         return data;
     }
 
@@ -393,6 +422,7 @@ class Reservation {
                                 resolve(false);
                             }
                             data.operation = data.date + '/' + data.productData.id + '/'+ teamId + '/' + reservation.id;
+                            data.team_id = teamId;
                             resolve(data);
                         });
                 }
@@ -423,7 +453,8 @@ class Reservation {
                     log.warn('Model', 'regularTeamBuild', `BIG reservation insert failed : ${result}`);
                     resolve(false);
                 }
-                data.operation = [...result];
+                data.operation = result.map(data => data[0]);
+                data.teamIdArr= result.map(data => data[1]);
                 log.debug('Model', 'regularTeamBuild', `BIG reservation success`);
                 resolve(data);
             });
@@ -447,7 +478,7 @@ class Reservation {
             }).then(result => {
                 let path = result.path.pieces_;
                 let operation = path[1] + '/' + path[2] + '/' + path[4] + '/' + reservationId;
-                resolve(operation);
+                resolve([operation, path[4]]);
             });
         })
     }
@@ -500,8 +531,7 @@ class Reservation {
                 if (!operation) {
                     log.debug('Model', 'Reservation-insertFB', `no matching operation in firebase --> newTeamBuild : ${reservation.id}`);
                     resolve(this.newTeamBuild(reservation, data));
-                }
-                else if (data.productData.name.match(/private/i)) {
+                } else if (data.productData.name.match(/private/i)) {
                     log.debug('Model', 'Reservation-insertFB', `private tour --> newTeamBuild : ${reservation.id}`);
                     resolve(this.newTeamBuild(reservation, data));
                 } else if (reservedPeopleNumber > BUS_PEOPLE_MAX_NUMBER) {
@@ -526,6 +556,28 @@ class Reservation {
             })
         })
     }
+    
+    static findFbObj(date, product_id, team_id, reservation_id) {
+        return new Promise((resolve, reject) => {
+            fbDB.ref('operation').child(date).child(product_id).child('teams').child(team_id).child('reservations').child(reservation_id).once('value', (snapshot) => {
+                resolve(snapshot.val());
+            })
+        })
+    }
+    
+    static findFBTeamId(date, product_id, reservation_id) {
+        return new Promise((resolve, reject) => {
+            fbDB.ref('operation').child(date).child(product_id).child('teams').once('value', (snapshot) => {
+                let data = snapshot.val();
+                Object.keys(data).forEach(team_id => {
+                    Object.keys(data[team_id].reservations).forEach(r_id => {
+                        if (r_id === reservation_id) resolve({reservation : data[team_id].reservations[r_id], team_id : team_id});
+                    });
+                });
+                resolve(false);
+            });
+        })
+    }
 
     /**
      * cancel FB : delete previous data in firebase.
@@ -536,7 +588,7 @@ class Reservation {
      * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
      * @returns {*}
      */
-    static deleteFB(reservation, data, testObj) {
+    static async deleteFB(reservation, data, testObj) {
         if (testObj.isTest && testObj.fail && testObj.detail.deleteFB) return Promise.resolve(false);
         if (typeof data.operation === 'string') {
             const operationArr = data.operation.split('/');
@@ -544,7 +596,7 @@ class Reservation {
                 productId = operationArr[1],
                 teamId = operationArr[2],
                 reservationId = operationArr[3] || reservation.id;
-            return this.fbDeleteProcess(date, productId, teamId, reservationId);
+            return await this.fbDeleteProcess(date, productId, teamId, reservationId);
         } else {
             const promiseArr = [];
             data.operation.forEach(operation => {
@@ -571,11 +623,12 @@ class Reservation {
             fbDB.ref('operation').child(date).child(productId).child('teams').child(teamId)
                 .child('reservations').child(reservationId).remove(err => {
                 if (err) {
-                    log.warn('Model', 'Reservation-deleteFB', `cancel reservation from FB failed : ${reservationId}`);
+                    log.warn('Model', 'Reservation-deleteFB', `delete reservation from FB failed : ${reservationId}`);
                     resolve(false);
+                } else {
+                    log.debug('Model', 'Reservation-deleteFB', `delete reservation from FB success : ${reservationId}`);
+                    resolve(true);
                 }
-                log.debug('Model', 'Reservation-deleteFB', `cancel reservation from FB success : ${reservationId}`);
-                resolve(true);
             });
         });
     }
@@ -584,7 +637,7 @@ class Reservation {
      * Insert data to Elastic search
      * @param reservation {Object} reservation object
      * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
-     * @returns {Promise<any>}
+     * @returns {Promise<boolean>}
      */
     static insertElastic(reservation, testObj) {
         if (testObj.isTest && testObj.fail && testObj.detail.insertElastic) return Promise.resolve(false);
@@ -600,9 +653,10 @@ class Reservation {
                     log.warn('Model', 'Reservation-insertElastic', `insert into Elastic failed : ${reservation.id}`);
                     console.log('error : ', JSON.stringify(err))
                     resolve(false);
+                } else {
+                    log.debug('Model', 'Reservation-cancelElastic', `insert to Elastic success : ${reservation.id}`);
+                    resolve(true);
                 }
-                log.debug('Model', 'Reservation-cancelElastic', `insert to Elastic success : ${reservation.id}`);
-                resolve(true);
             });
         });
     }
@@ -611,7 +665,7 @@ class Reservation {
      * cancel Elastic : only change "canceled" column to true.
      * @param reservation_id {String} reservation id
      * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
-     * @returns {Promise<any>}
+     * @returns {Promise<boolean>}
      */
     static cancelElastic(reservation_id, testObj) {
         if (testObj.isTest && testObj.fail && testObj.detail.cancelElastic) return Promise.resolve(false);
@@ -630,9 +684,10 @@ class Reservation {
                 if (err) {
                     log.warn('Model', 'Reservation-cancelElastic', `update from Elastic failed : ${reservation_id}`);
                     resolve(false);
+                } else {
+                    log.debug('Model', 'Reservation-cancelElastic', `update from Elastic success : ${reservation_id}`);
+                    resolve(true);
                 }
-                log.debug('Model', 'Reservation-cancelElastic', `update from Elastic success : ${reservation_id}`);
-                resolve(true);
             });
         });
     }
@@ -694,13 +749,13 @@ class Reservation {
      * @returns {Promise<any>}
      */
     static searchElastic(query) {
-        const result = {exist:false, score:{}, result:{}};
+        const result = [];
         return new Promise((resolve, reject) => {
             elasticDB.search({
                 index:'reservation',
                 type:'_doc',
                 body:{
-                    query : { match : query }
+                    query : { match : JSON.parse(JSON.stringify(query)) }
                 }
             }, (err, resp) => {
                 if (err || resp.timed_out) {
@@ -708,10 +763,8 @@ class Reservation {
                     throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
                 }
                 if (resp._shards.successful <= 0) resolve(result);
-                result.exist = true;
                 resp.hits.hits.forEach(item => {
-                    result.result[item._source.id] = item._source;
-                    result.score[item._source.id] = item._score;
+                    result.push(item._source);
                 });
                 resolve(result);
             });
@@ -745,5 +798,7 @@ function reservationQueryProcessing(object, type) {
     if (type === 'create') return {keys: tempKeys.slice(0, -2), values: tempValues.slice(0, -2)};
     else if (type === 'update') return tempUpdateResult.slice(0,-2);
 }
+// Reservation.searchElastic({language:'CHINESE'}).then(result => console.log(result))
+// Reservation.findFB('2019-07-09','p356', 'r38464').then(result => console.log('result : ',result))
 
 module.exports = Reservation;

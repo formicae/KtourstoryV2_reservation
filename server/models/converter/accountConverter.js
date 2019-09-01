@@ -3,6 +3,7 @@ const v2ReservationConverter = require('./reservationConverter');
 const Reservation = require('../../models/reservation');
 const Account = require('../../models/account');
 const sqlDB = require('../../auth/postgresql');
+const fbDB = require('../../auth/firebase').database;
 const fs = require('fs');
 const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Busan_Regular_부산 Scenic', '부산Scenic'],
@@ -60,63 +61,78 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
 class v2AccountConverter {
     constructor(v1Data) {
         this.data = v1Data;
-        this.totalCount = 0;
-        this.passCount = 0;
-        this.reservationCreateCount = 0;
-        this.accountCreateCount = 0;
     }
 
-    static generateSQLObjectForNonReservation(v1Data) {
+    /**
+     * generating v2 postgreSQL account when category is not reservation
+     * @param v1_fb_key {String} v1 unique firebase key for account
+     * @param v1Account {Object} v1 Account object
+     * @returns {Promise<any>}
+     */
+    static generateSQLObjectForNonReservation(v1_fb_key, v1Account) {
         return new Promise((resolve, reject) => {
             const result = {
-                writer: v1Data.writer || v1Data.agency,
-                category: v1Data.category || '',
+                v1 : v1_fb_key,
+                writer: v1Account.writer || v1Account.agency,
+                category: v1Account.category || '',
                 sub_category : '',
                 contents : '',
                 card_number : '',
-                currency: v1Data.currency,
+                currency: v1Account.currency,
                 income: 0,
                 expenditure: 0,
                 cash: false,
-                memo: v1Data.detail,
-                created_date: v1Data.date,
+                memo: v1Account.detail,
+                created_date: v1Account.date,
                 reservation_id: null
             };
-            if (!!v1Data.cash && v1Data.cash !== 0) {
+            if (v1Account.hasOwnProperty('cash') && v1Account.cash !== 0) {
                 result.cash = true;
-                if (v1Data.cash < 0) result.expenditure = (-1) * v1Data.cash;
-                else result.income = v1Data.cash;
+                if (v1Account.cash < 0) result.expenditure = (-1) * v1Account.cash;
+                else result.income = v1Account.cash;
             } else {
-                if (v1Data.card < 0) result.expenditure = (-1) * v1Data.card;
-                else result.income = v1Data.card;
+                if (v1Account.card < 0) result.expenditure = (-1) * v1Account.card;
+                else result.income = v1Account.card;
             }
-            if (v1Data.identifier) result.memo += ` identifier : ${v1Data.identifier}`;
+            if (v1Account.identifier) result.memo += ` identifier : ${v1Account.identifier}`;
             resolve(result);
         });
     }
 
-    static generateSQLObject(v1Data, v2Reservation) {
+    /**
+     * generating v2 postgreSQL account object when category is reservation
+     * @param v1_fb_key {String} v1 unique firebase key for account
+     * @param v1Account {Object} v1 Account object
+     * @param v2Reservation {Object} v2 reservation object
+     * @returns {Promise<any>}
+     */
+    static generateSQLObject(v1_fb_key, v1Account, v2Reservation, is_reverseAccount, v2ExistAccount) {
         const result = {
-            writer: v1Data.writer || v1Data.agency,
-            category: v1Data.category || 'Reservation',
+            v1 : v1_fb_key,
+            writer: v1Account.writer || v1Account.agency,
+            category: v1Account.category || 'Reservation',
             sub_category : '',
             contents : '',
             card_number : '',
-            currency: v1Data.currency,
+            currency: v1Account.currency,
             income: 0,
             expenditure: 0,
             cash: false,
-            memo: v1Data.detail,
-            created_date: Product.getLocalDate(v1Data.detail.split(' ')[1].split('\n')[0], 'UTC+9') || v1Data.date,
+            memo: v1Account.detail,
+            created_date: Product.getLocalDate(v1Account.detail.split(' ')[1].split('\n')[0], 'UTC+9') || v1Account.date,
             reservation_id: null
         };
-        if (!!v1Data.cash && v1Data.cash !== 0) {
+        if (is_reverseAccount) {
+            result.memo += ` / reverseAccount 인 ${v2ExistAccount.id} 의 정보 : [category : ${v2ExistAccount.category}], [sub_category : ${v2ExistAccount.sub_category}], [contents : ${v2ExistAccount.contents}]`;
+            result.contents = `${v2ExistAccount.id} 의 수정회계`;
+        }
+        if (v1Account.hasOwnProperty('cash') && v1Account.cash !== 0) {
             result.cash = true;
-            if (v1Data.cash < 0) result.expenditure = (-1) * v1Data.cash;
-            else result.income = v1Data.cash;
-        } else if (!!v1Data.card && v1Data.card !== 0){
-            if (v1Data.card < 0) result.expenditure = (-1) * v1Data.card;
-            else result.income = v1Data.card;
+            if (v1Account.cash < 0) result.expenditure = (-1) * v1Account.cash;
+            else result.income = v1Account.cash;
+        } else if (v1Account.hasOwnProperty('card') && v1Account.card !== 0){
+            if (v1Account.card < 0) result.expenditure = (-1) * v1Account.card;
+            else result.income = v1Account.card;
         }
         return new Promise((resolve, reject) => {
             if (v2Reservation) {
@@ -124,10 +140,10 @@ class v2AccountConverter {
                 result.created_date = v2Reservation.created_date;
                 resolve(result);
             } else {
-                const query = `SELECT id FROM reservation WHERE message_id = '${v1Data.id}'`;
+                const query = `SELECT id FROM reservation WHERE message_id = '${v1Account.id}'`;
                 sqlDB.query(query, (err, queryResult) => {
                     if (err) {
-                        console.log('error occured!', JSON.stringify(err));
+                        console.log('error occurred!', JSON.stringify(err));
                         resolve(false);
                     }
                     result.reservation_id = queryResult.rows[0].id;
@@ -137,21 +153,28 @@ class v2AccountConverter {
         });
     }
 
-    static generateElasticObject(v2SqlAccount, v2Reservation) {
+    /**
+     * generate v2 Elastic object when category is reservation
+     * @param v2SqlAccount {Object} v2 postgreSQL account object
+     * @param v2Reservation {Object} v2 reservation object
+     * @param v1FbTeamData {Object} v1 firebase Team information
+     * @returns {Promise<{date: (Date|boolean|*|string), income: (number|*|boolean), expenditure: (number|*|boolean), card_number: string, star: boolean, sub_category: string, memo: *, memo_history: Array, contents: string, reservation: {total: *, product: {area: *, name: *, alias: *, category: *}, agency: *, nationality: string, agency_code: (string|boolean), kid: *, options: *, tour_date: (Date|boolean|*|string), id: *, adult: *, infant: *}, currency: *, id: *, writer: *, created_date: *, category: (*|string), cash: (boolean|cash|{income, expenditure}|*), operation: {guide_message: *, teamId: (*|String), memo: string, guide: string, operator_message: *}} | never>}
+     */
+    static generateElasticObject(v2SqlAccount, v2Reservation, v1FbTeamData) {
         return v2AccountConverter.findProductWithAccount(v2SqlAccount.id)
             .then((product => {
                 const result = {
                     id: v2SqlAccount.id,
                     writer: v2SqlAccount.writer,
                     category: v2SqlAccount.category || 'Reservation',
-                    sub_category : '',
-                    contents : '',
+                    sub_category : v2SqlAccount.sub_category,
+                    contents : v2SqlAccount.contents,
                     date : v2Reservation.tour_date,
                     currency: v2SqlAccount.currency,
                     income: v2SqlAccount.income,
                     expenditure: v2SqlAccount.expenditure,
                     cash: v2SqlAccount.cash,
-                    memo: v2SqlAccount.detail,
+                    memo: v2SqlAccount.memo,
                     memo_history : [],
                     card_number : '',
                     created_date: v2SqlAccount.created_date,
@@ -172,14 +195,21 @@ class v2AccountConverter {
                             category: product.category,
                             area: product.area
                         },
-                        options: v2Reservation.options
+                        options: v2Reservation.options || []
                     },
                     operation : {
-                        teamId : '',
-                        guide : '',
-                        messages : []
+                        teamId : v1FbTeamData.team_id,
+                        guide : v1FbTeamData.guide || '',
+                        operator_message : v1FbTeamData.message || '',
+                        guide_message : [],
+                        memo : ''
                     }
                 };
+                if (v1FbTeamData.hasOwnProperty('memo')) {
+                    Object.keys(v1FbTeamData.memo).forEach(temp => {
+                        result.operation.guide_message.push({guide:temp[0], message:temp[1]});
+                    });
+                }
                 if (!!result.memo) {
                     result.memo_history.push({
                         writer : result.writer,
@@ -191,6 +221,11 @@ class v2AccountConverter {
             }))
     }
 
+    /**
+     * generating v2 Elastic account object when category is not reservation
+     * @param v2SqlAccount {Object} v2 postgreSQL account object
+     * @returns {{date: *, income: (number|*|boolean), expenditure: (number|*|boolean), card_number: string, star: boolean, sub_category: string, memo: *, memo_history: Array, contents: string, reservation: {}, currency: *, id: *, writer: (*|string), created_date: *, category: (*|string), cash: (boolean|cash|{income, expenditure}|*), operation: {}}}
+     */
     static generateElasticObjectForNonReservation(v2SqlAccount) {
         const result = {
             id: v2SqlAccount.id,
@@ -221,6 +256,11 @@ class v2AccountConverter {
         return result;
     }
 
+    /**
+     * find product object with accout id
+     * @param account_id {String} v2 account id
+     * @returns {Promise<any>}
+     */
     static findProductWithAccount(account_id) {
         return new Promise((resolve, reject) => {
             const output = 'product.name, product.category, product.alias, product.area';
@@ -232,6 +272,11 @@ class v2AccountConverter {
         })
     }
 
+    /**
+     * return v2 postgreSQL reservation object with messgage id
+     * @param message_id {String} message id
+     * @returns {Promise<any>}
+     */
     static getV2SqlReservations(message_id) {
         return new Promise((resolve, reject) => {
             const query = `SELECT * FROM reservation WHERE message_id = '${message_id}'`;
@@ -242,15 +287,24 @@ class v2AccountConverter {
         });
     }
 
-    static getV2SqlProduct(v1Product) {
-        let product = v1Product.split('_')[2];
-        if (V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.has(v1Product)) product = V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.get(v1Product);
+    /**
+     * return v2 product object with v1 product name
+     * @param v1ProductName {String} v1 product name
+     */
+    static getV2SqlProduct(v1ProductName) {
+        let product = v1ProductName.split('_')[2];
+        if (V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.has(v1ProductName)) product = V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.get(v1ProductName);
         return Product.getProduct(product);
     }
 
+    /**
+     * return v2 postgreSQL account with reservation id
+     * @param reservationId {String} v2 reservation id
+     * @returns {Promise<any>}
+     */
     static getV2SqlAccountWithReservation(reservationId) {
         return new Promise((resolve, reject) => {
-            const output = 'account.id, account.income, account.expenditure, account.cash, account.currency, reservation.message_id';
+            const output = 'account.id, account.income, account.expenditure, account.cash, account.currency, account.category, account.sub_category, account.contents, reservation.message_id';
             const query = `SELECT ${output} FROM account, reservation WHERE reservation.id = '${reservationId}' and reservation.id = account.reservation_id`;
             sqlDB.query(query, (err, result) => {
                 if (err) resovle(console.log(`error : ${JSON.stringify(err)}`));
@@ -261,25 +315,27 @@ class v2AccountConverter {
 
     /**
      * check if same account is already exist in postgreSQL with message_id, income / expenditure, writer, cash.
-     * @param v1Account {Object} v1 account object
-     * @param v1Sales {Number} amount of sales of
-     * @param cash
+     * @param v1_fb_key {String} v1 Account id which is automatically made in firebase
      * @returns {Promise<any>}
      */
-    static checkIdenticalAccountExist(v1Account, v1Sales, cash) {
+    static checkIdenticalAccountExist(v1_fb_key) {
         return new Promise((resolve, reject) => {
-            const compare = v1Sales > 0 ? 'account.income' : 'account.expenditure';
-            if (v1Sales < 0) v1Sales *= (-1);
-            const query = `SELECT account.id FROM account, reservation WHERE reservation.message_id = '${v1Account.id}' and account.writer = '${v1Account.writer}' and account.cash = ${cash} and ${compare} = ${v1Sales} and account.reservation_id = reservation.id and account.memo = '${v1Account.detail}'`;
+            const query = `SELECT id FROM account WHERE v1 = '${v1_fb_key}'`;
             sqlDB.query(query, (err, result) => {
                 if (err) resolve(console.log('error : ', JSON.stringify(err)));
-                // console.log(v1Account.id, result.rows, query);
                 resolve(result.rows.length > 0);
             })
         })
     }
 
-    static async v1v2AccountSales(v1Account, v2Account) {
+    /**
+     * check if v1 account and v2 account matches
+     * @param v1_fb_key {String} v1 Account key which is made automatically in firebase
+     * @param v1Account {Object} v1 Account object
+     * @param v2Account {Object} v2 Account object
+     * @returns {Promise<*>}
+     */
+    static async v1v2AccountSales(v1_fb_key, v1Account, v2Account) {
         if (!v2Account) return {match:false, identical: false};
         let tempV1Sales, tempV2Sales, v1Sales, v2Sales;
         let v1Cash = false;
@@ -300,7 +356,7 @@ class v2AccountConverter {
         else v2Sales = Number(v2Account.income);
         tempV2Sales = v2Sales;
         if (v2Sales < 0) v2Sales *= (-1);
-        let identical_result = await this.checkIdenticalAccountExist(v1Account, tempV1Sales, v1Cash);
+        let identical_result = await this.checkIdenticalAccountExist(v1_fb_key);
         return {
             match: ((v1Sales === v2Sales) && (tempV1Sales === (tempV2Sales * (-1))) && (v1Account.currency === v2Account.currency)),
             identical : identical_result,
@@ -311,63 +367,253 @@ class v2AccountConverter {
         };
     }
 
-    static async accountCreateAndInsert(v1Account, v2Reservation, isReservation) {
-        let v2Account, v2SqlAccount, v2ElasticAccount;
+    /**
+     * create account
+     * @param obj {Object} mainConverter's internal object. This is used to get team_id without querying elasticsearch.
+     * @param v1FbTeamBulkData {Object} v1 Firebase's team information object
+     * @param v1_fb_key {String} unique key from firebase v1 account
+     * @param v1Account {Object} v1 Account object
+     * @param v2Reservation {Object} v2 reservation object
+     * @param isReservation {Boolean} flag if target account is for reservation or not (e.g. Tour, Office)
+     * @param is_reverseAccount {Boolean} flag if account is made for reverse account
+     * @param v2ExistAccount {Object} SQL exist account when is_reverseAccount is true.
+     * @returns {Promise<boolean>}
+     */
+    static async accountCreateAndInsert(obj, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, isReservation, is_reverseAccount, v2ExistAccount) {
+        let v2Account, v2SqlAccount, v2ElasticAccount, team_id;
         if (isReservation) {
-            v2Account = await this.generateSQLObject(v1Account, v2Reservation);
+            v2Account = await this.generateSQLObject(v1_fb_key, v1Account, v2Reservation, is_reverseAccount, v2ExistAccount);
             v2SqlAccount = await Account.insertSQL(v2Account, {});
-            v2ElasticAccount = await this.generateElasticObject(v2SqlAccount, v2Reservation);
-            await Account.insertElastic(v2ElasticAccount, {});
-        } else {
-            v2Account = await this.generateSQLObjectForNonReservation(v1Account);
-            let isSameAccountExist = await this.checkNonReservationAccountExist(v2Account);
-            if (!isSameAccountExist) {
-                v2SqlAccount = await Account.insertSQL(v2Account, {});
-                v2ElasticAccount = await this.generateElasticObjectForNonReservation(v2SqlAccount);
-                await Account.insertElastic(v2ElasticAccount, {});
+            if (!v2SqlAccount) return false;
+            let v2ExistElasticReservationArr = await Reservation.searchElastic({message_id:v2Reservation.message_id});
+            if (v2ExistElasticReservationArr.length > 0) {
+                team_id = v2ExistElasticReservationArr[0].team_id;
             } else {
-                v2SqlAccount = {id : null}
+                team_id = obj.teamId_history[v2Reservation.id].team_id;
+            }
+            let teamData = v1FbTeamBulkData[team_id];
+            if (!teamData) console.log('no team id : ',v1_fb_key, v2SqlAccount, obj.teamId_history);
+            teamData.team_id = team_id;
+            v2ElasticAccount = await this.generateElasticObject(v2SqlAccount, v2Reservation, teamData);
+            let insertElasticResult = await Account.insertElastic(v2ElasticAccount, {});
+            if (!insertElasticResult) return false;
+            await setTimeout(()=>{},25);
+            return v2SqlAccount.id;
+        } else {
+            v2Account = await this.generateSQLObjectForNonReservation(v1_fb_key, v1Account);
+            v2SqlAccount = await Account.insertSQL(v2Account, {});
+            if (!v2SqlAccount) return false;
+            v2ElasticAccount = await this.generateElasticObjectForNonReservation(v2SqlAccount);
+            let insertElasticResult = await Account.insertElastic(v2ElasticAccount, {});
+            if (!insertElasticResult) return false;
+            return v2SqlAccount.id;
+        }
+    }
+
+    /**
+     * cancel reservation for postgreSQL(canceled = true), Firebase(delete), Elastic(canceled = true).
+     * @param obj {Object} mainConverter's internal object. This is used to update team_id, g, o for deleted reservation.
+     * @param v2Reservation {Object} v2 reservation object
+     * @param v1Account {Object} v1 Account object
+     * @returns {Promise<boolean>}
+     */
+    static async reservationCancelSQLandELASTICandFB(obj, v2Reservation, v1Account) {
+        let data = {};
+        let tour_date, modified_date;
+        if (typeof v2Reservation.tour_date === 'object') {
+            tour_date = v2Reservation.tour_date.toISOString().split('T')[0];
+        } else {
+            if (v2Reservation.tour_date.match('T')) {tour_date = v2Reservation.tour_date.split('T')[0];}
+            else {tour_date = v2Reservation.tour_date;}
+        }
+        if (!!v1Account){
+            if (v1Account.hasOwnProperty('detail')) {
+                modified_date = v1Account.detail.split(' ')[1].split('\n')[0];
+            } else {
+                modified_date = v1Account.date || v2Reservation.modified_date;
+            }
+        } else {
+            modified_date = v2Reservation.modified_date
+        }
+        if (typeof modified_date === 'object') modified_date = modified_date.toISOString().slice(0,-2);
+        else if (modified_date.match('T')) modified_date = modified_date.split('T')[0];
+        if (modified_date[0] !== 2) modified_date = v1Account.date;
+        console.log('modified date : ',modified_date);
+        let operation = tour_date + '/' + v2Reservation.product_id + '/';
+        let cancelSQLresult = await v2ReservationConverter.cancelSQL(v2Reservation.id, modified_date);
+        if (!cancelSQLresult) return false;
+        let v2ExistElasticReservationArr = await Reservation.searchElastic({message_id: v2Reservation.message_id});
+        let team_id = v2ExistElasticReservationArr[0].team_id;
+        for (let tempRsv of v2ExistElasticReservationArr) {
+            if (tempRsv.team_id && !tempRsv.canceled) team_id = tempRsv.team_id;
+        }
+        if (v2ExistElasticReservationArr.length > 1) {
+            for (let v2ExistElasticReservation of v2ExistElasticReservationArr) {
+                if (!v2ExistElasticReservation.canceled) team_id = v2ExistElasticReservation.team_id;
             }
         }
-        return v2SqlAccount.id;
+        operation += (team_id + '/' + v2Reservation.id);
+        let v2FbReservation = await Reservation.findFbObj(tour_date, v2Reservation.product_id, team_id, v2Reservation.id);
+        console.log(`  * Delete from Firebase : ${tour_date}/${v2Reservation.product_id}/${team_id}/${v2Reservation.id} done`);
+        if (!obj.teamId_history[v2Reservation.id]) obj.teamId_history[v2Reservation.id] = {};
+        obj.teamId_history[v2Reservation.id].team_id = team_id;
+        obj.teamId_history[v2Reservation.id].g = !!v2FbReservation ? v2FbReservation.g : false;
+        obj.teamId_history[v2Reservation.id].p = !!v2FbReservation ? v2FbReservation.o : false;
+        // console.log(`reservationCancelSQLandELASTICandFB. operation : ${operation}, team_id : ${team_id}`);
+        data.operation = operation;
+        let cancelFbResult = await Reservation.deleteFB(v2Reservation, data, {});
+        if (!cancelFbResult) return false;
+        return await Reservation.cancelElastic(v2Reservation.id, {});
     }
-    
-    static async reservationCancelSQLandElastic(v2Reservation) {
-        await Reservation.cancelSQL(v2Reservation.id, {});
-        await Reservation.cancelElastic(v2Reservation.id, {});
-        return true;
+
+    /**
+     * function for inserting reservation to firebase
+     * @param date {String} string form data (e.g '2019-07-03')
+     * @param v2ProductId {String} v2 Product Id (e.g. 'p407')
+     * @param teamId {String} team id which is stored in firebase, elastic
+     * @param v2FbReservation {Object} v2 Firebase reservation object
+     * @returns {Promise<any>}
+     */
+    static reservationFBInsert(date, v2ProductId, teamId, v2FbReservation){
+        return new Promise((resolve, reject) => {
+            const data = {};
+            data[v2FbReservation.id] = v2FbReservation;
+            fbDB.ref('operation').child(date).child(v2ProductId).child('teams').child(teamId).child('reservations').update(data, (err) => {
+                if (err) resolve(false);
+                else {
+                    console.log(` * Insert Firebase : ${date}/${v2ProductId}/${teamId}/${v2FbReservation.id} done`);
+                    resolve(true);
+                }
+            });
+        })
     }
-    
-    static async reservationCreateAndInsert(v1CanceledData, v2Product, canceled, v2NewReservation) {
-        // 취소된 예약은 firebase에 넣어 줄 필요가 없다.
-        let v2SQLReservation;
-        if (!v1CanceledData && v2NewReservation) {
-            let v2Reservation = v2NewReservation;
-            let v2ExistElasticReservation = await Reservation.searchElastic({id:v2Reservation.id});
+
+    /**
+     * reservation create & insert to SQL / Firebase / Elastic.
+     * in case of v1 canceled data is not present, "canceled" column of  v2NewReservation could be true.
+     * in this case, corresponding firebase data had already been deleted.
+     * So, search all elastic reservations with messge_id and find "canceled" = false and "team_id" is not null.
+     * @param obj {Object} team id, gCheck, oCheck history object for create / canceled reservation in convert function.
+     * @param v1CanceledData {Object} v1 canceled data
+     * @param v2Product {Object} v2 product data
+     * @param canceled {Boolean} canceled
+     * @param v2ExistReservation {Object} v2 Reservation object
+     * @param v1Account {Object} v1 Account object
+     * @returns {Promise<boolean>}
+     */
+    static async reservationCreateAndInsert(obj, v1CanceledData, v2Product, canceled, v2ExistReservation, v1Account) {
+        let v2SQLReservation, v2FbReservation, v2Reservation, team_id;
+        let is_operation_memo_update = false;
+        if (!v1CanceledData) {
+            v2Reservation = await JSON.parse(JSON.stringify(v2ExistReservation));
+            let temp = await Reservation.searchElastic({message_id : v2Reservation.message_id});
+            let v2ExistElasticReservation = temp[0];
+            for (let tempRsv of temp) {
+                if (tempRsv.team_id && !tempRsv.canceled) {
+                    v2ExistElasticReservation = tempRsv;
+                }
+            }
+            if (v2Reservation.id !== v2ExistElasticReservation.id) {
+                v2Reservation = await Reservation.getSQL(v2ExistElasticReservation.id);
+            }
             v2Reservation.canceled = canceled;
-            v2Reservation.created_date = Product.getLocalDate(new Date(), 'UTC+9');
-            v2Reservation.modified_date = Product.getLocalDate(new Date(), 'UTC+9');
+            if (v1Account.hasOwnProperty('detail')) {
+                v2Reservation.created_date = Product.getLocalDate(v1Account.detail.split(' ')[1].split('\n')[0], 'UTC+9') || v1Account.date;
+                v2Reservation.modified_date = Product.getLocalDate(v1Account.detail.split(' ')[1].split('\n')[0], 'UTC+9') || v1Account.date;
+            }
+            let v2ExistFbReservation = await Reservation.findFbObj(v2ExistElasticReservation.tour_date, v2Reservation.product_id, v2ExistElasticReservation.team_id, v2Reservation.id);
             if (v2Reservation.id) delete v2Reservation.id;
             v2SQLReservation = await Reservation.insertSQL(v2Reservation, {});
-            let v2ElasticReservation = await v2ReservationConverter.elasticDataMatch(null, v2Product, v2SQLReservation, v2ExistElasticReservation);
-            await Reservation.insertElastic(v2ElasticReservation, {});
+            if (!v2SQLReservation) return false;
+            if (!v2ExistFbReservation) {
+                team_id = obj.teamId_history[v2ExistElasticReservation.id].team_id;
+                let g = obj.teamId_history[v2ExistElasticReservation.id].g || false;
+                let o = obj.teamId_history[v2ExistElasticReservation.id].o || false;
+                v2FbReservation = await v2ReservationConverter.generateFbDataWithElastic(v2ExistElasticReservation, g, o);
+            } else {
+                team_id = v2ExistElasticReservation.team_id;
+                v2FbReservation = await v2ReservationConverter.generateSimpleFbData(null, v2SQLReservation, v2ExistFbReservation);
+            }
+            if (!!v2ExistReservation) {
+                if (!!v2ExistReservation.id) {
+                    v2FbReservation.operation_memo +=  ` / ${v2ExistReservation.id} 의 수정예약`;
+                    is_operation_memo_update = true;
+                }
+            } else if (!!v2ExistElasticReservation) {
+                if (!!v2ExistElasticReservation.id) {
+                    v2FbReservation.operation_memo +=  ` / ${v2ExistElasticReservation.id} 의 수정예약`;
+                    is_operation_memo_update = true;
+                }
+            }
+            let insertFbResult = await this.reservationFBInsert(v2ExistElasticReservation.tour_date, v2SQLReservation.product_id, team_id, v2FbReservation);
+            if (!insertFbResult) return false;
+            let v2ElasticReservation = await v2ReservationConverter.elasticDataMatch(null, v2Product, team_id, v2SQLReservation, v2ExistElasticReservation);
+            if (is_operation_memo_update) {
+                v2ElasticReservation.operation_memo = v2FbReservation.operation_memo;
+                if (v2ElasticReservation.memo_history.length === 0) {
+                    v2ElasticReservation.memo_history.push({
+                        writer: v2ElasticReservation.writer,
+                        memo: v2ElasticReservation.operation_memo,
+                        date: v2ElasticReservation.created_date
+                    });
+                } else {v2ElasticReservation.memo_history[0].memo += ` / ${v2ExistReservation.id} 의 수정예약`;}
+            }
+            let insertElasticResult = await Reservation.insertElastic(v2ElasticReservation, {});
+            if (!insertElasticResult) return false;
         } else {
-            let v2Reservation = await v2ReservationConverter.generateSQLObject(v1CanceledData, canceled);
-            v2SQLReservation = await Reservation.insertSQL(v2Reservation, {});
-            let v2ElasticReservation = await v2ReservationConverter.elasticDataMatch(v1CanceledData, v2Product, v2SQLReservation, null);
-            await Reservation.insertElastic(v2ElasticReservation, {});
+            let team_id = v1CanceledData.team;
+            let v2NewReservation = await v2ReservationConverter.generateSQLObject(v1CanceledData, canceled, true);
+            v2SQLReservation = await Reservation.insertSQL(v2NewReservation, {});
+            if (!v2SQLReservation) return false;
+            let v2ExistElasticReservationArr = await Reservation.searchElastic({message_id : v2SQLReservation.message_id});
+            v2FbReservation = await v2ReservationConverter.generateSimpleFbData(v1CanceledData, v2SQLReservation, null);
+            if (!!v2ExistReservation) {
+                if (!!v2ExistReservation.id) {
+                    v2FbReservation.operation_memo +=  ` / ${v2ExistReservation.id} 의 수정예약`;
+                    is_operation_memo_update = true
+                }
+            } else if (v2ExistElasticReservationArr.length > 0) {
+                v2FbReservation.operation_memo +=  ` / ${v2ExistElasticReservationArr[0].id} 의 수정예약`;
+                is_operation_memo_update = true;
+            }
+            let insertFbResult = await this.reservationFBInsert(v1CanceledData.date, v2Product.id, team_id, v2FbReservation);
+            if (!insertFbResult) return false;
+            let v2ElasticReservation = await v2ReservationConverter.elasticDataMatch(v1CanceledData, v2Product, v1CanceledData.team, v2SQLReservation, null);
+            if (is_operation_memo_update) {
+                v2ElasticReservation.operation_memo = v2FbReservation.operation_memo;
+                if (v2ElasticReservation.memo_history.length === 0) {
+                    v2ElasticReservation.memo_history.push({
+                        writer: v2ElasticReservation.writer,
+                        memo: v2ElasticReservation.operation_memo,
+                        date: v2ElasticReservation.created_date
+                    });
+                } else {v2ElasticReservation.memo_history[0].memo += ` / ${v2ExistReservation.id} 의 수정예약`;}
+            }
+            let insertElasticResult = await Reservation.insertElastic(v2ElasticReservation, {});
+            if (!insertElasticResult) return false;
         }
+        if (!obj.teamId_history[v2SQLReservation.id]) obj.teamId_history[v2SQLReservation.id] = {};
+        obj.teamId_history[v2SQLReservation.id].team_id = team_id;
+        obj.teamId_history[v2SQLReservation.id].g = !!v2FbReservation ? v2FbReservation.g : false;
+        obj.teamId_history[v2SQLReservation.id].o = !!v2FbReservation ? v2FbReservation.o : false;
         return v2SQLReservation;
     }
-    
-    static async multipleReservationProcess(v1Account, v2ReservationArr) {
-        const obj = {fullAccount : {}, emptyAccountReservation : [], reverse : false, reverseObj : {}, identical : false, identicalObj : {}};
+
+    /**
+     * process called when multiple(over 2) reservation exist in postgreSQL to find reverse or identical Account
+     * @param v1_fb_key {String} unique key from v1 firebase Account
+     * @param v1Account {Object} v1 Account object
+     * @param v2ReservationArr {Array} v2 reservation object array
+     * @returns {Promise<{identical: boolean, identicalObj: {}, emptyAccountReservation: Array, reverseObj: {}, fullAccount: {}, reverse: boolean}>}
+     */
+    static async multipleReservationProcess(v1_fb_key, v1Account, v2ReservationArr) {
+        const obj = {fullAccount : {}, emptyAccountReservation : [], reverse : false, reverseObj : {}, identical : false, identicalObj : {}, normalObj : []};
         for (let v2Reservation of v2ReservationArr) {
             let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
             if (v2AccountArr.length === 0) {obj.emptyAccountReservation.push(v2Reservation)}
             else if (v2AccountArr.length === 2) {obj.fullAccount[v2Reservation.id] = {v2Reservation :v2Reservation, v2AccountArr : v2AccountArr}}
             for (let v2Account of v2AccountArr) {
-                let accountSales = await this.v1v2AccountSales(v1Account, v2Account);
+                let accountSales = await this.v1v2AccountSales(v1_fb_key, v1Account, v2Account);
                 if (accountSales.match) {
                     if (accountSales.identical) {
                         obj.identicalObj = true;
@@ -376,236 +622,137 @@ class v2AccountConverter {
                         obj.reverse = true;
                         obj.reverseObj = {v2Reservation : v2Reservation, v2Account : v2Account};
                     }
-                }
+                } else {obj.normalObj.push(v2Reservation);}
             }
         }
         return obj;
     }
-    
-    static async mainConverter(v1AccountBulkData, v1CanceledBulkData) {
+
+    /**
+     * main converter for v1 --> v2
+     * @param v1AccountBulkData {Object} v1 Account bulk data
+     * @param v1CanceledBulkData {Object} v1 Canceled bulk data
+     * @param v1FbTeamBulkData {Object} v1 team bulk data from v1 firebase (extracted from operation data)
+     * @returns {Promise<void>}
+     */
+    static async mainConverter(v1AccountBulkData, v1CanceledBulkData, v1FbTeamBulkData) {
         this.totalCount = 0;
         this.passCount = 0;
+        this.errorCount = 0;
         this.reservationCreateCount = 0;
+        this.reservationCancelCount = 0;
         this.accountCreateCount = 0;
+        this.messageIdObj = {singleReservation:{},reservations:{}};
+        this.teamId_history = {};
         const taskObj = {error: {}};
         for (let temp of Object.entries(v1AccountBulkData)) {
             let date = temp[0];
             let v1AccountObj = temp[1];
-            for (let v1Account of Object.values(v1AccountObj)) {
-                let minus_v1Account = (!!v1Account.card && v1Account.card < 0) || (!!v1Account.cash && v1Account.cash < 0);
+            for (let temp1 of Object.entries(v1AccountObj)) {
+                let v1_fb_key = temp1[0];
+                let v1Account = temp1[1];
+                let minus_v1Account = (v1Account.hasOwnProperty('card') && v1Account.card < 0) || (v1Account.hasOwnProperty('cash') && v1Account.cash < 0);
+                let zeroAccount = false;
+                if (v1Account.hasOwnProperty('card') && v1Account.card === 0) {
+                    if (!v1Account.hasOwnProperty('cash')) zeroAccount = true;
+                    else if (v1Account.cash === 0) zeroAccount = true;
+                }
                 let messageId = v1Account.id;
-                if (v1Account.category === 'reservation' || v1Account.category === 'Reservation') {
-                    let v1CanceledData = v1CanceledBulkData[messageId];
-                    let v2ReservationArr = await this.getV2SqlReservations(messageId);
-                    if (!v1CanceledData) {
-                        if (v2ReservationArr.length === 0) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 1', null, null, messageId, [], [], null, `no matching canceled data && no reservation in SQL exist`)}
-                        else if (v2ReservationArr.length === 1) {
-                            let v2Reservation = v2ReservationArr[0];
-                            let v2Product = await Product.getProduct(v2Reservation.product_id);
-                            let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
-                            if (v2AccountArr.length === 0) {
-                                if (!v2Reservation.canceled) {
-                                    if (minus_v1Account) {
-                                        // (1ca) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 없음 + v1 Account 정보가 (-)임 --> reservation canceled = true로 변경 + account 생성
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        await this.reservationCancelSQLandElastic(v2Reservation);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[1ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                    } else {
-                                        // (2a) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 없음 + v1 Account 정보가 (+) 임--> account만 생성
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[2a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                    }
-                                } else {
-                                    // (3a) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 없음 --> account만 생성
-                                    let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                    taskObj[v2AccountId] = await this.taskManager(this, '[3a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                }
-                            } else {
-                                if (v2Reservation.canceled) {
-                                    if (v2AccountArr.length === 2) {
-                                        let accountSales1 = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                        let accountSales2 = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                        if (accountSales1.match || accountSales2.match) {
-                                            if (accountSales1.identical || accountSales2.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 2', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `same account exist in SQL`);}
-                                            else {taskObj.error[messageId] = await this.taskManager(this,'Pass - 3', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `no identical account exist but two same account exist in SQL`);}
-                                        } else {
-                                            // (4ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 2개 존재 + v1 Account가 존재하는 SQL account와 무관 --> reservation + account 생성 (canceled 정보는 account 정보에 따라 바뀜)
-                                            let v2NewReservation = await JSON.parse(JSON.stringify(v2Reservation));
-                                            let v2SQLReservation = await this.reservationCreateAndInsert(null, v2Product, minus_v1Account, v2NewReservation);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[4ra]',v2Reservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                        }
-                                    } else {
-                                        let accountSales = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                        if (accountSales.match) {
-                                            if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 4', v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `same account exist in SQL`);}
-                                            else {
-                                                // (5a) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 1개 존재 + v1 Account가 reverse 관계 --> account 생성
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[5a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                            }
-                                        } else {
-                                            // (6ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 1개 존재 + v1 Account가 존재하는 SQL account와 무관 + --> reservation + account 생성 (canceled 정보는 account 정보에 따라 바뀜)
-                                            let v2NewReservation = await JSON.parse(JSON.stringify(v2Reservation));
-                                            let v2SQLReservation = await this.reservationCreateAndInsert(null, v2Product, minus_v1Account, v2NewReservation);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[6ra]',v2Reservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                        }
-                                    }
-                                } else {
-                                    if (v2AccountArr.length === 2) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 5', v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `two account exist in non-canceled reservation`);}
-                                    else {
-                                        let accountSales = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                        if (accountSales.match) {
-                                            if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 6', v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `same account exist in SQL`);}
-                                            else {
-                                                // (7ca) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 1개 존재 + v1 Account가 존재하는 SQL account와 reverse 관계 --> reservation을 canceled = true로 변경하고 account 추가
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                                await this.reservationCancelSQLandElastic(v2Reservation);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[7ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                            }
-                                        } else {
-                                            // (8ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 1개 존재 + v1 Account가 존재하는 SQL account와 무관 --> reservation + account 생성 (canceled 정보는 account 정보에 따라 바뀜)
-                                            let v2NewReservation = await JSON.parse(JSON.stringify(v2Reservation));
-                                            let v2SQLReservation = await this.reservationCreateAndInsert(null, v2Product, minus_v1Account, v2NewReservation);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[8ra]',v2Reservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            const obj = await this.multipleReservationProcess(v1Account, v2ReservationArr);
-                            if (obj.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 7', obj.identicalObj.v2ReservationId, obj.identicalObj.v2AccountId, messageId, [], [], null, `same account exist in SQL`)}
-                            else if (obj.reverse) {
-                                // reverse인데 fullAccount가 될 수는 없다. 그렇다면 identical에서 걸렸을 것.
-                                let v2Reservation = obj.reverseObj.v2Reservation;
-                                if (v2Reservation.canceled) {
-                                    // (9a) : v1Canceled data 없음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = true --> account 생성
-                                    let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                    taskObj[v2AccountId] = await this.taskManager(this, '[9a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                } else {
-                                    // (10ca) : v1Canceled data 없음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = false --> reservation canceled = true로 변경하고 account 생성
-                                    let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                    await this.reservationCancelSQLandElastic(v2Reservation);
-                                    taskObj[v2AccountId] = await this.taskManager(this, '[10ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                }
-                            } else {
-                                if (obj.emptyAccountReservation.length > 0) {
-                                    let v2Reservation = obj.emptyAccountReservation[0];
-                                    let canceled = v2Reservation.canceled;
-                                    for (let tempReservation of obj.emptyAccountReservation) {
-                                        if (tempReservation.canceled) {
-                                            v2Reservation = tempReservation;
-                                            canceled = true;
-                                        }
-                                    }
-                                    if (canceled) {
-                                        // (11a) : v1Canceled data 없음 + 여러 개 SQL reservation 존재(canceled = true) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 --> account 생성
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[11a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                    } else {
-                                        if (minus_v1Account) {
-                                            // (12ca) : v1Canceled data 없음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + v1 Account 정보가 (-) --> reservation canceled = true로 변경 + account 생성
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            await this.reservationCancelSQLandElastic(v2Reservation);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[12ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                        } else {
-                                            // (13a) : v1Canceled data 없음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + 해당 reservation의 canceled = false, v1 Account 정보가 (+) --> account 생성
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[13a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                        }
-                                    }
-                                } else {
-                                    // (14ra) : v1Canceled data 없음 + 여러 개 SQL reservation 존재 + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 하지 않음 --> reservation + account 생성 (canceled 정보는 minus_v1Account에 따라 변경됨)
-                                    let v2NewReservation = await JSON.parse(JSON.stringify(v2ReservationArr[0]));
-                                    let v2Product = await Product.getProduct(v2NewReservation.product_id);
-                                    let v2SQLReservation = await this.reservationCreateAndInsert(null, v2Product, minus_v1Account, v2NewReservation);
-                                    let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                    taskObj[v2AccountId] = await this.taskManager(this, '[14ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                }
-                            }
-                        }
-                    } else {
-                        let v2Product = await Product.getProduct(v1CanceledData.product);
-                        if (!v2Product) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 8', v2ReservationArr.map(data=>data.id), null, messageId, [], [], null, `no matching v2 product exist! : ${v1CanceledData.product}`)}
-                        else {
-                            if (v2ReservationArr.length === 0) {
-                                // (15ra) : v1 Canceled data 있음 + SQL에 reservation 존재하지 않음 --> reservation + account 생성 (canceled 는 minus_v1Account에 따라 결정)
-                                let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, minus_v1Account);
-                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                taskObj[v2AccountId] = await this.taskManager(this, '[15ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                            } else if (v2ReservationArr.length === 1) {
+                let is_duplicateAccount = await this.checkIdenticalAccountExist(v1_fb_key);
+                if (is_duplicateAccount || zeroAccount) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 0', null, null, messageId, [], [], null, `no matching canceled data && no reservation in SQL exist : ${is_duplicateAccount} / zeroAccount : ${zeroAccount}`,null)}
+                else {
+                    if (v1Account.category === 'reservation' || v1Account.category === 'Reservation') {
+                        let v1CanceledData = v1CanceledBulkData[messageId];
+                        let v2ReservationArr = await this.getV2SqlReservations(messageId);
+                        if (!v1CanceledData) {
+                            if (v2ReservationArr.length === 0) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 1', null, null, messageId, [], [], null, `no matching canceled data && no reservation in SQL exist`, null)}
+                            else if (v2ReservationArr.length === 1) {
                                 let v2Reservation = v2ReservationArr[0];
-                                if (v2Reservation.canceled) {
-                                    let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
-                                    if (v2AccountArr.length === 2) {
-                                        let accountSales = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                        if (accountSales.match) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 9', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `already same account exist in SQL!`)}
-                                        else {
-                                            // (16ra) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true) + SQL에 관련 account 2개 존재 + v1 Account와는 관련없음  --> reservation + account 생성 (canceled 는 minus_v1Account에 따라 결정)
-                                            let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, minus_v1Account);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[16ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                        }
-                                    } else if (v2AccountArr.length === 1) {
-                                        let accountSales = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                        if (accountSales.match) {
-                                            if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 10', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `already same account exist in SQL!`)}
-                                            else {
-                                                // (17a) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true)  + SQL에 관련 account 1개 존재 + v1 Account와 reverse 관계  --> account 생성
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[17a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                            }
+                                let v2Product = await Product.getProduct(v2Reservation.product_id);
+                                let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
+                                if (v2AccountArr.length === 0) {
+                                    if (!v2Reservation.canceled) {
+                                        if (minus_v1Account) {
+                                            // (1ca) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 없음 + v1 Account 정보가 (-)임 --> reservation canceled = true로 변경 + account 생성
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                            let cancelReservationTask = await this.reservationCancelSQLandELASTICandFB(this, v2Reservation, v1Account);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[1ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, cancelReservationTask)
                                         } else {
-                                            // (18ra) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true) + SQL에 관련 account 1개 존재 + v1 Account와 관계 없음 --> 새로운 reservation + account 생성 (canceled 는 minus_v1Account에 따라 결정)
-                                            let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, minus_v1Account);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[18ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                            // (2a) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 없음 + v1 Account 정보가 (+) 임--> account만 생성
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[2a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                         }
                                     } else {
-                                        // (19a) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true) + SQL에 관련 account 없음 --> account 생성
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[19a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                        // (3a) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 없음 --> account만 생성
+                                        let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                        taskObj[v2AccountId] = await this.taskManager(this, '[3a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                     }
                                 } else {
-                                    let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
-                                    if (v2AccountArr.length === 0) {
-                                        // (20a) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = false) + SQL에 관련 account 없음 --> account 생성
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[20a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
-                                    } else {
-                                        let accountSales = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                        if (accountSales.match) {
-                                            if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 11', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `already same account exist in SQL!`)}
-                                            else {
-                                                // (21ca) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = false) + SQL에 관련 account 1개 있음 + v1 Account와 reverse 관계 --> reservation canceled = true로 변경하고 account 생성
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                                await this.reservationCancelSQLandElastic(v2Reservation);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[21ca]',v2Reservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                    if (v2Reservation.canceled) {
+                                        if (v2AccountArr.length === 2) {
+                                            let accountSales1 = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[0]);
+                                            let accountSales2 = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[1]);
+                                            if (accountSales1.match || accountSales2.match) {
+                                                if (accountSales1.identical || accountSales2.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 2', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `same account exist in SQL`);}
+                                                else {taskObj.error[messageId] = await this.taskManager(this,'Pass - 3', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `no identical account exist but two same account exist in SQL`,null);}
+                                            } else {
+                                                // (4ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 2개 존재 + v1 Account가 존재하는 SQL account와 무관 --> reservation + account 생성 (canceled 정보는 account 정보에 따라 바뀜)
+                                                let v2SQLReservation = await this.reservationCreateAndInsert(this,null, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[4ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`, null, v2SQLReservation)
                                             }
                                         } else {
-                                            // (22ra) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = false) + SQL에 관련 account 1개 있음 + v1 Account와 아무런 관계 없음 --> 새로운 reservation account 생성 (canceled 는 minus_v1Account에 따라 결정)
-                                            let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, minus_v1Account);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[22ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                            let accountSales = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[0]);
+                                            if (accountSales.match) {
+                                                if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 4', v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `same account exist in SQL`, null);}
+                                                else {
+                                                    // (5a) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 1개 존재 + v1 Account가 reverse 관계 --> account 생성
+                                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, v2AccountArr[0]);
+                                                    taskObj[v2AccountId] = await this.taskManager(this, '[5a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`, null, null)
+                                                }
+                                            } else {
+                                                // (6ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 1개 존재 + v1 Account가 존재하는 SQL account와 무관 + --> reservation + account 생성 (canceled 정보는 account 정보에 따라 바뀜)
+                                                let v2SQLReservation = await this.reservationCreateAndInsert(this, null, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[6ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`, null, v2SQLReservation)
+                                            }
+                                        }
+                                    } else {
+                                        if (v2AccountArr.length === 2) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 5', v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `two account exist in non-canceled reservation`, null);}
+                                        else {
+                                            let accountSales = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[0]);
+                                            if (accountSales.match) {
+                                                if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 6', v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `same account exist in SQL`, null);}
+                                                else {
+                                                    // (7ca) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 1개 존재 + v1 Account가 존재하는 SQL account와 reverse 관계 --> reservation을 canceled = true로 변경하고 account 추가
+                                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, v2AccountArr[0]);
+                                                    let cancelReservationTask = await this.reservationCancelSQLandELASTICandFB(this, v2Reservation, v1Account);
+                                                    taskObj[v2AccountId] = await this.taskManager(this, '[7ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`, null, cancelReservationTask)
+                                                }
+                                            } else {
+                                                // (8ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = false) + 관련 SQL account 1개 존재 + v1 Account가 존재하는 SQL account와 무관 --> reservation + account 생성 (canceled 정보는 account 정보에 따라 바뀜)
+                                                let v2SQLReservation = await this.reservationCreateAndInsert(this,null, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[8ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`, null, v2SQLReservation)
+                                            }
                                         }
                                     }
                                 }
                             } else {
-                                const obj = await this.multipleReservationProcess(v1Account, v2ReservationArr);
-                                if (obj.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 12', obj.identicalObj.v2ReservationId, obj.identicalObj.v2AccountId, messageId, [], [], null, `already same account exist in SQL!`)}
+                                const obj = await this.multipleReservationProcess(v1_fb_key, v1Account, v2ReservationArr);
+                                if (obj.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 7', obj.identicalObj.v2ReservationId, obj.identicalObj.v2AccountId, messageId, [], [], null, `same account exist in SQL`, null)}
                                 else if (obj.reverse) {
+                                    // reverse인데 fullAccount가 될 수는 없다. 그렇다면 identical에서 걸렸을 것.
                                     let v2Reservation = obj.reverseObj.v2Reservation;
                                     if (v2Reservation.canceled) {
-                                        // (23a) : v1Canceled data 있음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = true --> account 생성
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[23a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                        // (9a) : v1Canceled data 없음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = true --> account 생성
+                                        let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, obj.reverseObj.v2Account);
+                                        taskObj[v2AccountId] = await this.taskManager(this, '[9a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                     } else {
-                                        // (24ca) : v1Canceled data 있음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = false --> reservation canceled = true로 변경하고 account 생성
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        await this.reservationCancelSQLandElastic(v2Reservation);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[24ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                        // (10ca) : v1Canceled data 없음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = false --> reservation canceled = true로 변경하고 account 생성
+                                        let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, obj.reverseObj.v2Account);
+                                        let cancelReservationTask = await this.reservationCancelSQLandELASTICandFB(this, v2Reservation, v1Account);
+                                        taskObj[v2AccountId] = await this.taskManager(this, '[10ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, cancelReservationTask)
                                     }
                                 } else {
                                     if (obj.emptyAccountReservation.length > 0) {
@@ -618,357 +765,217 @@ class v2AccountConverter {
                                             }
                                         }
                                         if (canceled) {
-                                            // (25a) : v1Canceled data 있음 + 여러 개 SQL reservation 존재(canceled = true) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 --> account 생성
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[25a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                            // (11a) : v1Canceled data 없음 + 여러 개 SQL reservation 존재(canceled = true) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 --> account 생성
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[11a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                         } else {
                                             if (minus_v1Account) {
-                                                // (26ca) : v1Canceled data 있음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + v1 Account 정보가 (-) --> reservation canceled = true로 변경 + account 생성
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                                await this.reservationCancelSQLandElastic(v2Reservation);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[26ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                                // (12ca) : v1Canceled data 없음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + v1 Account 정보가 (-) --> reservation canceled = true로 변경 + account 생성
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                                let cancelReservationTask = await this.reservationCancelSQLandELASTICandFB(this, v2Reservation, v1Account);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[12ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, cancelReservationTask)
                                             } else {
-                                                // (27a) : v1Canceled data 있음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + v1 Account 정보가 (+) --> account 생성
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[27a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                                // (13a) : v1Canceled data 없음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + 해당 reservation의 canceled = false, v1 Account 정보가 (+) --> account 생성
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[13a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                             }
                                         }
                                     } else {
-                                        // (28ra) : v1Canceled data 있음 + 여러 개 SQL reservation 존재 + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 하지 않음 --> reservation + account 생성 (canceled 정보는 minus_v1Account에 따라 변경됨)
-                                        let v2NewReservation = await JSON.parse(JSON.stringify(v2ReservationArr[0]));
-                                        let v2SQLReservation = await this.reservationCreateAndInsert(null, v2Product, minus_v1Account, v2NewReservation);
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[28ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`)
+                                        // (14ra) : v1Canceled data 없음 + 여러 개 SQL reservation 존재 + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 하지 않음 --> reservation + account 생성 (canceled 정보는 minus_v1Account에 따라 변경됨)
+                                        let v2Product = await Product.getProduct(v2Reservation.product_id);
+                                        let v2SQLReservation = await this.reservationCreateAndInsert(this, null, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                        let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                        taskObj[v2AccountId] = await this.taskManager(this, '[14ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, v2SQLReservation)
                                     }
                                 }
                             }
-                        }
-                    }
-                } else {
-                    // (29a) : 예약이 아닌 회계에 대해서 converting 회계 생성
-                    let v2AccountId = await this.accountCreateAndInsert(v1Account, null, false);
-                    if (!v2AccountId) {
-                        let memo = v1Account.identifier ? v1Account.detail + ' identifier : ' + v1Account.identifier : v1Account.detail;
-                        taskObj.error[v1Account.id + '-' + String(new Date())] = await this.taskManager(this, 'Pass - 13',null, null, null, [], [], null, `already same non-reservation account exist in postgreSQL. memo : ${memo}`);
-                    } else {
-                        taskObj[v2AccountId] = await this.taskManager(this, '[21a]',null, v2AccountId, null, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : only account for non-reservation insert`);
-                    }
-                }
-            }
-        }
-        console.log('all task done! : ', {totalCount:this.totalCount, passCount : this.passCount,reservationCreateCount : this.reservationCreateCount, accountCreateCount : this.accountCreateCount, missingCount : this.totalCount - this.passCount - this.reservationCreateCount - this.accountCreateCount});
-    }
-    
-    /**
-     * main converter of v1 --> v2 account
-     * it has to be checked if certain reservation or account is already exist in postgreSQL database at every v1 account case.
-     * sequential process should be done to make sure previous task can affect next task.
-     * @param v1AccountBulkData {Object} v1 account bulk object
-     * @param v1CanceledBulkData {Object} v1 canceled bulk object
-     * @returns {Promise<void>}
-     */
-    static async mainConverter_old(v1AccountBulkData, v1CanceledBulkData) {
-        this.totalCount = 0;
-        this.passCount = 0;
-        this.reservationCreateCount = 0;
-        this.accountCreateCount = 0;
-        const taskObj = {error: {}};
-        for (let temp of Object.entries(v1AccountBulkData)) {
-            let date = temp[0];
-            let v1AccountObj = temp[1];
-            for (let v1Account of Object.values(v1AccountObj)) {
-                this.totalCount += 1;
-                if (v1Account.category === 'reservation' || v1Account.category === 'Reservation') {
-                    let messageId = v1Account.id;
-                    let v2ReservationArr = await this.getV2SqlReservations(messageId);
-                    if (v2ReservationArr.length > 0) {
-                        if (v2ReservationArr.length > 1) {
-                            let v1CanceledData = v1CanceledBulkData[messageId];
-                            if (!v1CanceledData) {
-                                const obj = { totalNum : 0, fullCount: 0, newAccount : false, nonCanceledReservation : {}, newAccountObj : {}, fullAccount : {}, emptyAccount : {},identical : false, identicalObj : {}, newAccountWithRsv : false, newAccountWithRsvObj : {}};
-                                for (let v2Reservation of v2ReservationArr) {
-                                    obj.totalNum += 1;
-                                    let tempV2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
-                                    if (v2Reservation.canceled === true) {
-                                        if (tempV2AccountArr.length === 0) {obj.emptyAccount[v2Reservation.id] = v2Reservation}
-                                        else if (tempV2AccountArr.length === 2) {
-                                            obj.fullCount += 1;
-                                            obj.fullAccount[v2Reservation.id] = tempV2AccountArr.map(data=>data.id)
-                                        } else {
-                                            let accountSales = await this.v1v2AccountSales(v1Account, tempV2AccountArr[0]);
-                                            if (accountSales.match) {
-                                                if (accountSales.identical) {
-                                                    obj.identical = true;
-                                                    obj.identicalObj = {v2ReservationId : v2Reservation.id, v2AccountID : tempV2AccountArr[0].id}
-                                                } else {
-                                                    obj.newAccount = true;
-                                                    obj.newAccountObj = {v2Reservation : v2Reservation};
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        obj.nonCanceledReservation = {v2Reservation : v2Reservation, v2AccountArr : tempV2AccountArr};
-                                        let accountSales = await this.v1v2AccountSales(v1Account, tempV2AccountArr[0]);
-                                        if (accountSales.match) {
-                                            if (accountSales.identical) {
-                                                obj.identical = true;
-                                                obj.identicalObj = {v2ReservationId : v2Reservation.id, v2AccountID : tempV2AccountArr[0].id}
-                                            } else {
-                                                obj.newAccountWithRsv = true;
-                                                obj.newAccountWithRsvObj = {v2Reservation : v2Reservation, v2Account : tempV2AccountArr[0]}
-                                            }
-                                        }
-                                    }
-                                }
-                                if (obj.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 1', obj.identicalObj.v2ReservationId, obj.identicalObj.v2AccountID, messageId, [], [], null, `identical account data exist`);}
-                                else if (obj.newAccount) {
-                                    if (!obj.newAccountObj.v2Reservation) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 2', null, null, messageId, [], [], null, `no matching canceled data && only canceled reservation exist without account data`);} 
-                                    else {
-                                        // (1a) : 여러 예약 중 canceled 예약의 account와 v1 account가 reverse 관계이므로 account 만 생성.
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, obj.newAccountObj.v2Reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[1a]',obj.newAccountObj.v2Reservation.id, v2AccountId, messageId, [], ['insertSQL, insertElastic'], `success - ${v1Account.category} : [multiple reservation] 1 canceled reservation with 1 account + alpha (canceled/non-canceled) reservation exist --> 1 reverse account for canceled reservation insert`);
-                                    }
-                                } else if (obj.newAccountWithRsv) {
-                                    // (2cra) : 여러 예약 중 non-canceled 예약의 account와 v1 account가 reverse 관계이므로 canceled 로 예약을 변경하고 account 넣은 후 non-canceled 예약 생성.
-                                    let v2Reservation = obj.newAccountWithRsvObj.v2Reservation;
-                                    let v2Product = await Product.getProduct(v2Reservation.product_id);
-                                    let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                    let v2SQLCanceledReservation = await this.reservationCancelSQLandElastic(v2Reservation, v2Product);
-                                    taskObj[v2AccountId] = await this.taskManager(this, '[2cra]',`canceled : ${v2Reservation.id} / created : ${v2SQLCanceledReservation.id}`, v2AccountId, messageId, ['cancelSQL', 'cancelElastic', 'insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [multiple reservation] 1 non-canceled reservation / 1 account exist + alpha reservation with account --> change reservation from non-canceled to canceled due to reverse account + insert account + create another non-canceled reservation`)
-                                } else {
-                                    // 모든 reservation에서 v1Account data와 matching되는 account가 에 없기 때문에 canceled = true인 예약 중 account가 하나도 없는 예약이 있다면
-                                    // 거기에 account 추가하고, 빈 reservation이 없다면 reservation + account.
-                                    let canceled = false;
-                                    if (!!v1Account.card && v1Account.card !== 0) canceled = v1Account.card < 0;
-                                    else if (!!v1Account.cash && v1Account.cash !== 0) canceled = v1Account.cash < 0;
-                                    if (obj.totalNum - obj.fullCount === 1) {
-                                        if (obj.nonCanceledReservation.v2AccountArr.length === 0 && !canceled) {
-                                            // (3a) : 모든 canceled = true인 예약의 회계정보는 세트로 존재함. canceled = false인 예약의 회계정보는 존재하지 않음. canceled = false인 예약에 account 생성
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, obj.nonCanceledReservation.v2Reservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[3a]',obj.newAccountObj.v2Reservation.id, v2AccountId, messageId, [], ['insertSQL, insertElastic'], `success - ${v1Account.category} : [multiple reservation] all canceled reservation's account set is full / non-canceled reservation's account is empty --> (+) account insert`);
-                                        } else {
-                                            // (4ra) 모든 canceled = true인 예약의 회계정보는 세트로 존재함. canceled = false인 예약과 v1 account는 아무 관련이 없음. canceled = true인 예약 생성 및 회계 생성.
-                                            let v2NewReservation = await JSON.parse(JSON.stringify(obj.nonCanceledReservation.v2Reservation))
-                                            let v2Product = await Product.getProduct(v2NewReservation.product_id);
-                                            let v2SQLReservation = await this.reservationCreateAndInsert(null, v2Product, true, v2NewReservation);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[4ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [multiple reservation] all canceled reservation's account set is full / non-canceled reservation's account is empty or v1 account data is (-) --> create new canceled reservation + insert account`);
-                                        }
-                                    } else if (Object.keys(obj.emptyAccount).length === 0) {
-                                        // (5ra) 여러 reservation 중에서 빈 account가 없기 때문에 랜덤으로 reservation 하나를 골라서 새로운 reservation + account 생성. canceled = false인 예약이 이미 존재하므로 canceled = true 이어야 함.
-                                        let v2Reservation = await JSON.parse(JSON.stringify(v2ReservationArr[0]));
-                                        let v2Product = await Product.getProduct(v2Reservation.product_id);
-                                        let v2SQLReservation = await this.reservationCreateAndInsert(null, v2Product, true, v2Reservation);
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[5ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [multiple reservation] multiple reservation without empty account --> create new reservation + insert account`);
-                                    } else {
-                                        let v2Reservation = Object.values(obj.emptyAccount)[0];
-                                        let v2Product = await Product.getProduct(v2Reservation.product_id);
-                                        if (canceled) {
-                                            // (6cra) 빈 reservation에 account 추가. v1 Account의 가격정보가 (-) 값이기 때문에 reservation을 canceled로 바꾼 다음 account 생성 + 새로운 non-canceled reservation을 새로 생성 .
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            let v2SQLCanceledReservation = await this.reservationCancelSQLandElastic(v2Reservation, v2Product);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[6cra]',`canceled : ${v2Reservation.id} / created : ${v2SQLCanceledReservation.id}`, v2AccountId, messageId, ['cancelSQL', 'cancelElastic', 'insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [multiple reservation] reservation with empty account exist + alpha reservation with account --> change reservation from non-canceled to canceled due to (-) account + insert account + create another non-canceled reservation`)
-                                        } else {
-                                            // (7a) 빈 reservation에 account 추가. v1 Account의 가격정보가 (+) 값이기 때문에 account만 생성.
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[7a]',obj.newAccountObj.v2Reservation.id, v2AccountId, messageId, [], ['insertSQL, insertElastic'], `success - ${v1Account.category} : [multiple reservation] 1 reservation with empty account --> (+) account insert`);
-                                        }
-                                    }
-                                }
-                            } else {
-                                // message id 에 대응되는 reservation이 여러개 존재하지만, canceled data가 존재하지 않는 경우. 정상적인 예약이 1개는 무조건 있다는 말임.
-                                let v2AccountObj = {canceled:{}, normal:{}, alreadyExist : false};
-                                let v2ReservationObj = {canceled:{}, normal:{}};
-                                let v2AccountMakeForEmptySQL = false;
-                                let matchCount = 0;
-                                // console.log('(10ra) v2ReservationArr : ', messageId, v2ReservationArr.map(data=>[data.id,data.canceled]));
-                                for (let v2Reservation of v2ReservationArr) {
-                                    if (v2Reservation.canceled === true) {
-                                        let tempV2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
-                                        if (tempV2AccountArr.length === 0) {
-                                            // (8a) : 하나의 message Id 에 여러개의 reservation Id가 존재. 취소된 예약에 회계정보가 없는 경우 회계 생성
-                                            // todo : account 없는 reservation 이 있다는 걸 표시해야함. 밑에 작업들 다 바꿔야함!
-                                            // let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            // v2AccountMakeForEmptySQL = true;
-                                            // taskObj[v2AccountId] = await this.taskManager(this, '[8a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL, insertElastic'], `success - ${v1Account.category} : [multiple reservation] 1 canceled reservation with no account + alpha (canceled/non-canceled) reservation exist --> 1 account for canceled reservation insert`);
-                                        } else {
-                                            // console.log('(10ra) tempV2AccountArr : ',tempV2AccountArr.map(data=>data.id))
-                                            for (let v2Account of tempV2AccountArr) {
-                                                let accountSales = await this.v1v2AccountSales(v1Account, v2Account);
-                                                // console.log('(10ra) ',v2Account.id, v2Account.income, v2Account.expenditure, JSON.stringify(accountSales));
-                                                if (accountSales.match && accountSales.identical && accountSales.v1 === accountSales.v2) v2AccountObj.alreadyExist = true;
-                                                else if (accountSales.match && !accountSales.identical && accountSales.v1 === accountSales.v2 * (-1)) {
-                                                    v2AccountObj.canceled.obj = v2Account;
-                                                    v2AccountObj.canceled.reservation = v2Reservation;
-                                                    matchCount += 1;
-                                                }}}
-                                    } else {
-                                        v2ReservationObj.normal = v2Reservation;
-                                        let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
-                                        if (v2AccountArr.length > 0) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 23',v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `already account exist in non-canceled reservation`);}
-                                        else {taskObj.error[messageId] = await this.taskManager('Pass - 4',v2Reservation.id, null, messageId, [], [], null, `no account exist in non-canceled reservation`);
-                                        }}}
-                                if (v2AccountObj.canceled.reservation) {
-                                    if (matchCount > 1) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 5',v2AccountObj.canceled.reservation.id, null, messageId, [], [], null, `multiple identical account information exist in non-canceled reservation. matchCount : ${matchCount}`);}
-                                    else {
-                                        // (9a) : 하나의 message Id 에 여러개의 reservation Id가 존재. 특정 취소된 reservation 에 회계 정보가 1개 있고, 그에 reverse 관계인 회계가 생성되는 case.
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2AccountObj.canceled.reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[9a]',v2AccountObj.canceled.reservation.id, v2AccountId, messageId, [], ['insertSQL, insertElastic'], `success - ${v1Account.category} : [multiple reservation] 1 canceled reservation / 1 account + 1 (canceled/non-canceled) reservation exist --> 1 reversed account for canceled reservation insert`);
-                                    }
-                                } else {
-                                    if (v2AccountObj.alreadyExist) taskObj[messageId] = await this.taskManager(this, 'Pass - 6',v2ReservationArr.map(data=>data.id), null, messageId, [], [], null, 'already account exist in canceled reservation');
-                                    else if (!v2AccountMakeForEmptySQL) {
-                                        // (10ra) : 하나의 message Id 에 여러개의 reservation Id가 존재. 존재하는 reservation의 sales와 일치하는 것이 없기 때문에 새로운 취소 예약 + 회계 생성 (canceled 아닌 Reservation은 이미 SQL에 존재하는 것을 전제)
-                                        let v2Product = await this.getV2SqlProduct(v1CanceledData.product);
-                                        let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, true);
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[10ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL, insertElastic'], ['insertSQL, insertElastic'], `success - ${v1Account.category} : [multiple reservation] new canceled reservation + account insert`);
-                                    }}}
                         } else {
-                            let v2Reservation = v2ReservationArr[0];
-                            let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
-                            if (v2Reservation.canceled === true) {
-                                // message id 에 대응하는 reservation 이 1개만 SQL에 존재하고, canceled = true 일 때.
-                                let v1CanceledData = v1CanceledBulkData[messageId];
-                                if (!v1CanceledData) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 7',v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `no matching canceled data`);}
-                                else {
-                                    let v2Product = await this.getV2SqlProduct(v1CanceledData.product);
-                                    if (!v2Product) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 8',v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `no matching v2 Product in SQL. v1 Product : ${v1CanceledData.product}`);}
-                                    else {
-                                        if (v2AccountArr.length === 0) {
-                                            // (11a) : 취소된 예약에 회계정보가 존재하지 않음. account 생성 (보통 중간에 account converter 실행 도중 멈추고 다시 실행 한 경우에 발생)
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[11a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 canceled reservation / 1 account exist --> 1 reversed account insert`);
+                            let v2Product = await Product.getProduct(v1CanceledData.product);
+                            if (!v2Product) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 8', v2ReservationArr.map(data=>data.id), null, messageId, [], [], null, `no matching v2 product exist! : ${v1CanceledData.product}`,null)}
+                            else {
+                                if (v2ReservationArr.length === 0) {
+                                    // (15ra) : v1 Canceled data 있음 + SQL에 reservation 존재하지 않음 --> reservation + account 생성 (canceled 는 minus_v1Account에 따라 결정)
+                                    let v2SQLReservation = await this.reservationCreateAndInsert(this, v1CanceledData, v2Product, minus_v1Account, null, v1Account);
+                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                    taskObj[v2AccountId] = await this.taskManager(this, '[15ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, v2SQLReservation)
+                                } else if (v2ReservationArr.length === 1) {
+                                    let v2Reservation = v2ReservationArr[0];
+                                    if (v2Reservation.canceled) {
+                                        let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
+                                        if (v2AccountArr.length === 2) {
+                                            let accountSales = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[0]);
+                                            if (accountSales.match) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 9', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `already same account exist in SQL!`)}
+                                            else {
+                                                // (16ra) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true) + SQL에 관련 account 2개 존재 + v1 Account와는 관련없음  --> reservation + account 생성 (canceled 는 minus_v1Account에 따라 결정)
+                                                let v2SQLReservation = await this.reservationCreateAndInsert(this, v1CanceledData, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[16ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, v2SQLReservation)
+                                            }
                                         } else if (v2AccountArr.length === 1) {
-                                            let accountSales = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
+                                            let accountSales = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[0]);
                                             if (accountSales.match) {
-                                                if (accountSales.v1 === accountSales.v2) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 9',v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `duplicated account exist`);}
+                                                if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 10', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `already same account exist in SQL!`, null)}
                                                 else {
-                                                    // (12a) : 취소된 예약에 이미 1개의 회계가 존재하고, reverse 회계를 넣는 case
-                                                    let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                                    taskObj[v2AccountId] = await this.taskManager(this, '[12a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 canceled reservation / 1 account exist --> 1 reversed account insert`);
+                                                    // (17a) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true)  + SQL에 관련 account 1개 존재 + v1 Account와 reverse 관계  --> account 생성
+                                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, v2AccountArr[0]);
+                                                    taskObj[v2AccountId] = await this.taskManager(this, '[17a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                                 }
                                             } else {
-                                                // (13ra) : 취소된 예약에 이미 1개의 회계가 존재하는데, sales 정보가 달라서 새로운 취소 예약 + 회계를 만드는 case
-                                                let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, true);
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[13ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 canceled reservation / 1 account exist --> another canceled reservation + account insert`);
+                                                // (18ra) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true) + SQL에 관련 account 1개 존재 + v1 Account와 관계 없음 --> 새로운 reservation + account 생성 (canceled 는 minus_v1Account에 따라 결정)
+                                                let v2SQLReservation = await this.reservationCreateAndInsert(this, v1CanceledData, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[18ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, v2SQLReservation)
                                             }
                                         } else {
-                                            let v2Account;
-                                            for (let tempV2Account of v2AccountArr) {
-                                                let accountSales = await this.v1v2AccountSales(v1Account, tempV2Account);
-                                                if (!accountSales.match) v2Account = tempV2Account;
-                                            }
-                                            if (!v2Account) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 10',v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `already two account exist in one canceled reservation`);}
-                                            else {
-                                                // (14ra) : 취소된 예약에 이미 2개의 서로 reverse관계인 회계가 존재하는데, sales 정보가 달라서 새로운 취소 예약 + 회계를 만드는 case
-                                                let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, true);
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[14ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 canceled reservation / 2 account exist --> another canceled reservation + account insert`)
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                // message id 에 대응하는 reservation이 1개 존재하고, canceled = false 일 때.
-                                let canceled = false;
-                                if (!!v1Account.card && v1Account.card !== 0) canceled = v1Account.card < 0;
-                                else if (!!v1Account.cash && v1Account.cash !== 0) canceled = v1Account.cash < 0;
-                                if (v2AccountArr.length > 0) {
-                                    let accountSales = await this.v1v2AccountSales(v1Account, v2AccountArr[0]);
-                                    if (accountSales.match) {
-                                        if (accountSales.identical) {taskObj.error[v2AccountArr[0].id] = await this.taskManager(this, 'Pass - 11',v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `account already exists in non-canceled reservation. money info : [${v1Account.cash}, ${v1Account.card}]. number of account in message id ${messageId} : ${v2AccountArr.length}`);}
-                                        else {
-                                            // (15cra) :  message id 하나에 1개의 canceled = false인 예약이 존재하고 v1 account는 해당 회계의 reverse 관계. reverse 란 말은 v1 account가 (-) 값이란 말이므로 해당 예약을 canceled 로 변경하고 새로운 non-canceled reservation 생성
-                                            let v2Product = await Product.getProduct(v2Reservation.product_id);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                            let v2SQLCanceledReservation = await this.reservationCancelSQLandElastic(v2Reservation, v2Product);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[15cra]',`canceled : ${v2Reservation.id} / created : ${v2SQLCanceledReservation.id}`, v2AccountId, messageId, ['cancelSQL', 'cancelElastic', 'insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 non-canceled reservation / 1 account exist --> change reservation from non-canceled to canceled due to reverse account + insert account + create another non-canceled reservation`)
+                                            // (19a) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = true) + SQL에 관련 account 없음 --> account 생성
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[19a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                         }
                                     } else {
-                                        let v1CanceledData = v1CanceledBulkData[messageId];
-                                        if (!v1CanceledData) {
-                                            // (16ra) 일반적인 루트. 정상 예약과 회계 정보 존재하지만, v1 account와는 아무 관계가 없음. canceled data가 없다는 말은 canceled = false인 예약이 존재한다는 것이므로 canceled = true인 새로운 예약 + 회계 생성
-                                            let v2Product = Product.getProduct(v2Reservation.product_id);
-                                            let v2CanceledReservation = await JSON.parse(JSON.stringify(v2Reservation));
-                                            let v2CanceledSQLReservation = await this.reservationCreateAndInsert(null, v2Product, true, v2CanceledReservation);
-                                            let v2AccountId = await this.accountCreateAndInsert(v1Account, v2CanceledSQLReservation, true);
-                                            taskObj[v2AccountId] = await this.taskManager(this, '[16ra]',v2CanceledSQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 non-canceled reservation / 1 account exist --> another canceled reservation + account insert (canceled data does not exist)`)
+                                        let v2AccountArr = await this.getV2SqlAccountWithReservation(v2Reservation.id);
+                                        if (v2AccountArr.length === 0) {
+                                            // (20a) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = false) + SQL에 관련 account 없음 --> account 생성
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[20a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
                                         } else {
-                                            let v2Product = await this.getV2SqlProduct(v1CanceledData.product);
-                                            if (!v2Product) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 12',v2Reservation.id, v2AccountArr[0].id, messageId, [], [], null, `no matching v2 Product in SQL. v1 Product : ${v1CanceledData.product}`);}
-                                            else {
-                                                // (17ra) : 일반 예약, 회계가 존재했는데 같은 message id로 canceled 된 회계정보가 들어와서 canceled 예약 + 회계 생성.
-                                                let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, true);
-                                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                                taskObj[v2AccountId] = await this.taskManager(this, '[17ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 non-canceled reservation / 1 account exist --> another canceled reservation + account insert`)
+                                            let accountSales = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[0]);
+                                            if (accountSales.match) {
+                                                if (accountSales.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 11', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `already same account exist in SQL!`, null)}
+                                                else {
+                                                    // (21ca) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = false) + SQL에 관련 account 1개 있음 + v1 Account와 reverse 관계 --> reservation canceled = true로 변경하고 account 생성
+                                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, v2AccountArr[0]);
+                                                    let cancelReservationTask = await this.reservationCancelSQLandELASTICandFB(this, v2Reservation, v1Account);
+                                                    taskObj[v2AccountId] = await this.taskManager(this, '[21ca]',v2Reservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, cancelReservationTask)
+                                                }
+                                            } else {
+                                                // (22ra) : v1 Canceled data 있음 + SQL에 reservation 1개 존재(canceled = false) + SQL에 관련 account 1개 있음 + v1 Account와 아무런 관계 없음 --> 새로운 reservation account 생성 (canceled 는 minus_v1Account에 따라 결정)
+                                                let v2SQLReservation = await this.reservationCreateAndInsert(this, v1CanceledData, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[22ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, v2SQLReservation)
                                             }
                                         }
                                     }
                                 } else {
-                                    // SQL상에 canceled = false 인 예약이 1개 있는데 이에 대응하는 account 하나도 없음.
-                                    if (canceled) {
-                                        // (18cra) : (-) 회계이므로 reservation을 canceled 로 변경하고 account 추가 + 새로운 non-canceled reservation 추가.
-                                        let v2Product = await Product.getProduct(v2Reservation.product_id);
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        let v2SQLCanceledReservation = await this.reservationCancelSQLandElastic(v2Reservation, v2Product);
-                                        taskObj[v2AccountId] = await this.taskManager(this, '[18cra]',`canceled : ${v2Reservation.id} / created : ${v2SQLCanceledReservation.id}`, v2AccountId, messageId, ['cancelSQL', 'cancelElastic', 'insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 non-canceled reservation with no account --> change reservation from non-canceled to canceled due to (-) account + insert account + create another non-canceled reservation`)
+                                    const obj = await this.multipleReservationProcess(v1_fb_key, v1Account, v2ReservationArr);
+                                    if (obj.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 12', obj.identicalObj.v2ReservationId, obj.identicalObj.v2AccountId, messageId, [], [], null, `already same account exist in SQL!`, null)}
+                                    else if (obj.reverse) {
+                                        let v2Reservation = obj.reverseObj.v2Reservation;
+                                        if (v2Reservation.canceled) {
+                                            // (23a) : v1Canceled data 있음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = true --> account 생성
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, obj.reverseObj.v2Account);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[23a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null,null)
+                                        } else {
+                                            // (24ca) : v1Canceled data 있음 + 여러 개 SQL reservation 존재 + 관련 SQL account 중 v1 Account와 reverse 관계인 account 존재 + 해당 reservation 의 canceled = false --> reservation canceled = true로 변경하고 account 생성
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, true, obj.reverseObj.v2Account);
+                                            let cancelReservationTask = await this.reservationCancelSQLandELASTICandFB(this, v2Reservation, v1Account);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[24ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, cancelReservationTask)
+                                        }
                                     } else {
-                                        // (19a) : 가장 일반적인 루트(canceled 되지 않은 reservation에 대한 account 생성) . SQL database에 업데이트 하는 순서가 reservation --> account이기 때문에 정상 예약이라도 account가 없는 경우가 있음.
-                                        let v2AccountId = await this.accountCreateAndInsert(v1Account, v2Reservation, true);
-                                        taskObj[v2AccountId] = await this.taskManager(this,'[19a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : [single reservation] 1 non-canceled reservation with no account --> insert (+) account`);
+                                        if (obj.emptyAccountReservation.length > 0) {
+                                            let v2Reservation = obj.emptyAccountReservation[0];
+                                            let canceled = v2Reservation.canceled;
+                                            for (let tempReservation of obj.emptyAccountReservation) {
+                                                if (tempReservation.canceled) {
+                                                    v2Reservation = tempReservation;
+                                                    canceled = true;
+                                                }
+                                            }
+                                            if (canceled) {
+                                                // (25a) : v1Canceled data 있음 + 여러 개 SQL reservation 존재(canceled = true) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 --> account 생성
+                                                let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                                taskObj[v2AccountId] = await this.taskManager(this, '[25a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
+                                            } else {
+                                                if (minus_v1Account) {
+                                                    // (26ca) : v1Canceled data 있음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + v1 Account 정보가 (-) --> reservation canceled = true로 변경 + account 생성
+                                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                                    let cancelReservationTask = await this.reservationCancelSQLandELASTICandFB(this, v2Reservation, v1Account);
+                                                    taskObj[v2AccountId] = await this.taskManager(this, '[26ca]',v2Reservation.id, v2AccountId, messageId, ['cancelSQL', 'cancelElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, cancelReservationTask)
+                                                } else {
+                                                    // (27a) : v1Canceled data 있음 + 여러 개 SQL reservation 존재(canceled = false) + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 + v1 Account 정보가 (+) --> account 생성
+                                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2Reservation, true, false, null);
+                                                    taskObj[v2AccountId] = await this.taskManager(this, '[27a]',v2Reservation.id, v2AccountId, messageId, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, null)
+                                                }
+                                            }
+                                        } else {
+                                            // (28ra) : v1Canceled data 있음 + 여러 개 SQL reservation 존재 + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 하지 않음 --> reservation + account 생성 (canceled 정보는 minus_v1Account에 따라 변경됨)
+                                            let v2Reservation = null;
+                                            if (obj.normalObj.length > 0) {v2Reservation = obj.normalObj[0];}
+                                            let v2SQLReservation = await this.reservationCreateAndInsert(this, v1CanceledData, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                            let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                            taskObj[v2AccountId] = await this.taskManager(this, '[28ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, v2SQLReservation)
+                                        }
                                     }
                                 }
                             }
                         }
                     } else {
-                        // message id에 대응하는 reservation이 SQL에 하나도 없는 경우 : 취소 예약만 존재한다는 뜻이라 canceled data가 반드시 있어야 함.
-                        let v1CanceledData = v1CanceledBulkData[messageId];
-                        if (!v1CanceledData) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 13',null, null, messageId, [], [], null, `no matching v2 Reservation in SQL, no matching canceled Data`);}
-                        else {
-                            let v2Product = await this.getV2SqlProduct(v1CanceledData.product);
-                            if (!v2Product) {taskObj.error[messageId] = await this.taskManager(this, 'Pass - 14',null, null, messageId, [], [], null, `no matching v2 Product in SQL. v1 Product : ${v1CanceledData.product}`);}
-                            else {
-                                // (20ra) : 두번째로 일반적인 루트(canceled 된 reservation + account 생성). message id 에 대응하는 reservation이 SQL에 존재하지 않고 canceled Data가 존재할 때 취소된 reservation + account를 생성.
-                                let v2SQLReservation = await this.reservationCreateAndInsert(v1CanceledData, v2Product, true);
-                                let v2AccountId = await this.accountCreateAndInsert(v1Account, v2SQLReservation, true);
-                                taskObj[v2AccountId] = await this.taskManager(this, '[20ra]',v2SQLReservation.id, v2AccountId.id, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : no reservation in SQL --> canceled reservation + account insert`);
-                            }
+                        // (29a) : 예약이 아닌 회계에 대해서 converting 회계 생성
+                        let v2AccountId = await this.accountCreateAndInsert(this, null, v1_fb_key, v1Account, null, false, false, null);
+                        if (!v2AccountId) {
+                            let memo = v1Account.identifier ? v1Account.detail + ' identifier : ' + v1Account.identifier : v1Account.detail;
+                            taskObj.error[v1Account.id + '-' + String(new Date())] = await this.taskManager(this, 'Pass - 13',null, null, null, [], [], null, `already same non-reservation account exist in postgreSQL. memo : ${memo}`, null);
+                        } else {
+                            taskObj[v2AccountId] = await this.taskManager(this, '[21a]',null, v2AccountId, null, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : only account for non-reservation insert`,null, null);
                         }
-                    }
-                } else {
-                    // (21a) : 예약이 아닌 회계에 대해서 converting 회계 생성
-                    let v2AccountId = await this.accountCreateAndInsert(v1Account, null, false);
-                    if (!v2AccountId) {
-                        let memo = v1Account.identifier ? v1Account.detail + ' identifier : ' + v1Account.identifier : v1Account.detail;
-                        taskObj.error[v1Account.id + '-' + String(new Date())] = await this.taskManager(this, 'Pass - 15',null, null, null, [], [], null, `already same non-reservation account exist in postgreSQL. memo : ${memo}`);
-                    } else {
-                        taskObj[v2AccountId] = await this.taskManager(this, '[21a]',null, v2AccountId, null, [], ['insertSQL', 'insertElastic'], `success - ${v1Account.category} : only account for non-reservation insert`);
                     }
                 }
             }
         }
-        console.log('all task done! : ', {totalCount:this.totalCount, reservationCreateCount : this.reservationCreateCount, accountCreateCount : this.accountCreateCount, missingCount : this.totalCount - this.passCount - this.reservationCreateCount - this.accountCreateCount});
+        console.log('all task done! : ', {totalCount:this.totalCount, errorCount : this.errorCount, passCount : this.passCount, reservationCreateCount : this.reservationCreateCount, accountCreateCount : this.accountCreateCount, missingCount : this.totalCount - this.errorCount - this.passCount - this.reservationCreateCount - this.reservationCancelCount - this.accountCreateCount});
     }
 
-    static checkNonReservationAccountExist(v2Account) {
-        return new Promise((resolve, reject) => {
-           const query = `SELECT * FROM account WHERE category = '${v2Account.category}' and memo = '${v2Account.memo}' and writer = '${v2Account.writer}'`;
-           sqlDB.query(query, (err, result) => {
-              if (err) resolve(console.log('error : ',JSON.stringify(err)));
-              resolve(result.rowCount > 0);
-           });
-        });
-    }
-
-    static taskManager(obj, type, v2ReservationId, v2AccountId, message_id, reservationTask, accountTask, message, error) {
+    /**
+     * task manager for account main converter
+     * @param obj {Object} main converter's internal object for counting / storing history
+     * @param type {String} task type (e.g. [2a], [15ra], ...)
+     * @param v2ReservationId {String} v2 reservation id
+     * @param v2AccountId {String || boolean} v2 account id
+     * @param message_id {String} message id
+     * @param reservationTask {Array} processed task for reservation related database (e.g. insertSQL, insertElastic, insertFB, ...)
+     * @param accountTask {Array} processed task for account related database (e.g insertSQL, insertElastic, ...)
+     * @param message {String} message for each task
+     * @param error {String} error message for each task
+     * @param additionalTaskStaus {Object || Boolean} additional task like reservation create / cancel status
+     * @returns {{reservation_task: (*|Array), v2_a_id: *, v1_id: *, v2_r_id: *, account_task: (*|Array), type: *, message: (*|string), error: (*|null)} || Error}
+     */
+    static taskManager(obj, type, v2ReservationId, v2AccountId, message_id, reservationTask, accountTask, message, error, additionalTaskStaus) {
         let typeArr;
+        obj.totalCount += 1;
+        if (!v2AccountId) {
+            console.log(` ## Account creation Error : ${type} / ${v2ReservationId} / ${message_id}`);
+            obj.errorCount += 1;
+            return new Error(`${type} / ${v2ReservationId} / ${message_id}`);
+        }
         if (type[0] === "[") {
             typeArr = type.split('').slice(1, -1);
-            if (typeArr.indexOf('r') !== -1) obj.reservationCreateCount += 1;
-            if (typeArr.indexOf('a') !== -1) obj.accountCreateCount += 1;
+            if (!obj.messageIdObj.reservations[message_id]) obj.messageIdObj.reservations[message_id] = {canceled : new Set(), nonCanceled : new Set(), history:{}, count : 0};
+            obj.messageIdObj.reservations[message_id].count += 1;
+            if (typeArr.indexOf('ra') !== -1) {
+                if (!additionalTaskStaus) {
+                    console.log(` ## Reservation creation Error : ${type} / ${v2ReservationId} / ${message_id} / ${v2AccountId}`);
+                    obj.errorCount += 1;
+                    return new Error(`${type} / ${v2ReservationId} / ${message_id} / ${v2AccountId}`);;
+                }
+                obj.messageIdObj.reservations[message_id].nonCanceled.add(v2ReservationId);
+                if (!obj.messageIdObj.reservations[message_id].history[v2ReservationId]) obj.messageIdObj.reservations[message_id].history[v2ReservationId] = [];
+                obj.messageIdObj.reservations[message_id].history[v2ReservationId].push('ra');
+                obj.reservationCreateCount += 1;
+            } else if (typeArr.indexOf('ca') !== -1) {
+                if (!additionalTaskStaus) {
+                    console.log(` ## Reservation cancel Error : ${type} / ${v2ReservationId} / ${message_id} / ${v2AccountId}`);
+                    obj.errorCount += 1;
+                    return new Error(`${type} / ${v2ReservationId} / ${message_id} / ${v2AccountId}`);;;
+                }
+                if (obj.messageIdObj.reservations[message_id].nonCanceled.has(v2ReservationId)) {obj.messageIdObj.reservations[message_id].nonCanceled.delete(v2ReservationId);}
+                obj.messageIdObj.reservations[message_id].canceled.add(v2ReservationId);
+                if (!obj.messageIdObj.reservations[message_id].history[v2ReservationId]) obj.messageIdObj.reservations[message_id].history[v2ReservationId] = [];
+                obj.messageIdObj.reservations[message_id].history[v2ReservationId].push('ca');
+                obj.reservationCancelCount += 1;
+            } else if (typeArr.indexOf('a') !== -1) {
+                if (!obj.messageIdObj.reservations[message_id].history[v2ReservationId]) obj.messageIdObj.reservations[message_id].history[v2ReservationId] = [];
+                obj.messageIdObj.reservations[message_id].history[v2ReservationId].push('a');
+                obj.accountCreateCount += 1;
+            }
         } else {
             typeArr = type.split(' ');
             if (typeArr.indexOf('Pass') !== -1) obj.passCount += 1;
@@ -987,31 +994,72 @@ class v2AccountConverter {
         return result;
     }
 
+    /**
+     * data extract from bulk data by year, month
+     * @param v1AccountBulkData {Object} v1 Account bulk data
+     * @param year {Number} year information
+     * @param month {Number || String} for number, only matching month will be extracted. for string, following rule is being applied
+     * @param path {String} data save path
+     * @returns {Promise<any>}
+     */
     static accountDataExtractByMonth(v1AccountBulkData, year, month, path) {
         let result = {};
         Object.entries(v1AccountBulkData).forEach(temp => {
-            let date = temp[0];
+            let v1_fb_key = temp[0];
             let v1Account = temp[1];
-            let dateArr = date.trim().split('-');
+            let dateArr = v1Account.date.trim().split('-');
+            let date = v1Account.date;
             if (!month) {
-                if (Number(dateArr[0]) === year) result[date] = v1Account;
+                if (Number(dateArr[0]) === year) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '~3') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 3) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '4~6') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 4 && Number(dateArr[1]) <= 6) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '~6') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 6) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '7~9') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 7 && Number(dateArr[1]) <= 9) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '7~') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 7) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '~9') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 9) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '10~'){
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 10) result = this.dataStore(result, v1Account, date, v1_fb_key);
             } else {
-                if (Number(dateArr[0]) === year && Number(dateArr[1]) === month) result[date] = v1Account;
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) === month) result = this.dataStore(result, v1Account, date, v1_fb_key);
             }
         });
         return new Promise((resolve, reject) => {
             fs.writeFile(path, JSON.stringify(result), err => {
-                if (err) resolve(console.log('error in file write : ',JSON.stringify(err)));
-                resolve(console.log('done'));
+                if (err) resolve(`error in file write : ${JSON.stringify(err)}`);
+                resolve('done');
+            });
+        })
+    }
+    
+    static dataStore(result, v1Account, date, v1_fb_key) {
+        if (v1Account.category !== 'reservation' && v1Account.category !== 'Reservation') console.log(' non-reservation : ',v1Account)
+        if (!result.hasOwnProperty(date)) result[date] = {};
+        result[date][v1_fb_key] = v1Account;
+        return result;
+    }
+    
+    static fbTeamDataProcess(v1FbTeamBulkData, filePath) {
+        const result = {};
+        Object.values(v1FbTeamBulkData).forEach(data => {
+            Object.entries(data).forEach(temp => {
+                let key = temp[0];
+                result[key] = temp[1];
+            });
+        });
+        return new Promise((resolve, reject) => {
+            fs.writeFile(filePath, JSON.stringify(result), err => {
+                if (err) resolve(`error in file write : ${JSON.stringify(err)}`);
+                resolve('done');
             });
         })
     }
 }
-// const v1Account_2019 = require('../dataFiles/v1AccountData_2019.json');
-const v1Account_2019_June = require('../dataFiles/v1AccountData_2019_June.json');
-const v1Account_2019_July = require('../dataFiles/v1AccountData_2019_July.json');
-const v1CanceledBulkDataData = require('../dataFiles/intranet-64851-canceled-export.json');
-// let result = v2AccountConverter.mainConverter(v1Account_2019_July, v1CanceledBulkDataData);
 
 async function findDuplicateAccount(v1AccountBulkData, v1CanceledBulkData) {
     const temp_result = {};
@@ -1030,8 +1078,6 @@ async function findDuplicateAccount(v1AccountBulkData, v1CanceledBulkData) {
     console.log(result)
     return result;
 }
-
-// findDuplicateAccount(v1Account_2019_July, v1CanceledBulkDataData).then(result => console.log(' @ @ result : ',result));
 
 async function AccountQuerytest() {
     let v2Reservation = await v2AccountConverter.getV2SqlReservations('16be9e80327b2c0f')[0];
@@ -1267,5 +1313,52 @@ const testCase = {
     }
 };
 
+const v1AccountBulkData = require('../dataFiles/intranet-64851-account-export.json');
+const v1Account_2019_July = require('../dataFiles/v1AccountData_2019_July.json');
+// const v1Account_2019_October = require('../dataFiles/v1AccountData_2019_October.json');
+const v1CanceledBulkDataData = require('../dataFiles/intranet-64851-canceled-export.json');
+const v1FbTeamBulkData = require('../dataFiles/v1FbTeamBulkData_noDate.json');
+
+// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, 8, 'server/models/dataFiles/v1AccountData_2019_October.json').then(result => console.log('result : ', result));
+// v2AccountConverter.reservationCancelSQLandELASTICandFB({tour_date: '2019-07-15',product_id:'p360',id:'r32623'}).then(result=>console.log(result));
 // v2AccountConverterTest(testCase, v1CanceledBulkDataData);
-// v2AccountConverter.mainConverter(v1Account_2019_July, v1CanceledBulkDataData);
+v2AccountConverter.mainConverter(v1Account_2019_July, v1CanceledBulkDataData, v1FbTeamBulkData);
+// v2AccountConverter.mainConverter({'2019-07-19' : {
+//         "-LjmkzfaD75Fr2-EfEAP": {
+//             "card": 280000,
+//             "category": "Reservation",
+//             "currency": "KRW",
+//             "date": "2019-07-16",
+//             "detail": "Created: 2019-07-14\nagency: L\nproduct: Busan_Regular_통영 \npeople: 4(4/0/0\noption: [object Object]",
+//             "id": "16b6b4af10939cbc",
+//             "writer": "L"
+//         }}}, v1CanceledBulkDataData, v1FbTeamBulkData);
+// v2AccountConverter.fbTeamDataProcess(v1FbTeamBulkData, 'server/models/dataFiles/v1FbTeamBulkData_noDate.json').then(result => console.log('result : ',result));
+
+const v2Reservation = {
+    message_id: 'NM-1560833492407',
+    product_id: 'p380',
+    agency: 'BN',
+    writer: 'BN',
+    tour_date: new Date('2019-07-31T09:00:00.000'),
+    options: [],
+    adult: 3,
+    kid: 1,
+    infant: 0,
+    canceled: false,
+    created_date: new Date('2019-06-18T04:51:32.000'),
+    modified_date: new Date('2019-06-18T04:51:32.000'),
+    id: 'r49859',
+    agency_code: 'NM-1560833492407',
+    nationality: 'RUSSIAN FEDERATION' };
+
+const teamV1Account = {
+    "card": 0,
+    "category": "Reservation",
+    "currency": "KRW",
+    "date": "2019-07-18",
+    "detail": "Created: 2019-07-11\nagency: GT\nproduct: Busan_Private_Private(B) \npeople: 3(3/0/0\noption: ",
+    "id": "NM-1562888720981",
+    "writer": "GT"
+};
+// v2AccountConverter.reservationCancelSQLandELASTICandFB(v2Reservation).then(result => console.log('result : ',result));

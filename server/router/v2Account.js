@@ -179,7 +179,7 @@ function testManager(req, env){
     result.isTest = true;
     result.fail = obj.fail;
     Object.keys(obj.detail).forEach(key => {
-        if (result.detail.hasOwnProperty(key)) result.detail[key] = obj.detail[key];
+        if (!!result.detail.key) result.detail[key] = obj.detail[key];
     });
     return result;
 }

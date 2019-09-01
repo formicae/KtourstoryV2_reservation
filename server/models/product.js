@@ -281,10 +281,10 @@ class Product {
  * @returns {*}
  */
 function productMapProcessing(productMap, ignoreSet, product) {
-    let areaCategoryalias = product.area + '_' + product.category + '_' + product.alias;
+    let areaCategoryAlias = product.area + '_' + product.category + '_' + product.alias;
     if (!ignoreSet.has(product.name) && !ignoreSet.has(product.alias)) {
         productMap.set(product.alias, product);
-        productMap.set(areaCategoryalias, product);
+        productMap.set(areaCategoryAlias, product);
         productMap.set(product.name, product);
         productMap.set(product.id, product);
         if (!!product.incoming) {

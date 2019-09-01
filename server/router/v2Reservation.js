@@ -39,7 +39,7 @@ function routerHandler(req, res, requestType) {
     const testObj = testManager(req, env);
     if (!data.message_id) data.message_id = "NM-" + new Date().getTime();
     data.reservationResult = false;
-    return pickupPlaceFinder(data)
+    return Reservation.pickupPlaceFinder(data)
         .then(location => {
             data.pickupData = location;
             return Product.productDataExtractFromFB(data)})
@@ -72,26 +72,6 @@ function routerHandler(req, res, requestType) {
                 return accountRouter.update(req, res);
             }
         });
-}
-
-function pickupPlaceFinder(data){
-    return new Promise((resolve, reject) => {
-        fbDB.ref('geos').once('value', (snapshot) => {
-            const geos = snapshot.val();
-            if (!geos) resolve({lat:0.00,lon:0.00});
-            else {
-                Object.keys(geos.areas).forEach(key => {
-                    geos.areas[key].pickups.forEach(area => {
-                        if (area.name === data.pickup) resolve(area.location);
-                        area.incoming.forEach(incoming => {
-                            if (incoming === data.pickup) resolve(area.location);
-                        });
-                    })
-                });
-                resolve({lat:0.00,lon:0.00});
-            }
-        })
-    })
 }
 
 /**
@@ -146,6 +126,8 @@ function createReservation(reservation, data, requestType, testObj) {
         .then(resultData => {
             if (!resultData) return false;
             data = resultData;
+            if (data.teamIdArr) {reservation.elasticData.team_id = data.teamIdArr[0];} 
+            else {reservation.elasticData.team_id = data.team_id;}
             task.insertFB = true;
             return Reservation.insertElastic(reservation.elasticData, testObj)})
         .then(result => {
@@ -262,7 +244,9 @@ function testManager(req, env){
     result.isTest = true;
     result.fail = obj.fail;
     Object.keys(obj.detail).forEach(key => {
-        if (result.detail.hasOwnProperty(key)) result.detail[key] = obj.detail[key];
+        if (!!result.detail.key) result.detail[key] = obj.detail[key];
     });
     return result;
 }
+
+// pickupPlaceFinder({pickup:'Seomyun'}).then(result=>console.log(result))

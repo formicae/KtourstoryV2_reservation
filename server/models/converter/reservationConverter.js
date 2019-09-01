@@ -62,50 +62,62 @@ class v2ReservationConverter {
     constructor(v1OperationData) {
         this.data = v1OperationData;
     }
-
-    static async generateSimpleFbData(v1ProductId, teamId, v1_r_id, v1Reservation, v2SqlReservation) {
-        const result = {};
-        const tour_date = v1Reservation.date;
-        const v2Product = await this.findProduct(v1ProductId, v1ProductId.split('_')[2]);
-        if (!v2Product) return console.log(` Error : no v2 product for v1 product : ${v1ProductId}`);
-        const v2FbReservation = {
-            id: v2SqlReservation.id,
-            agency_code: v1Reservation.agency_code,
-            name: v1Reservation.clientName,
-            nationality: v1Reservation.nationality.toUpperCase(),
-            agency: v2SqlReservation.agency,
-            writer: v2SqlReservation.writer || v2SqlReservation.agency,
-            pickup: v1Reservation.pickupPlace,
-            adult: v2SqlReservation.adult,
-            kid: v2SqlReservation.kid,
-            infant: v2SqlReservation.infant,
-            options: {},
-            phone: v1Reservation.tel || '',
-            email: v1Reservation.email || '',
-            messenger: v1Reservation.messenger || '',
-            memo: v1Reservation.memo || '',
-            o: v1Reservation.oCheck || false,
-            g: v1Reservation.gCheck || v1Reservation.oChekc || false
-        };
-        if (v2SqlReservation.options) v2FbReservation.options = v2SqlReservation.options;
-        if (!v1Reservation.language) v2FbReservation.language = 'English'
-        else if (v1Reservation.language === 'N/A') v2FbReservation.language = 'English';
-        else v2FbReservation.language = v1Reservation.language;
-        const data = {
-            date: tour_date,
-            productData: v2Product,
-            operation: tour_date + '/' + v1ProductId + '/' + teamId + '/' + v2SqlReservation.id
-        };
-        if (!data.productData.bus) data.productData.bus = {company: 'busking', size: 43, cost: 0};
-        result[tour_date] = {};
-        result[tour_date][v1Product] = {};
-        result[tour_date][v1Product].teams = {};
-        result[tour_date][v1Product].teams[teamId] = {};
-        result[tour_date][v1Product].teams[teamId].reservations = {};
-        result[tour_date][v1Product].teams[teamId].reservations[v2FbReservation.id] = v2FbReservation;
+    
+    static async generateSimpleFbData(v1Reservation, v2SqlReservation, v2ExistFbReservation) {
+        let v2FbReservation;
+        if (!v1Reservation && v2ExistFbReservation) {
+            v2FbReservation = JSON.parse(JSON.stringify(v2ExistFbReservation));
+            v2FbReservation.id = v2SqlReservation.id;
+        } else {
+            v2FbReservation = {
+                id: v2SqlReservation.id,
+                agency_code: v2SqlReservation.agency_code,
+                name: v1Reservation.clientName,
+                nationality: v2SqlReservation.nationality,
+                agency: v2SqlReservation.agency,
+                writer: v2SqlReservation.writer || v2SqlReservation.agency,
+                pickup: v1Reservation.pickupPlace,
+                adult: v2SqlReservation.adult,
+                kid: v2SqlReservation.kid,
+                infant: v2SqlReservation.infant,
+                options: {},
+                phone: v1Reservation.tel || '',
+                email: v1Reservation.email || '',
+                messenger: v1Reservation.messenger || '',
+                guide_memo : '',
+                operation_memo: v1Reservation.memo || '',
+                o: v1Reservation.oCheck || false,
+                g: v1Reservation.gCheck || v1Reservation.oChekc || false
+            };
+            if (v2SqlReservation.options) v2FbReservation.options = v2SqlReservation.options;
+            if (!v1Reservation.language) v2FbReservation.language = 'English';
+            else if (v1Reservation.language === 'N/A') v2FbReservation.language = 'English';
+            else v2FbReservation.language = v1Reservation.language;
+        }
+        return v2FbReservation;
+    }
+    
+    static async generateFbDataWithElastic(v2ElasticData, g, o){
         return {
-            reservation : result,
-            data: data
+            id : v2ElasticData.id,
+            name : v2ElasticData.name,
+            nationality : v2ElasticData.nationality,
+            agency : v2ElasticData.agency,
+            agency_code : v2ElasticData.agency_code ,
+            writer : v2ElasticData.writer,
+            pickup : v2ElasticData.pickup,
+            adult : v2ElasticData.adult,
+            kid : v2ElasticData.kid,
+            infant : v2ElasticData.infant,
+            options : v2ElasticData.options,
+            phone : v2ElasticData.phone,
+            email : v2ElasticData.email,
+            messenger : v2ElasticData.messenger,
+            guide_memo : v2ElasticData.guide_memo,
+            operation_memo : v2ElasticData.operation_memo,
+            g : g,
+            o : o,
+            language : v2ElasticData.language
         };
     }
 
@@ -136,7 +148,7 @@ class v2ReservationConverter {
                     Object.keys(v1Data.teams).forEach(key => {
                         if (!result.fbOverallData[date][v2ProductData.id].teams) result.fbOverallData[date][v2ProductData.id].teams = {};
                         result.fbOverallData[date][v2ProductData.id].teams[key] = {};
-                        reservation.teams[key] = {id: key, notification: v1Data.teams[key].memo || {}, guides: v1Data.teams[key].guide || [], reservations: {}};
+                        reservation.teams[key] = {id: key, operator_message : v1Data.teams[key].message, guide_message: v1Data.teams[key].memo || {}, guides: v1Data.teams[key].guide || [], memo : '', reservations: {}};
                         if (v1Data.teams[key].reservations) {
                             Object.keys(v1Data.teams[key].reservations).forEach(r_id => {
                                 keyArr.push({team_id: key, v1_r_id: r_id});
@@ -147,7 +159,7 @@ class v2ReservationConverter {
                     });
                 }
                 return Promise.all(promiseArr)
-            }).then(promiseResult => {
+            }).then(async promiseResult => {
                 if (promiseResult.length > 0) {
                     for (let i = 0; i < promiseResult.length; i++) {
                         let team_id = keyArr[i].team_id;
@@ -169,7 +181,8 @@ class v2ReservationConverter {
                                 phone: v1Reservation.tel || '',
                                 email: v1Reservation.email || '',
                                 messenger: v1Reservation.messenger || '',
-                                memo: v1Reservation.memo || '',
+                                guide_memo : '',
+                                operation_memo: v1Reservation.memo || '',
                                 o: v1Reservation.oCheck || false,
                                 g: v1Reservation.gCheck || v1Reservation.oChekc || false,
                             };
@@ -184,14 +197,13 @@ class v2ReservationConverter {
                                 reservation.teams[team_id].reservations[promiseResult[i].id].language = v1Reservation.language;
                             }
                             if (!productData.bus) productData.bus = {company: 'busking', size: 43, cost: 0};
-                            result.elasticData.push(this.elasticDataMatch(v1Data.teams[team_id].reservations[v1_reservation_id], productData, promiseResult[i]));
                             if (!result.fbOverallData[date][productData.id].teams[team_id].reservations) result.fbOverallData[date][productData.id].teams[team_id] = {reservations: {}};
                             result.fbOverallData[date][productData.id].teams[team_id].reservations[promiseResult[i].id] = {
                                 date: v1Data.date,
                                 productData: productData,
                                 operation: v1Data.date + '/' + productData.id + '/' + team_id + '/' + promiseResult[i].id
                             };
-
+                            result.elasticData.push(await this.elasticDataMatch(v1Data.teams[team_id].reservations[v1_reservation_id], productData, team_id, promiseResult[i], null));
                         }
                     }
                     result.fbData = fbData;
@@ -199,17 +211,19 @@ class v2ReservationConverter {
                 }
             });
     }
-
+    
     /**
      *
      * @param v1Reservation {Object} v1 Reservation data
      * @param v2ProductData {Object} v2 Product Data from postgreSQL
+     * @param team_id {String} reservation team_id
      * @param v2SQLData {Object} v2 Reservation Data from postgreSQL
      * @param v2ElasticReservation {Object} v2 Elastic object when v1Reservation does not exist
      * @returns {{product: {area: *, bus: {cost: number, size: number, company: string}, geos: {location: {lon: number, lat: number}, place: *}, name: *, alias: *, id: *, category: *}, agency: (*|Array|boolean), agency_code: string, timezone: string, kid: (*|number|Number|string|boolean), pickup: {location: {lon: number, lat: number}, place: string}, memo: *, message_id: *, language: (*|string|string), infant: (string|*|number|Number|boolean), modified_date: (*|*|string|boolean|String|*), canceled: boolean, total: *, nationality: (string|*), phone: string, messenger: (string|*), options: *, tour_date: *, id: *, writer: string, created_date: (*|*|boolean|Date|string|*), adult: (boolean|string|*|number|Number), email: *}}
      */
-    static elasticDataMatch(v1Reservation, v2ProductData, v2SQLData, v2ElasticReservation) {
+    static async elasticDataMatch(v1Reservation, v2ProductData, team_id, v2SQLData, v2ElasticReservation) {
         if (v1Reservation) {
+            let pickupLocation = await Reservation.pickupPlaceFinder({pickup:v1Reservation.pickupPlace});
             const result = {
                 id: v2SQLData.id,
                 message_id: v1Reservation.id,
@@ -226,7 +240,7 @@ class v2ReservationConverter {
                 name: v1Reservation.clientName,
                 nationality: v1Reservation.nationality.toUpperCase(),
                 tour_date: v1Reservation.date,
-                pickup: { place: v1Reservation.pickupPlace, location:{ lat: 0.0, lon: 0.0 }},
+                pickup: { place: v1Reservation.pickupPlace, location:pickupLocation || {lat:0.0, lon:0.0}},
                 options : v2SQLData.options || [],
                 adult: v1Reservation.adult,
                 kid: v1Reservation.kid,
@@ -235,19 +249,21 @@ class v2ReservationConverter {
                 phone: v1Reservation.tel || '',
                 email: v1Reservation.email || '',
                 messenger: v1Reservation.messenger || '',
-                memo: v1Reservation.memo || '',
+                guide_memo : '',
+                operation_memo: v1Reservation.memo || '',
                 memo_history : [],
                 canceled: v2SQLData.canceled,
                 created_date: v2SQLData.created_date,
                 modified_date: v2SQLData.modified_date,
                 timezone : 'UTC+9',
                 language : v1Reservation.language,
-                star : false
+                star : false,
+                team_id : team_id
             };
-            if (!!result.memo) {
+            if (!!result.operation_memo) {
                 result.memo_history.push({
                     writer : result.writer,
-                    memo : result.memo,
+                    memo : result.operation_memo,
                     date : v2SQLData.created_date
                 })
             }
@@ -259,7 +275,6 @@ class v2ReservationConverter {
             } else {
                 result.language = v1Reservation.language
             }
-            if (!!v1Reservation.memo.match('중국어')) result.language = 'CHINESE';
             return result;
         } else {
             const result = {
@@ -281,19 +296,20 @@ class v2ReservationConverter {
                 phone: v2ElasticReservation.phone,
                 email: v2ElasticReservation.email,
                 messenger: v2ElasticReservation.messenger,
-                memo: v2SQLData.memo,
+                operation_memo: v2ElasticReservation.operation_memo,
                 memo_history: [],
                 canceled: v2SQLData.canceled,
                 created_date: v2SQLData.created_date,
                 modified_date: v2SQLData.modified_date,
                 timezone: 'UTC+9',
                 language: v2SQLData.language,
-                star: false
+                star: false,
+                team_id : team_id
             };
-            if (!!result.memo) {
+            if (!!result.operation_memo) {
                 result.memo_history.push({
                     writer : result.writer,
-                    memo : result.memo,
+                    memo : result.operation_memo,
                     date : v2SQLData.created_date
                 })
             }
@@ -305,9 +321,10 @@ class v2ReservationConverter {
      * generate v2 Reservation object with v1 Reservation data
      * @param v1Reservation {Object} v1 Reservation data. v1Operation > [date] > [productName] > teams > [teamId] > reservations > [reservationId]
      * @param canceled {Boolean} Boolean if reservation should be made in canceled
+     * @param is_canceledData {Boolean} check if reservation is created by v1 Canceled data
      * @returns {Promise<any | never>}
      */
-    static generateSQLObject(v1Reservation , canceled){
+    static generateSQLObject(v1Reservation , canceled, is_canceledData){
         let v1ProductName = v1Reservation.product.split('_')[2];
         if (v1ProductName.match(/-/i)) {
             const temp = v1ProductName.split('-');
@@ -333,9 +350,16 @@ class v2ReservationConverter {
                         infant : v1Reservation.infant,
                         nationality : (v1Reservation.nationality || 'unknown').toUpperCase(),
                         canceled : canceled,
-                        created_date : Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9'),
-                        modified_date : Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9')
+                        created_date : '',
+                        modified_date : ''
                     };
+                    if (is_canceledData) {
+                        result.created_date = Product.getLocalDate(v1Reservation.canceledDate,'UTC+9');
+                        result.modified_date = Product.getLocalDate(v1Reservation.canceledDate,'UTC+9');
+                    } else {
+                        result.created_date = Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9');
+                        result.modified_date = Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9');
+                    }
                     if (v1Reservation.option) {
                         v1Reservation.option.forEach(each => {
                             let temp = { name : each.option, number : each.people};
@@ -349,6 +373,44 @@ class v2ReservationConverter {
                 }
 
             });
+    }
+
+    static cancelSQL(reservation_id, modified_date) {
+        return new Promise((resolve, reject) => {
+            const query = `UPDATE reservation SET canceled = true, modified_date = '${Product.getLocalDate(modified_date, 'UTC+9').toISOString().slice(0,-2)}' WHERE id = '${reservation_id}' RETURNING *`;
+            sqlDB.query(query, (err, result) => {
+                if (err) {
+                    console.log('debug-error / ', 'Reservation-cancelSQL', `data update from SQL failed - make "cancel" column to TRUE. query : ${query}`);
+                    resolve(false);
+                } else {
+                    console.log('debug / ', 'Reservation-cancelSQL', 'data update from SQL success - make "cancel" column to TRUE');
+                    resolve(result.rows[0]);
+                }
+            });
+        });
+    }
+
+    static cancelElastic(reservation_id, modified_date) {
+        return new Promise((resolve, reject) => {
+            elasticDB.update({
+                index : 'reservation',
+                type : '_doc',
+                id : reservation_id,
+                body : {
+                    doc : {
+                        canceled : true,
+                        modified_date : Product.getLocalDate(modified_date, 'UTC+9')
+                    }
+                }
+            }, (err, resp) => {
+                if (err) {
+                    console.log('debug-error / ', 'Reservation-cancelElastic', `update from Elastic failed : ${reservation_id}`);
+                    resolve(false);
+                }
+                console.log('debug / ', 'Reservation-cancelElastic', `update from Elastic success : ${reservation_id}`);
+                resolve(true);
+            });
+        });
     }
 
     /**
@@ -434,7 +496,7 @@ class v2ReservationConverter {
                                 let v1ReservationId = temp3[0];
                                 let v1Reservation = temp3[1];
                                 if (v1Reservation) {
-                                    let v2Reservtion = await v2ReservationConverter.generateSQLObject(v1Reservation, false);
+                                    let v2Reservtion = await v2ReservationConverter.generateSQLObject(v1Reservation, false, false);
                                     result[i] = v2Reservtion;
                                     console.log(`  [${v2Reservtion.message_id}] convert done!`);
                                     i += 1;
@@ -459,7 +521,7 @@ class v2ReservationConverter {
                         if (v1OperationBulkData[date][v1ProductId].teams[v1TeamId].reservations) {
                             Object.keys(v1OperationBulkData[date][v1ProductId].teams[v1TeamId].reservations).forEach(v1_r_id => {
                                 let v1Reservation = v1OperationBulkData[date][v1ProductId].teams[v1TeamId].reservations[v1_r_id];
-                                sqlGeneratePromiseArr.push(this.generateSQLObject(v1Reservation, false));
+                                sqlGeneratePromiseArr.push(this.generateSQLObject(v1Reservation, false, false));
                             })
                         }
                     })
@@ -502,7 +564,7 @@ class v2ReservationConverter {
                                 let v1ReservationId = temp3[0];
                                 let v1Reservation = temp3[1];
                                 if (v1Reservation) {
-                                    let v2Reservation = await v2ReservationConverter.generateSQLObject(v1Reservation, false);
+                                    let v2Reservation = await v2ReservationConverter.generateSQLObject(v1Reservation, false, false);
                                     let checkDuplicate = await this.checkSameReservationExist(v2Reservation);
                                     if (!checkDuplicate.result) {
                                         let v2SQLReservation = await Reservation.insertSQL(v2Reservation, {});
@@ -600,6 +662,18 @@ class v2ReservationConverter {
         })
     }
 
+    /**
+     * task manager for reservation main converter
+     * @param type {String}
+     * @param v2ReservationId
+     * @param v1ReservationId
+     * @param v1product
+     * @param team
+     * @param reservationTask
+     * @param message
+     * @param error
+     * @returns {{reservation_task: (*|Array), v2_r_id: *, v1_product: *, team: *, type: *, message: (*|string), error: (*|null)}}
+     */
     static taskManager(type, v2ReservationId, v1ReservationId, v1product, team, reservationTask, message, error) {
         const result = {
             type : type,
@@ -695,6 +769,7 @@ class v2ReservationConverter {
  * file write
  * @param filePath {String} example : 'server/models/tempDataFiles/temporaryV2ReservationElasticFBData.json'
  * @param object {Object} object
+ * @param message {String} message
  */
 function writeFile(filePath, object, message) {
     return fs.writeFile(filePath, JSON.stringify(object), err => {
@@ -732,7 +807,7 @@ const v1OperationBulkData = require('../dataFiles/intranet-64851-operation-expor
 const v1Operation_2019_July = require('../dataFiles/v1OperationData_2019_July.json');
 const v1Operation_2019_October = require('../dataFiles/v1OperationData_2019_October.json');
 // v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, 8, 'server/models/dataFiles/v1OperationData_2019_October.json');
-// let result = v2ReservationConverter.mainConverter(v1Operation_2019_October);
+let result = v2ReservationConverter.mainConverter(v1Operation_2019_July);
 // deleteFirebaseData()
 // v2ReservationConverter.convertElasticToFile(require('../dataFiles/v1OperationData_2019_July'), 'server/models/tempDataFiles/v2ConvertedElasticData.json')
 //     .then(result => console.log('result : ',result));

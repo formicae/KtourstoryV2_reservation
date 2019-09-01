@@ -66,11 +66,7 @@ class Account {
                 },
                 options : data.options || {}
             },
-            operation : {
-                teamId : '',
-                guide : '',
-                messages : []
-            }
+            operation : data.operationData
         };
         if (!!result.memo) {
             result.memo_history.push({
@@ -84,7 +80,7 @@ class Account {
 
     static getGlobalDate() {
         // return new Date().toISOString().slice(0,-2);
-        return new Date(new Date() - ((validation.TIME_OFFSET_MAP['UTC+9']) * 60000));
+        return new Date(new Date() - ((validation.TIME_OFFSET_MAP['UTC+9']) * 60000)).toISOString().slice(0,-2);
     }
 
     static moneyPreprocess(money) {
@@ -125,11 +121,13 @@ class Account {
     static reverseAccountDataProcessing(prev_account, data) {
         prev_account.date = data.date;
         prev_account.agency = data.agency;
-        prev_account.nationality = data.nationality;
-        prev_account.writer = data.writer || prev_account.writer;
-        prev_account.account_memo = data.account_memo || prev_account.memo;
+        if (!!data.category) prev_account.category =  data.category;
+        if (!!data.sub_category) prev_account.sub_category = data.sub_category;
+        if (!!data.nationality)prev_account.nationality = data.nationality;
+        if (!!data.writer) prev_account.writer = data.writer;
+        if (!!data.memo) prev_account.account_memo = data.account_memo;
         prev_account.productData = {
-            category : prev_account.category,
+            category : data.category || prev_account.category,
             currency : prev_account.currency,
             income : prev_account.income,
             expenditure : prev_account.expenditure,
@@ -137,10 +135,9 @@ class Account {
             alias : data.productData.alias,
             area : data.productData.area
         };
-        prev_account.contents = `previous account id : ${prev_account.id} / date : ${prev_account.date} / category : ${prev_account.category} / sub_category : ${prev_account.sub_category}`
         prev_account.created_date = Account.getGlobalDate();
-        if (!prev_account.cash) prev_account.cash = data.cash;
-        if (prev_account.memo !== data.account_memo) prev_account.contents += ` / previous account memo : ${prev_account.memo}`;
+        prev_account.cash = data.cash;
+        if (prev_account.memo !== data.account_memo) prev_account.memo += ` / previous account memo : ${prev_account.memo} \n`;
         return prev_account;
     }
 
@@ -153,7 +150,7 @@ class Account {
      */
     static processReverseAccount(data, testObj) {
         if (testObj.isTest && testObj.fail && testObj.detail.processReverseAccount) return Promise.resolve(false);
-        const queryColumns = 'account.writer, category, currency, income, expenditure, cash, account.memo, reservation_id';
+        const queryColumns = 'account.id, account.writer, category, sub_category, contents, currency, income, expenditure, cash, account.memo, reservation_id';
         const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
@@ -163,17 +160,20 @@ class Account {
                 }
                 log.debug('Model','processReverseAccount',`query from Account success! target reservation id : ${data.previous_reservation_id}`);
                 resolve(result.rows[0])})})
-            .then(canceledData => {
-                if (!canceledData) {
+            .then(existSQLAccount => {
+                if (!existSQLAccount) {
                     log.warn('Model', 'processReverseAccount', `Account load from SQL failed`);
                     return false;
+                } else {
+                    const tempAccount = new Account(Account.reverseAccountDataProcessing(existSQLAccount, data));
+                    tempAccount.sqlData = Account.reverseMoneyProcess(tempAccount.sqlData);
+                    tempAccount.elasticData = Account.reverseMoneyProcess(tempAccount.elasticData);
+                    tempAccount.memo += ` / reverseAccount 인 ${existSQLAccount.id} 의 정보 : [category : ${existSQLAccount.category}], [sub_category : ${existSQLAccount.sub_category}], [contents : ${existSQLAccount.contents}]`;
+                    tempAccount.contents = `${existSQLAccount.id} 의 수정회계`;
+                    if (tempAccount.id) delete tempAccount.id;
+                    log.debug('Model', 'processReverseAccount', 'reverse Account process success!');
+                    return tempAccount;
                 }
-                const tempAccount = new Account(Account.reverseAccountDataProcessing(canceledData, data));
-                tempAccount.sqlData = Account.reverseMoneyProcess(tempAccount.sqlData);
-                tempAccount.elasticData = Account.reverseMoneyProcess(tempAccount.elasticData);
-                if (tempAccount.id) delete tempAccount.id;
-                log.debug('Model', 'processReverseAccount', 'reverse Account process success!');
-                return tempAccount;
             });
     };
 
@@ -218,9 +218,10 @@ class Account {
                 if (err) {
                     log.warn('Model','Account-insertElastic', `insert Elastic failed : ${account.id}`);
                     resolve(false);
+                } else {
+                    log.debug('Model','Account-insertElastic', `insert to Elastic success : ${account.id}`);
+                    resolve(true);
                 }
-                log.debug('Model','Account-insertElastic', `insert to Elastic success : ${account.id}`);
-                resolve(true);
             });
         });
     }

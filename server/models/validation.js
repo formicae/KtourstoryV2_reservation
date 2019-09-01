@@ -1,5 +1,5 @@
 const RESERVATION_KEY_MAP = ['id', 'message_id', 'writer', 'product_id', 'agency', 'agency_code', 'tour_date', 'options', 'adult', 'kid', 'infant', 'canceled', 'created_date', 'modified_date', 'nationality'];
-const ACCOUNT_KEY_MAP = ['id', 'writer', 'category', 'currency', 'income', 'expenditure', 'cash', 'memo', 'created_date','reservation_id', 'sub_category', 'card_number', 'contents'];
+const ACCOUNT_KEY_MAP = ['id', 'writer', 'category', 'currency', 'income', 'expenditure', 'cash', 'memo', 'created_date','reservation_id', 'sub_category', 'card_number', 'contents','v1'];
 const DAY_MAP = {'MON':0,'TUE':1,'WED':2,'THU':3,'FRI':4,'SAT':5,'SUN':6,'0':'MON','1':'TUE','2':'WED','3':'THU','4':'FRI','5':'SAT','6':'SUN'};
 const TIME_OFFSET_MAP = {'UTC0':0,'UTC+1':-60,'UTC+2':-120,'UTC+3':-180,'UTC+4':-240,'UTC+5':-300,'UTC+6':-360, 'UTC+7':-420,'UTC+8':-480,'UTC+9':-540,'UTC+10':-600,'UTC+11':-660,'UTC+12':-720,'UTC-1':60,'UTC-2':120,'UTC-3':180,'UTC-4':240,'UTC-5':300,'UTC-6':360,'UTC-7':420,'UTC-8':480,'UTC-9':540,'UTC-10':600,'UTC-11':660};
 const Product = require('./product');

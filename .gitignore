@@ -17,6 +17,7 @@ yarn-error.log*
 server/models/dataFiles/*.json
 server/auth/keys/*.json
 *.pem
+*.tsv
 
 # Runtime data
 pids

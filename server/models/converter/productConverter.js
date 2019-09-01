@@ -314,9 +314,10 @@ class v2ProductConveter {
                     log.warn('Model', 'Reservation-insertElastic', `insert into Elastic failed : ${data.id}`);
                     console.log('error : ', JSON.stringify(err));
                     resolve(false);
+                } else {
+                    log.debug('Model', 'Reservation-cancelElastic', `insert to Elastic success : ${data.id}`);
+                    resolve(true);
                 }
-                log.debug('Model', 'Reservation-cancelElastic', `insert to Elastic success : ${data.id}`);
-                resolve(true);
             });
         });
     }
