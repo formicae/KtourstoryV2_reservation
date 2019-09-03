@@ -40,18 +40,18 @@ describe('v2Reservation CREATE test, ', function() {
 
 describe('v2Reservation UPDATE test , ', function() {
     this.timeout(10000);
-    before(function() {
+    before(async function() {
         const promiseArr = [];
-        Object.keys(RESERVATION_UPDATE_TEST_CASE).forEach(key => {
+        for (let key of Object.keys(RESERVATION_UPDATE_TEST_CASE)) {
             let testTask = TEST_CASE_RESULT.rut[key].reservationTask;
             if (testTask.hasOwnProperty('checkSQLcanceled') && !testTask.checkSQLcanceled) {
                 console.log('no canceled reset!! : ', key)
             } else {
                 let reservation_id = RESERVATION_UPDATE_TEST_CASE[key].reservation_id;
-                promiseArr.push(Reservation.undoCancelSQL(reservation_id));
-                promiseArr.push(Reservation.undoCancelElastic(reservation_id));
+                await promiseArr.push(Reservation.undoCancelSQL(reservation_id));
+                await promiseArr.push(Reservation.undoCancelElastic(reservation_id));
             }
-        });
+        }
         Promise.all(promiseArr).then(result => {
             if (result.includes(false)) console.log(`failure exist : ${result}`);
             else console.log(`all SQL & Elastic test cases's canceled column data changed to true. ready to test!`);

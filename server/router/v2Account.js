@@ -53,7 +53,9 @@ exports.delete = (req, res) => {
  */
 function accountHandler(req, res, requestType) {
     const data = req.body;
-    const testObj = testManager(req, env);
+    let testObj;
+    if (req.body.hasOwnProperty('testObj')) testObj = req.body.testObj;
+    else testObj = testManager(req, env);
     data.accountResult = false;
     const account = new Account(data);
     if (requestType === 'REVERSE_CREATE') {

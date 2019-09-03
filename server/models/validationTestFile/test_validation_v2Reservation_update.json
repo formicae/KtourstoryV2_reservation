@@ -20,8 +20,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "success - normal reservation",
-    "reservation_memo": "예약 메모",
+    "test_memo": "success - normal reservation",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut2": {
@@ -45,8 +45,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "success - big reservation",
-    "reservation_memo": "예약 메모",
+    "test_memo": "success - big reservation",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut3": {
@@ -70,8 +70,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "success - small reservation",
-    "reservation_memo": "예약 메모",
+    "test_memo": "success - small reservation",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut4": {
@@ -95,8 +95,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - reservation_id : no reservation id in SQL database",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - reservation_id : no reservation id in SQL database",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut5": {
@@ -120,8 +120,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - writer : wrong type",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - writer : wrong type",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut6": {
@@ -145,8 +145,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - options : wrong type",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - options : wrong type",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut7": {
@@ -170,8 +170,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - message_id : wrong type",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - message_id : wrong type",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut8": {
@@ -194,8 +194,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - agency : no agency information",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - agency : no agency information",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut9": {
@@ -218,8 +218,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - agency_code : no agency_code information",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - agency_code : no agency_code information",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut10": {
@@ -243,8 +243,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - tour_date : no day information in tour_date",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - tour_date : no day information in tour_date",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut11": {
@@ -268,8 +268,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - tour_date : weekday check failed",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - tour_date : weekday check failed",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut12": {
@@ -293,8 +293,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - tour_date : tour date check fail (available : 2017.01.01 ~ 2018.12.31)",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - tour_date : tour date check fail (available : 2017.01.01 ~ 2018.12.31)",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut13": {
@@ -318,8 +318,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - tour_date : no matching product_id from product",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - tour_date : no matching product_id from product",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut14": {
@@ -343,8 +343,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - adult : number is under 0",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - adult : number is under 0",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut15": {
@@ -368,8 +368,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - kid : number is under 0",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - kid : number is under 0",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut16": {
@@ -393,8 +393,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - infant : number is under 0",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - infant : number is under 0",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut17": {
@@ -418,8 +418,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "success",
-    "reservation_memo": "예약 메모",
+    "test_memo": "success",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut18": {
@@ -443,8 +443,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - totalPeopleNumberCheck : total number of people is 0",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - totalPeopleNumberCheck : total number of people is 0",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모"
   },
   "rut19": {
@@ -468,8 +468,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - checkSQLcanceled",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - checkSQLcanceled",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모",
     "testObj":{"isTest":true,"fail":true,"target":"reservation","detail":{"checkSQLcanceled":true}}
   },
@@ -494,8 +494,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - insertSQL",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - insertSQL",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모",
     "testObj":{"isTest":true,"fail":true,"target":"reservation","detail":{"cancelSQL":true}}
   },
@@ -520,8 +520,8 @@
     "timezone": "UTC+9",
     "email": "kdh7337@gmail.com",
     "messenger": "kakao:01038482278",
-    "memo": "fail - insertElastic",
-    "reservation_memo": "예약 메모",
+    "test_memo": "fail - insertElastic",
+    "operation_memo": "예약 메모",
     "account_memo": "회계 메모",
     "testObj":{"isTest":true,"fail":true,"target":"reservation","detail":{"cancelElastic":true}}
   }

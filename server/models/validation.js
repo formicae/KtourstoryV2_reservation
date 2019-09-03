@@ -19,7 +19,11 @@ const ACCOUNT_VALID_CHECK_LIST_MAP = {
     'memo' : true,
     'created_date' : true,
     'reservation_id' : false,
-    'totalMoneyCheck' : true
+    'totalMoneyCheck' : true,
+    'sub_category' : false,
+    'card_number' : false,
+    'contents' : false,
+    'v1' : false
 };
 
 const RESERVATION_UPDATE_VALID_CHECK_LIST_MAP = {
@@ -37,7 +41,8 @@ const RESERVATION_UPDATE_VALID_CHECK_LIST_MAP = {
     'created_date':false,
     'modified_date':false,
     'productCheck':true,
-    'totalPeopleNumberCheck':true
+    'totalPeopleNumberCheck':true,
+    'nationality' : false
 };
 
 const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
@@ -55,7 +60,8 @@ const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
     'created_date':false,
     'modified_date':false,
     'productCheck':true,
-    'totalPeopleNumberCheck':true
+    'totalPeopleNumberCheck':true,
+    'nationality' : false
 };
 
 /**
@@ -325,7 +331,7 @@ function validCheckSimpleDateTime(input) {
     let dateArray = [];
     let timeArray = [];
     const date = (typeof input === 'string') ? input : input.toISOString();
-    if (date.match(/T/i)){
+    if (date.match('T')){
         const array = date.split('T');
         dateArray = array[0].split('-');
         timeArray = array[1].split(':');

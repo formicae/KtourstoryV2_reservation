@@ -231,9 +231,9 @@ class Reservation {
      * @returns {Promise<any>}
      */
     static insertSQL(reservation, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.insertSQL) return Promise.resolve(false);
-        const text = reservationQueryProcessing(reservation, 'create');
         return new Promise((resolve, reject)=> {
+            if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.insertSQL) resolve(false);
+            const text = reservationQueryProcessing(reservation, 'create');
             const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
@@ -254,8 +254,8 @@ class Reservation {
      * @returns {Promise<any>}
      */
     static deleteSQL(reservation_id, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.deleteSQL) return Promise.resolve(false);
         return new Promise((resolve, reject) => {
+            if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.deleteSQL) resolve(false);
             const query = `DELETE FROM reservation WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
@@ -289,8 +289,8 @@ class Reservation {
      * @returns {Promise<any>}
      */
     static cancelSQL(reservation_id, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.cancelSQL) return Promise.resolve(false);
         return new Promise((resolve, reject) => {
+            if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.cancelSQL) resolve(false);
             const query = `UPDATE reservation SET canceled = true, modified_date = '${Reservation.getGlobalDate()}' WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
@@ -327,8 +327,8 @@ class Reservation {
      * @returns {Promise<any>}
      */
     static checkSQLcanceled(reservation_id, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.checkSQLcanceled) return Promise.resolve(false);
         return new Promise((resolve, reject) => {
+            if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.checkSQLcanceled) resolve(false);
             const query = `SELECT canceled from reservation where id = '${reservation_id}'`;
             sqlDB.query(query, (err, result) => {
                 if (err || !result.rows) {
@@ -523,9 +523,9 @@ class Reservation {
      * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information.
      */
     static insertFB(reservation, data, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.insertFB) return Promise.resolve(false);
-        const reservedPeopleNumber = reservation.adult + reservation.kid + reservation.infant;
         return new Promise((resolve, reject) => {
+            if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.insertFB) resolve(false);
+            const reservedPeopleNumber = reservation.adult + reservation.kid + reservation.infant;
             fbDB.ref('operation').child(data.date).child(data.productData.id).once('value', (snapshot) => {
                 const operation = snapshot.val();
                 if (!operation) {
@@ -589,7 +589,7 @@ class Reservation {
      * @returns {*}
      */
     static async deleteFB(reservation, data, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.deleteFB) return Promise.resolve(false);
+        if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.deleteFB) return false;
         if (typeof data.operation === 'string') {
             const operationArr = data.operation.split('/');
             const date = operationArr[0],
@@ -640,9 +640,9 @@ class Reservation {
      * @returns {Promise<boolean>}
      */
     static insertElastic(reservation, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.insertElastic) return Promise.resolve(false);
-        if(reservation._id) delete reservation._id;
         return new Promise((resolve, reject)=> {
+            if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.insertElastic) resolve(false);
+            if (reservation._id) delete reservation._id;
             elasticDB.create({
                 index : 'reservation',
                 type : '_doc',
@@ -668,8 +668,8 @@ class Reservation {
      * @returns {Promise<boolean>}
      */
     static cancelElastic(reservation_id, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.cancelElastic) return Promise.resolve(false);
         return new Promise((resolve, reject) => {
+            if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.cancelElastic) resolve(false);
             elasticDB.update({
                 index : 'reservation',
                 type : '_doc',
@@ -725,7 +725,7 @@ class Reservation {
      * @returns {*}
      */
     static deleteElastic(reservation_id, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.deleteElastic) return Promise.resolve(false);
+        if (testObj.isTest && testObj.fail && testObj.target === 'reservation' && testObj.detail.deleteElastic) return Promise.resolve(false);
         return new Promise((resolve, reject) => {
             elasticDB.delete({
                 index : 'reservation',

@@ -36,7 +36,9 @@ exports.update = (req, res) => {
  */
 function routerHandler(req, res, requestType) {
     let data = req.body;
-    const testObj = testManager(req, env);
+    let testObj;
+    if (req.body.hasOwnProperty('testObj')) testObj = req.body.testObj;
+    else testObj = testManager(req, env);
     if (!data.message_id) data.message_id = "NM-" + new Date().getTime();
     data.reservationResult = false;
     return Reservation.pickupPlaceFinder(data)

@@ -206,8 +206,10 @@ class v2AccountConverter {
                     }
                 };
                 if (v1FbTeamData.hasOwnProperty('memo')) {
-                    Object.keys(v1FbTeamData.memo).forEach(temp => {
-                        result.operation.guide_message.push({guide:temp[0], message:temp[1]});
+                    Object.entries(v1FbTeamData.memo).forEach(temp => {
+                        let guide = temp[0];
+                        let memo = temp[1];
+                        result.operation.guide_message.push({guide:guide, message:memo});
                     });
                 }
                 if (!!result.memo) {

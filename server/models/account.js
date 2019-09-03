@@ -149,7 +149,7 @@ class Account {
      * @returns {Promise<any | never>}
      */
     static processReverseAccount(data, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.processReverseAccount) return Promise.resolve(false);
+        if (testObj.isTest && testObj.fail && testObj.target === 'account' && testObj.detail.processReverseAccount) return Promise.resolve(false);
         const queryColumns = 'account.id, account.writer, category, sub_category, contents, currency, income, expenditure, cash, account.memo, reservation_id';
         const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
         return new Promise((resolve, reject) => {
@@ -184,7 +184,7 @@ class Account {
      * @returns {Promise<any | never>}
      */
     static insertSQL(account, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.insertSQL) return Promise.resolve(false);
+        if (testObj.isTest && testObj.fail && testObj.target === 'account' && testObj.detail.insertSQL) return Promise.resolve(false);
         const text = accountCreateQuery(account);
         const query = `INSERT INTO account (${text.keys}) VALUES (${text.values}) RETURNING *`;
         return new Promise((resolve, reject) => {
@@ -207,7 +207,7 @@ class Account {
      * @returns {Promise<any>}
      */
     static insertElastic(account, testObj) {
-        if (testObj.isTest && testObj.fail && testObj.detail.insertElastic) return Promise.resolve(false);
+        if (testObj.isTest && testObj.fail && testObj.target === 'account' && testObj.detail.insertElastic) return Promise.resolve(false);
         return new Promise((resolve, reject)=> {
             elasticDB.create({
                 index : 'account',
