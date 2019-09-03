@@ -104,6 +104,8 @@ class v2AccountConverter {
      * @param v1_fb_key {String} v1 unique firebase key for account
      * @param v1Account {Object} v1 Account object
      * @param v2Reservation {Object} v2 reservation object
+     * @param is_reverseAccount {Boolean} boolean if account is for reverse data
+     * @param v2ExistAccount {Boolean} boolean if account is existing v2 Account data
      * @returns {Promise<any>}
      */
     static generateSQLObject(v1_fb_key, v1Account, v2Reservation, is_reverseAccount, v2ExistAccount) {

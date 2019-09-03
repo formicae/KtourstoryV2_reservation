@@ -71,7 +71,7 @@ function routerHandler(req, res, requestType) {
                 return accountRouter.post(req, res);
             } else {
                 log.debug('Router', 'v2Reservation', 'all task done successfully [UPDATE]. goto v2Account router');
-                return accountRouter.update(req, res);
+                return accountRouter.delete(req, res);
             }
         });
 }

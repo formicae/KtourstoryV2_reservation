@@ -2,6 +2,7 @@ const sqlDB = require('../auth/postgresql');
 const elasticDB = require('../auth/elastic');
 const validation = require('./validation');
 const ACCOUNT_KEY_MAP = validation.ACCOUNT_KEY_MAP;
+const TIME_OFFSET_MAP = validation.TIME_OFFSET_MAP;
 const log = require('../../log');
 
 class Account {
@@ -68,11 +69,18 @@ class Account {
             },
             operation : data.operationData
         };
-        if (!!result.memo) {
+        if (!!data.account_memo) {
             result.memo_history.push({
                 writer : result.writer,
                 memo : result.memo,
                 date : result.created_date
+            })
+        }
+        if (!!data.prev_memo) {
+            result.memo_history.push({
+                writer : data.prev_writer,
+                memo : data.prev_memo,
+                date : data.prev_created_date
             })
         }
         return result;
@@ -81,6 +89,15 @@ class Account {
     static getGlobalDate() {
         // return new Date().toISOString().slice(0,-2);
         return new Date(new Date() - ((validation.TIME_OFFSET_MAP['UTC+9']) * 60000)).toISOString().slice(0,-2);
+    }
+
+    static getTimeOffset(utc) {
+        return TIME_OFFSET_MAP[utc.toUpperCase()];
+    }
+
+    static getLocalDate(date, utc) {
+        if (typeof date === 'string') return new Date(new Date(date) - (Number(this.getTimeOffset(utc)) * 60000)).toISOString().slice(0,-2);
+        return new Date(date - (Number(this.getTimeOffset(utc)) * 60000)).toISOString().slice(0,-2);
     }
 
     static moneyPreprocess(money) {
@@ -119,13 +136,20 @@ class Account {
      * @returns {*}
      */
     static reverseAccountDataProcessing(prev_account, data) {
+        prev_account.prev_writer = prev_account.writer;
+        prev_account.prev_created_date = this.getLocalDate(prev_account.created_date, data.timezone || 'UTC+9');
+        prev_account.prev_memo = prev_account.memo;
         prev_account.date = data.date;
         prev_account.agency = data.agency;
         if (!!data.category) prev_account.category =  data.category;
         if (!!data.sub_category) prev_account.sub_category = data.sub_category;
+        if (!!data.contents) prev_account.contents = data.contents + ` / ${prev_account.id} 의 수정회계`;
+        else prev_account.contents = `${prev_account.id} 의 수정회계`;
+        if (!!data.card_number) prev_account.card_number = data.card_number;
+        if (!!data.cash) prev_account.cash = data.cash;
         if (!!data.nationality)prev_account.nationality = data.nationality;
         if (!!data.writer) prev_account.writer = data.writer;
-        if (!!data.memo) prev_account.account_memo = data.account_memo;
+        if (!!data.account_memo) prev_account.account_memo = data.account_memo += ` / reverseAccount 인 ${prev_account.id} 의 정보 : [category : ${prev_account.category}], [sub_category : ${prev_account.sub_category}], [contents : ${prev_account.contents}]`;
         prev_account.productData = {
             category : data.category || prev_account.category,
             currency : prev_account.currency,
@@ -137,7 +161,6 @@ class Account {
         };
         prev_account.created_date = Account.getGlobalDate();
         prev_account.cash = data.cash;
-        if (prev_account.memo !== data.account_memo) prev_account.memo += ` / previous account memo : ${prev_account.memo} \n`;
         return prev_account;
     }
 
@@ -150,7 +173,7 @@ class Account {
      */
     static processReverseAccount(data, testObj) {
         if (testObj.isTest && testObj.fail && testObj.target === 'account' && testObj.detail.processReverseAccount) return Promise.resolve(false);
-        const queryColumns = 'account.id, account.writer, category, sub_category, contents, currency, income, expenditure, cash, account.memo, reservation_id';
+        const queryColumns = 'account.id, account.writer, category, sub_category, contents, currency, income, expenditure, cash, account.memo, reservation_id, account.created_date';
         const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
@@ -168,8 +191,6 @@ class Account {
                     const tempAccount = new Account(Account.reverseAccountDataProcessing(existSQLAccount, data));
                     tempAccount.sqlData = Account.reverseMoneyProcess(tempAccount.sqlData);
                     tempAccount.elasticData = Account.reverseMoneyProcess(tempAccount.elasticData);
-                    tempAccount.memo += ` / reverseAccount 인 ${existSQLAccount.id} 의 정보 : [category : ${existSQLAccount.category}], [sub_category : ${existSQLAccount.sub_category}], [contents : ${existSQLAccount.contents}]`;
-                    tempAccount.contents = `${existSQLAccount.id} 의 수정회계`;
                     if (tempAccount.id) delete tempAccount.id;
                     log.debug('Model', 'processReverseAccount', 'reverse Account process success!');
                     return tempAccount;
