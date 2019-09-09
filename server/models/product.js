@@ -300,24 +300,26 @@ class Product {
  */
 function productMapProcessing(productMap, ignoreSet, product) {
     let areaCategoryAlias = product.area + '_' + product.category + '_' + product.alias;
-    if (!ignoreSet.has(product.name) && !ignoreSet.has(product.alias)) {
-        productMap.set(product.alias, product);
-        productMap.set(areaCategoryAlias, product);
-        productMap.set(product.name, product);
-        productMap.set(product.id, product);
-        if (!!product.incoming) {
-            product.incoming.forEach(incoming => {
-                if (!ignoreSet.has(incoming)) productMap.set(incoming, product);
-            })
-        }
-        if (!!product.options) {
-            product.options.forEach(option => {
-                if (!!option.incoming) {
-                    option.incoming.forEach(incoming => {
-                        if (!ignoreSet.has(incoming)) { productMap.set(incoming, product) }
-                    });
-                }
-            });
+    if (product.category !== 'test') {
+        if (!ignoreSet.has(product.name) && !ignoreSet.has(product.alias)) {
+            productMap.set(product.alias, product);
+            productMap.set(areaCategoryAlias, product);
+            productMap.set(product.name, product);
+            productMap.set(product.id, product);
+            if (!!product.incoming) {
+                product.incoming.forEach(incoming => {
+                    if (!ignoreSet.has(incoming)) productMap.set(incoming, product);
+                })
+            }
+            if (!!product.options) {
+                product.options.forEach(option => {
+                    if (!!option.incoming) {
+                        option.incoming.forEach(incoming => {
+                            if (!ignoreSet.has(incoming)) { productMap.set(incoming, product) }
+                        });
+                    }
+                });
+            }
         }
     }
     return productMap;
@@ -448,6 +450,6 @@ function testOperationDateCheck(){
             console.log('final result : ',result)
         });
 }
-
+// Product.getProduct('Seoul_Regular_남쁘아').then(result=>console.log(result));
 monitorProduct();
 module.exports = Product;

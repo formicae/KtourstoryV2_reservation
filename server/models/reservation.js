@@ -815,7 +815,7 @@ function reservationQueryProcessing(object, type) {
 //     console.log(JSON.stringify(snapshot.val()))
 // })
 const Product = require('./product');
-const fbData = require('../models/validationTestFile/v2FbTestReservation.json');
+// const fbData = require('../models/validationTestFile/v2FbTestReservation.json');
 async function validationTestFileCreate(fbData) {
     let result = {};
     for (let temp of Object.entries(fbData)) {
@@ -839,7 +839,7 @@ async function validationTestFileCreate(fbData) {
     console.log(JSON.stringify(result));
 }
 // validationTestFileCreate(fbData)
-const elasticData = require('../models/validationTestFile/v2ElasticTestReservation.json');
+// const elasticData = require('../models/validationTestFile/v2ElasticTestReservation.json');
 async function valDataInsertElastic(elasticData) {
     for (let data of Object.values(elasticData)) {
         await Reservation.insertElastic(data, {});
