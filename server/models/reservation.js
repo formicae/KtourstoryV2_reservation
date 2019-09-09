@@ -62,8 +62,9 @@ class Reservation {
             email : data.email || '',
             messenger : data.messenger || '',
             guide_memo : data.guide_memo || '',
+            guide_memo_history : [],
             operation_memo : data.operation_memo || '',
-            memo_history : [],
+            operation_memo_history : [],
             canceled : data.canceled || false,
             modified_date : currentDate,
             timezone : data.timezone || 'UTC+9',
@@ -74,13 +75,23 @@ class Reservation {
         if (!!data.operation_memo) {
             if (data.operation_memo.match('중국어')) result.language = 'CHINESE';
         }
+        if (!!data.guide_memo) {
+            if (data.guide_memo.match('중국어')) result.language = 'CHINESE';
+        }
         if (data.requestType === 'POST') {result.created_date = currentDate } 
         else { result.created_date = data.reservation_created_date }
         if (data.memo_history) {result.memo_history = data.memo_history;}
         if (!!result.operation_memo) {
-            result.memo_history.push({
+            result.operation_memo_history.push({
                 writer : result.writer,
                 memo : result.operation_memo,
+                date : result.created_date
+            })
+        }
+        if (!!result.guide_memo) {
+            result.guide_memo_history.push({
+                writer : result.writer,
+                memo : result.guide_memo,
                 date : result.created_date
             })
         }
@@ -800,5 +811,39 @@ function reservationQueryProcessing(object, type) {
 }
 // Reservation.searchElastic({language:'CHINESE'}).then(result => console.log(result))
 // Reservation.findFB('2019-07-09','p356', 'r38464').then(result => console.log('result : ',result))
-
+// fbDB.ref('operation').child('2018-05-15').once('value', snapshot => {
+//     console.log(JSON.stringify(snapshot.val()))
+// })
+const Product = require('./product');
+const fbData = require('../models/validationTestFile/v2FbTestReservation.json');
+async function validationTestFileCreate(fbData) {
+    let result = {};
+    for (let temp of Object.entries(fbData)) {
+        let date = temp[0];
+        let data = temp[1];
+        for (let temp0 of Object.entries(data)) {
+            let product = temp0[0];
+            for (let temp1 of Object.entries(temp0[1].teams)) {
+                let teamId = temp1[0];
+                for (let reservation of Object.values(temp1[1].reservations)) {
+                    let productData = await Product.getProduct(product);
+                    reservation.productData = productData;
+                    reservation.reservation_id = reservation.id;
+                    reservation.date = date;
+                    reservation.team_id = teamId;
+                    result[reservation.id] = await Reservation.generateElasticObject(reservation, '2019-09-09');
+                }
+            }
+        }
+    }
+    console.log(JSON.stringify(result));
+}
+// validationTestFileCreate(fbData)
+const elasticData = require('../models/validationTestFile/v2ElasticTestReservation.json');
+async function valDataInsertElastic(elasticData) {
+    for (let data of Object.values(elasticData)) {
+        await Reservation.insertElastic(data, {});
+    }
+}
+// valDataInsertElastic(elasticData);
 module.exports = Reservation;

@@ -55,6 +55,7 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리']
 ]);
 let productMap = new Map();
+const elasticDB = require('../auth/elastic');
 
 class Product {
     constructor(data) {
@@ -269,6 +270,23 @@ class Product {
         else return 0;
     }
 
+    static insertElastic(product) {
+        return new Promise((resolve, reject)=> {
+            elasticDB.create({
+                index : 'product',
+                type : '_doc',
+                id : product.id,
+                body: product
+            },(err, resp) => {
+                if (err) {
+                    console.log('error : ', JSON.stringify(err))
+                    resolve(false);
+                } else {
+                    resolve(true);
+                }
+            });
+        });
+    }
 
 }
 

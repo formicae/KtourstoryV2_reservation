@@ -181,8 +181,8 @@ class v2ReservationConverter {
                                 phone: v1Reservation.tel || '',
                                 email: v1Reservation.email || '',
                                 messenger: v1Reservation.messenger || '',
-                                guide_memo : '',
-                                operation_memo: v1Reservation.memo || '',
+                                guide_memo : v1Reservation.memo || '',
+                                operation_memo: '',
                                 o: v1Reservation.oCheck || false,
                                 g: v1Reservation.gCheck || v1Reservation.oChekc || false,
                             };
@@ -249,9 +249,10 @@ class v2ReservationConverter {
                 phone: v1Reservation.tel || '',
                 email: v1Reservation.email || '',
                 messenger: v1Reservation.messenger || '',
-                guide_memo : '',
-                operation_memo: v1Reservation.memo || '',
-                memo_history : [],
+                guide_memo : v1Reservation.memo || '',
+                guide_memo_history : [],
+                operation_memo: '',
+                operation_memo_history : [],
                 canceled: v2SQLData.canceled,
                 created_date: v2SQLData.created_date,
                 modified_date: v2SQLData.modified_date,
@@ -260,8 +261,8 @@ class v2ReservationConverter {
                 star : false,
                 team_id : team_id
             };
-            if (!!result.operation_memo) {
-                result.memo_history.push({
+            if (!!result.guide_memo) {
+                result.guide_memo_history.push({
                     writer : result.writer,
                     memo : result.operation_memo,
                     date : v2SQLData.created_date
@@ -296,8 +297,10 @@ class v2ReservationConverter {
                 phone: v2ElasticReservation.phone,
                 email: v2ElasticReservation.email,
                 messenger: v2ElasticReservation.messenger,
-                operation_memo: v2ElasticReservation.operation_memo,
-                memo_history: [],
+                guide_memo : v2ElasticReservation.operation_memo,
+                guide_memo_history : [],
+                operation_memo: '',
+                operation_memo_history: [],
                 canceled: v2SQLData.canceled,
                 created_date: v2SQLData.created_date,
                 modified_date: v2SQLData.modified_date,
@@ -306,8 +309,8 @@ class v2ReservationConverter {
                 star: false,
                 team_id : team_id
             };
-            if (!!result.operation_memo) {
-                result.memo_history.push({
+            if (!!result.guide_memo) {
+                result.guide_memo_history.push({
                     writer : result.writer,
                     memo : result.operation_memo,
                     date : v2SQLData.created_date
@@ -745,6 +748,8 @@ class v2ReservationConverter {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 4 && Number(dateArr[1]) <= 6) result[date] = v1Operation;
             } else if (month === '~6') {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 6) result[date] = v1Operation;
+            } else if (month === '6~8') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 6 && Number(dateArr[1]) <= 8) result[date] = v1Operation;
             } else if (month === '7~9') {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 7 && Number(dateArr[1]) <= 9) result[date] = v1Operation;
             } else if (month === '7~') {
@@ -758,7 +763,7 @@ class v2ReservationConverter {
         return new Promise((resolve, reject) => {
             fs.writeFile(path, JSON.stringify(result), err => {
                 if (err) resolve(console.log('error in file write : ',JSON.stringify(err)));
-                resolve(console.log('done'));
+                resolve(console.log('operationDataExtractByMonth : done'));
             });
         })
     }
@@ -792,23 +797,26 @@ function reservationQueryProcessing(object) {
     return result.slice(0,-5);
 }
 
-function deleteFirebaseData(){
+function deleteFirebaseData(year, month){
+    let tempMonth, tempDay;
     for (let day=1; day<=31; day++) {
-        let date = '2019-07-' + day;
-        if (day < 10) date = '2019-07-0' + day;
+        if (month < 10) tempMonth = '0' + month;
+        else tempMonth = String(month);
+        if (day < 10) tempDay = '0' + day;
+        else tempDay = String(day);
+        let date = year + '-' + tempMonth + '-' + tempDay;
         fbDB.ref('operation').child(date).remove(err => {
-            if (err) console.log('error : ',JSON.stringify(err));
-            else console.log('success');
+            if (err) console.log('error : ',date, JSON.stringify(err));
+            else console.log(`${date} delete from firebase success`);
         })
     }
 }
 
 const v1OperationBulkData = require('../dataFiles/intranet-64851-operation-export.json');
-const v1Operation_2019_July = require('../dataFiles/v1OperationData_2019_July.json');
-const v1Operation_2019_October = require('../dataFiles/v1OperationData_2019_October.json');
-// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, 8, 'server/models/dataFiles/v1OperationData_2019_October.json');
-let result = v2ReservationConverter.mainConverter(v1Operation_2019_July);
-// deleteFirebaseData()
+const v1Operation_2019_JuneToOct = require('../dataFiles/v1OperationData_2019_JuneToOct.json');
+// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '6~8', 'server/models/dataFiles/v1OperationData_2019_JuneToOct.json');
+// let result = v2ReservationConverter.mainConverter(v1Operation_2019_JuneToOct);
+// deleteFirebaseData(2019,7);
 // v2ReservationConverter.convertElasticToFile(require('../dataFiles/v1OperationData_2019_July'), 'server/models/tempDataFiles/v2ConvertedElasticData.json')
 //     .then(result => console.log('result : ',result));
 // v2ReservationConverter.findV2ReservationInElastic('r13777').then(result => console.log(result));

@@ -71,7 +71,7 @@ function accountHandler(req, res, requestType) {
                 task.validation = true;
                 return Account.processReverseAccount(data, testObj)})
             .then(account => {
-                console.log('after processReverseAccount, testObj : ',JSON.stringify(testObj));
+                // console.log('after processReverseAccount, testObj : ',JSON.stringify(testObj));
                 if (!account) return false;
                 reverseAccount = account;
                 task.processReverseAccount = true;

@@ -23,7 +23,6 @@ class Account {
             income : Account.moneyPreprocess(data.productData.income),
             expenditure : Account.moneyPreprocess(data.productData.expenditure),
             cash : data.cash,
-            memo : data.account_memo || '',
             created_date : currentDate,
             reservation_id : data.reservation_id,
             card_number : data.card_number || '',
@@ -69,14 +68,14 @@ class Account {
             },
             operation : data.operationData
         };
-        if (!!data.account_memo) {
+        if (data.hasOwnProperty('account_memo')) {
             result.memo_history.push({
                 writer : result.writer,
                 memo : result.memo,
                 date : result.created_date
             })
         }
-        if (!!data.prev_memo) {
+        if (data.hasOwnProperty('prev_memo')) {
             result.memo_history.push({
                 writer : data.prev_writer,
                 memo : data.prev_memo,
@@ -138,18 +137,19 @@ class Account {
     static reverseAccountDataProcessing(prev_account, data) {
         prev_account.prev_writer = prev_account.writer;
         prev_account.prev_created_date = this.getLocalDate(prev_account.created_date, data.timezone || 'UTC+9');
-        prev_account.prev_memo = prev_account.memo;
         prev_account.date = data.date;
         prev_account.agency = data.agency;
-        if (!!data.category) prev_account.category =  data.category;
-        if (!!data.sub_category) prev_account.sub_category = data.sub_category;
-        if (!!data.contents) prev_account.contents = data.contents + ` / ${prev_account.id} 의 수정회계`;
-        else prev_account.contents = `${prev_account.id} 의 수정회계`;
         if (!!data.card_number) prev_account.card_number = data.card_number;
         if (!!data.cash) prev_account.cash = data.cash;
         if (!!data.nationality)prev_account.nationality = data.nationality;
         if (!!data.writer) prev_account.writer = data.writer;
+        if (!!prev_account.memo) prev_account.prev_memo = prev_account.memo;
         if (!!data.account_memo) prev_account.account_memo = data.account_memo += ` / reverseAccount 인 ${prev_account.id} 의 정보 : [category : ${prev_account.category}], [sub_category : ${prev_account.sub_category}], [contents : ${prev_account.contents}]`;
+        else prev_account.account_memo = `reverseAccount 인 ${prev_account.id} 의 정보 : [category : ${prev_account.category}], [sub_category : ${prev_account.sub_category}], [contents : ${prev_account.contents}]`;
+        if (!!data.category) prev_account.category =  data.category;
+        if (!!data.sub_category) prev_account.sub_category = data.sub_category;
+        if (!!data.contents) prev_account.contents = data.contents + ` / ${prev_account.id} 의 수정회계`;
+        else prev_account.contents = `${prev_account.id} 의 수정회계`;
         prev_account.productData = {
             category : data.category || prev_account.category,
             currency : prev_account.currency,
@@ -173,7 +173,7 @@ class Account {
      */
     static processReverseAccount(data, testObj) {
         if (testObj.isTest && testObj.fail && testObj.target === 'account' && testObj.detail.processReverseAccount) return Promise.resolve(false);
-        const queryColumns = 'account.id, account.writer, category, sub_category, contents, currency, income, expenditure, cash, account.memo, reservation_id, account.created_date';
+        const queryColumns = 'account.id, account.writer, category, sub_category, contents, currency, income, expenditure, cash, reservation_id, account.created_date';
         const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {

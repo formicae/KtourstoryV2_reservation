@@ -120,12 +120,10 @@ class v2AccountConverter {
             income: 0,
             expenditure: 0,
             cash: false,
-            memo: v1Account.detail,
             created_date: Product.getLocalDate(v1Account.detail.split(' ')[1].split('\n')[0], 'UTC+9') || v1Account.date,
             reservation_id: null
         };
         if (is_reverseAccount) {
-            result.memo += ` / reverseAccount 인 ${v2ExistAccount.id} 의 정보 : [category : ${v2ExistAccount.category}], [sub_category : ${v2ExistAccount.sub_category}], [contents : ${v2ExistAccount.contents}]`;
             result.contents = `${v2ExistAccount.id} 의 수정회계`;
         }
         if (v1Account.hasOwnProperty('cash') && v1Account.cash !== 0) {
@@ -157,12 +155,15 @@ class v2AccountConverter {
 
     /**
      * generate v2 Elastic object when category is reservation
+     * @param v1Account {Object} v1 Account object
      * @param v2SqlAccount {Object} v2 postgreSQL account object
      * @param v2Reservation {Object} v2 reservation object
      * @param v1FbTeamData {Object} v1 firebase Team information
+     * @param is_reverseAccount {Boolean} boolean for reverse account
+     * @param v2ExistAccount {Object} SQL exist v2 Account object
      * @returns {Promise<{date: (Date|boolean|*|string), income: (number|*|boolean), expenditure: (number|*|boolean), card_number: string, star: boolean, sub_category: string, memo: *, memo_history: Array, contents: string, reservation: {total: *, product: {area: *, name: *, alias: *, category: *}, agency: *, nationality: string, agency_code: (string|boolean), kid: *, options: *, tour_date: (Date|boolean|*|string), id: *, adult: *, infant: *}, currency: *, id: *, writer: *, created_date: *, category: (*|string), cash: (boolean|cash|{income, expenditure}|*), operation: {guide_message: *, teamId: (*|String), memo: string, guide: string, operator_message: *}} | never>}
      */
-    static generateElasticObject(v2SqlAccount, v2Reservation, v1FbTeamData) {
+    static generateElasticObject(v1Account, v2SqlAccount, v2Reservation, v1FbTeamData, is_reverseAccount, v2ExistAccount) {
         return v2AccountConverter.findProductWithAccount(v2SqlAccount.id)
             .then((product => {
                 const result = {
@@ -176,7 +177,7 @@ class v2AccountConverter {
                     income: v2SqlAccount.income,
                     expenditure: v2SqlAccount.expenditure,
                     cash: v2SqlAccount.cash,
-                    memo: v2SqlAccount.memo,
+                    memo: v1Account.detail,
                     memo_history : [],
                     card_number : '',
                     created_date: v2SqlAccount.created_date,
@@ -207,6 +208,7 @@ class v2AccountConverter {
                         memo : ''
                     }
                 };
+                if (is_reverseAccount) result.memo += ` / reverseAccount 인 ${v2ExistAccount.id} 의 정보 : [category : ${v2ExistAccount.category}], [sub_category : ${v2ExistAccount.sub_category}], [contents : ${v2ExistAccount.contents}]`;
                 if (v1FbTeamData.hasOwnProperty('memo')) {
                     Object.entries(v1FbTeamData.memo).forEach(temp => {
                         let guide = temp[0];
@@ -398,7 +400,7 @@ class v2AccountConverter {
             let teamData = v1FbTeamBulkData[team_id];
             if (!teamData) console.log('no team id : ',v1_fb_key, v2SqlAccount, obj.teamId_history);
             teamData.team_id = team_id;
-            v2ElasticAccount = await this.generateElasticObject(v2SqlAccount, v2Reservation, teamData);
+            v2ElasticAccount = await this.generateElasticObject(v1Account, v2SqlAccount, v2Reservation, teamData, is_reverseAccount, v2ExistAccount);
             let insertElasticResult = await Account.insertElastic(v2ElasticAccount, {});
             if (!insertElasticResult) return false;
             await setTimeout(()=>{},25);
@@ -540,12 +542,12 @@ class v2AccountConverter {
             }
             if (!!v2ExistReservation) {
                 if (!!v2ExistReservation.id) {
-                    v2FbReservation.operation_memo +=  ` / ${v2ExistReservation.id} 의 수정예약`;
+                    v2FbReservation.guide_memo +=  ` / ${v2ExistReservation.id} 의 수정예약`;
                     is_operation_memo_update = true;
                 }
             } else if (!!v2ExistElasticReservation) {
                 if (!!v2ExistElasticReservation.id) {
-                    v2FbReservation.operation_memo +=  ` / ${v2ExistElasticReservation.id} 의 수정예약`;
+                    v2FbReservation.guide_memo +=  ` / ${v2ExistElasticReservation.id} 의 수정예약`;
                     is_operation_memo_update = true;
                 }
             }
@@ -553,14 +555,14 @@ class v2AccountConverter {
             if (!insertFbResult) return false;
             let v2ElasticReservation = await v2ReservationConverter.elasticDataMatch(null, v2Product, team_id, v2SQLReservation, v2ExistElasticReservation);
             if (is_operation_memo_update) {
-                v2ElasticReservation.operation_memo = v2FbReservation.operation_memo;
-                if (v2ElasticReservation.memo_history.length === 0) {
-                    v2ElasticReservation.memo_history.push({
+                v2ElasticReservation.guide_memo = v2FbReservation.guide_memo;
+                if (v2ElasticReservation.guide_memo_history.length === 0) {
+                    v2ElasticReservation.guide_memo_history.push({
                         writer: v2ElasticReservation.writer,
-                        memo: v2ElasticReservation.operation_memo,
+                        memo: v2ElasticReservation.guide_memo,
                         date: v2ElasticReservation.created_date
                     });
-                } else {v2ElasticReservation.memo_history[0].memo += ` / ${v2ExistReservation.id} 의 수정예약`;}
+                } else {v2ElasticReservation.guide_memo_history[0].memo += ` / ${v2ExistReservation.id} 의 수정예약`;}
             }
             let insertElasticResult = await Reservation.insertElastic(v2ElasticReservation, {});
             if (!insertElasticResult) return false;
@@ -573,25 +575,25 @@ class v2AccountConverter {
             v2FbReservation = await v2ReservationConverter.generateSimpleFbData(v1CanceledData, v2SQLReservation, null);
             if (!!v2ExistReservation) {
                 if (!!v2ExistReservation.id) {
-                    v2FbReservation.operation_memo +=  ` / ${v2ExistReservation.id} 의 수정예약`;
+                    v2FbReservation.guide_memo +=  ` / ${v2ExistReservation.id} 의 수정예약`;
                     is_operation_memo_update = true
                 }
             } else if (v2ExistElasticReservationArr.length > 0) {
-                v2FbReservation.operation_memo +=  ` / ${v2ExistElasticReservationArr[0].id} 의 수정예약`;
+                v2FbReservation.guide_memo +=  ` / ${v2ExistElasticReservationArr[0].id} 의 수정예약`;
                 is_operation_memo_update = true;
             }
             let insertFbResult = await this.reservationFBInsert(v1CanceledData.date, v2Product.id, team_id, v2FbReservation);
             if (!insertFbResult) return false;
             let v2ElasticReservation = await v2ReservationConverter.elasticDataMatch(v1CanceledData, v2Product, v1CanceledData.team, v2SQLReservation, null);
             if (is_operation_memo_update) {
-                v2ElasticReservation.operation_memo = v2FbReservation.operation_memo;
-                if (v2ElasticReservation.memo_history.length === 0) {
-                    v2ElasticReservation.memo_history.push({
+                v2ElasticReservation.guide_memo = v2FbReservation.guide_memo;
+                if (v2ElasticReservation.guide_memo_history.length === 0) {
+                    v2ElasticReservation.guide_memo_history.push({
                         writer: v2ElasticReservation.writer,
-                        memo: v2ElasticReservation.operation_memo,
+                        memo: v2ElasticReservation.guide_memo,
                         date: v2ElasticReservation.created_date
                     });
-                } else {v2ElasticReservation.memo_history[0].memo += ` / ${v2ExistReservation.id} 의 수정예약`;}
+                } else {v2ElasticReservation.guide_memo_history[0].memo += ` / ${v2ExistReservation.id} 의 수정예약`;}
             }
             let insertElasticResult = await Reservation.insertElastic(v2ElasticReservation, {});
             if (!insertElasticResult) return false;
@@ -1021,6 +1023,8 @@ class v2AccountConverter {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 4 && Number(dateArr[1]) <= 6) result = this.dataStore(result, v1Account, date, v1_fb_key);
             } else if (month === '~6') {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 6) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '6~8') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 6 && Number(dateArr[1]) <= 8) result = this.dataStore(result, v1Account, date, v1_fb_key);;
             } else if (month === '7~9') {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 7 && Number(dateArr[1]) <= 9) result = this.dataStore(result, v1Account, date, v1_fb_key);
             } else if (month === '7~') {
@@ -1318,15 +1322,15 @@ const testCase = {
 };
 
 const v1AccountBulkData = require('../dataFiles/intranet-64851-account-export.json');
-const v1Account_2019_July = require('../dataFiles/v1AccountData_2019_July.json');
-// const v1Account_2019_October = require('../dataFiles/v1AccountData_2019_October.json');
+// const v1Account_2019_JuneToOct = require('../dataFiles/v1AccountData_2019_JuneToOct.json');
+const temp_v1Account_due_to_error_2019_JuneToOct = require('../dataFiles/temp_v1AccountData_2019_JuneToOct.json');
 const v1CanceledBulkDataData = require('../dataFiles/intranet-64851-canceled-export.json');
 const v1FbTeamBulkData = require('../dataFiles/v1FbTeamBulkData_noDate.json');
 
-// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, 8, 'server/models/dataFiles/v1AccountData_2019_October.json').then(result => console.log('result : ', result));
+// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, '6~8', 'server/models/dataFiles/v1AccountData_2019_JuneToOct.json').then(result => console.log('result : ', result));
 // v2AccountConverter.reservationCancelSQLandELASTICandFB({tour_date: '2019-07-15',product_id:'p360',id:'r32623'}).then(result=>console.log(result));
 // v2AccountConverterTest(testCase, v1CanceledBulkDataData);
-v2AccountConverter.mainConverter(v1Account_2019_July, v1CanceledBulkDataData, v1FbTeamBulkData);
+v2AccountConverter.mainConverter(temp_v1Account_due_to_error_2019_JuneToOct, v1CanceledBulkDataData, v1FbTeamBulkData);
 // v2AccountConverter.mainConverter({'2019-07-19' : {
 //         "-LjmkzfaD75Fr2-EfEAP": {
 //             "card": 280000,
