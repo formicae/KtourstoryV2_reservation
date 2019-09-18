@@ -101,6 +101,7 @@ function accountHandler(req, res, requestType) {
             }
         }).then(productData => {
             data.productData = productData;
+            if (!data.hasOwnProperty('cash')) data.cash = false;
             const account = new Account(data);
             const task = {validation : false, insertSQL : false, insertElastic: false};
             return Account.validation(account)

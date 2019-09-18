@@ -15,7 +15,7 @@ const ACCOUNT_VALID_CHECK_LIST_MAP = {
     'currency' : true,
     'income' : true,
     'expenditure' : true,
-    'cash' : true,
+    'cash' : false,
     'created_date' : true,
     'reservation_id' : false,
     'totalMoneyCheck' : true,
