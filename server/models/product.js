@@ -224,7 +224,7 @@ class Product {
                 productData.sales.forEach(item => { if (item.default) {
                     result = {
                         id : product.id,
-                        name : item.name,
+                        name : product.name,
                         alias : product.alias,
                         category : product.category,
                         area : product.area,

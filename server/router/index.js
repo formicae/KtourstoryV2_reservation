@@ -6,7 +6,7 @@ const env = require('../../package.json').env;
 const log = require('../../log');
 
 api.post('/reservation', reservationRouter.post);
-api.put('/reservation', reservationRouter.update);
+api.delete('/reservation', reservationRouter.delete);
 api.post('/account', accountRouter.post);
 api.delete('/account', accountRouter.delete);
 if (!env.released) {

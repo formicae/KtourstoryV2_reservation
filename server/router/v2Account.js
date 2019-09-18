@@ -1,5 +1,6 @@
 const sqlDB = require('../auth/postgresql');
 const Account = require('../models/account');
+const Product = require('../models/product');
 const log = require('../../log');
 const env = require('../../package.json').env;
 sqlDB.connect();
@@ -57,85 +58,90 @@ function accountHandler(req, res, requestType) {
     if (req.body.hasOwnProperty('testObj')) testObj = req.body.testObj;
     else testObj = testManager(req, env);
     data.accountResult = false;
-    const account = new Account(data);
     if (requestType === 'REVERSE_CREATE') {
         let reverseAccount;
-        const task = {validation : false, processReverseAccount:false, insertSQL : false, insertElastic: false};
-        return Account.validation(account)
-            .then(validCheck => {
-                if (!validCheck.result) {
-                    log.warn('Router', 'accountHandler', `ValidDataCheck failed [Account - ${requestType}], [${data.reservation_id}]`);
-                    task.validationDetail = validCheck.detail;
-                    return false;
-                }
-                task.validation = true;
-                return Account.processReverseAccount(data, testObj)})
-            .then(account => {
-                // console.log('after processReverseAccount, testObj : ',JSON.stringify(testObj));
-                if (!account) return false;
-                reverseAccount = account;
-                task.processReverseAccount = true;
-                return Account.insertSQL(reverseAccount.sqlData, testObj)})
-            .then(result => {
-                if (!result) return false;
-                task.insertSQL = true;
-                reverseAccount.sqlData.id = result.id;
-                reverseAccount.elasticData.id = result.id;
-                return Account.insertElastic(reverseAccount.elasticData, testObj)})
-            .then(result => {
-                data.accountTask = task;
-                if (!result && !task.reverseDataProcess) { return failureManager(account, data, task, requestType, testObj).then(failureTask => {
-                    data.accountTask = failureTask;
-                    return data;})}
-                else if (!result) { return failureManager(reverseAccount.sqlData, data, task, requestType, testObj).then(failureTask => {
-                    data.accountTask = failureTask;
-                    return data;
-                });}
-                data.accountTask.insertElastic = true;
-                data.accountResult = true;
-                log.debug('Router','accountHandler [UPDATE]', 'all process success!');
-                return data });
+        const task = {processReverseAccount:false, insertSQL : false, insertElastic: false};
+        return new Promise((resolve, reject) => {
+            if (!data.account_id) {resolve(Account.getAccountId(data.reservation_id))}
+            else { resolve(data.account_id)}
+        }).then(account_id => {
+            data.account_id = account_id;
+            return Account.processReverseAccount(account_id, testObj)})
+        .then(account => {
+            // console.log('after processReverseAccount, testObj : ',JSON.stringify(testObj));
+            if (!account) return false;
+            reverseAccount = account;
+            task.processReverseAccount = true;
+            return Account.insertSQL(reverseAccount.sqlData, testObj)})
+        .then(result => {
+            if (!result) return false;
+            task.insertSQL = true;
+            reverseAccount.sqlData.id = result.id;
+            reverseAccount.elasticData.id = result.id;
+            return Account.insertElastic(reverseAccount.elasticData, testObj)})
+        .then(result => {
+            data.accountTask = task;
+            if (!result) { return failureManager(reverseAccount.sqlData, task, requestType, testObj).then(failureTask => {
+                data.accountTask = failureTask;
+                return data;
+            });}
+            data.accountTask.insertElastic = true;
+            data.accountResult = true;
+            log.debug('Router','accountHandler [REVERSE_CREATE]', 'all process success!');
+            return data });
     } else if (requestType === 'POST') {
-        const task = {validation : false, insertSQL : false, insertElastic: false};
-        return Account.validation(account)
-            .then(validCheck => {
-                if (!validCheck.result) {
-                    log.warn('Router', 'accountHandler', `ValidDataCheck failed [Account - ${requestType}], [${data.reservation_id}]`);
-                    task.validationDetail = validCheck.detail;
-                    return false;
-                }
-                task.validation = true;
-                return Account.insertSQL(account.sqlData, testObj)})
-            .then(result => {
-                if (!result) return false;
-                task.insertSQL = true;
-                account.sqlData.id = result.id;
-                account.elasticData.id = result.id;
-                return Account.insertElastic(account.elasticData, testObj)})
-            .then(result => {
-                data.accountTask = task;
-                if (!result) return failureManager(account.sqlData, data, task, requestType, testObj).then(failureTask => {
-                    data.accountTask = failureTask;
+        return new Promise((resolve, reject) => {
+            if (!data.hasOwnProperty('productData') && data.hasOwnProperty('product')) {
+                data.adult = data.reservation.adult;
+                data.kid = data.reservation.kid;
+                data.infant = data.reservation.infant;
+                resolve(Product.productDataExtractFromFB(data));
+            } else {
+                resolve(data.productData);
+            }
+        }).then(productData => {
+            data.productData = productData;
+            const account = new Account(data);
+            const task = {validation : false, insertSQL : false, insertElastic: false};
+            return Account.validation(account)
+                .then(validCheck => {
+                    if (!validCheck.result) {
+                        log.warn('Router', 'accountHandler', `ValidDataCheck failed [Account - ${requestType}], [${data.reservation_id}]`);
+                        task.validationDetail = validCheck.detail;
+                        return false;
+                    }
+                    task.validation = true;
+                    return Account.insertSQL(account.sqlData, testObj)})
+                .then(result => {
+                    if (!result) return false;
+                    task.insertSQL = true;
+                    account.sqlData.id = result.id;
+                    account.elasticData.id = result.id;
+                    return Account.insertElastic(account.elasticData, testObj)})
+                .then(result => {
+                    data.accountTask = task;
+                    if (!result) return failureManager(account.sqlData,task, requestType, testObj).then(failureTask => {
+                        data.accountTask = failureTask;
+                        return data;
+                    });
+                    data.accountTask.insertElastic = true;
+                    data.accountResult = true;
+                    log.debug('Router','accountHandler [CREATE]', 'all process success!');
                     return data;
                 });
-                data.accountTask.insertElastic = true;
-                data.accountResult = true;
-                log.debug('Router','accountHandler [CREATE]', 'all process success!');
-                return data;
-            });
+        })
     }
 }
 
 /**
  * failure manager when error occurred in AccountHandler.
  * @param account {Object} account object
- * @param data {Object} data object
  * @param task {Object} task from AccountHandler
  * @param type {String} POST / UPDATE
  * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
  * @returns {*}
  */
-function failureManager(account, data, task, type, testObj){
+function failureManager(account, task, type, testObj){
     log.debug('Router', 'Account - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`)
     task.insertReverseSQL = false;
     if (type === 'POST') {

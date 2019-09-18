@@ -22,12 +22,12 @@ class Account {
             currency : data.productData.currency || 'KRW',
             income : Account.moneyPreprocess(data.productData.income),
             expenditure : Account.moneyPreprocess(data.productData.expenditure),
-            cash : data.cash,
+            cash : data.cash || false,
             created_date : currentDate,
             reservation_id : data.reservation_id,
             card_number : data.card_number || '',
             sub_category: data.sub_category || '',
-            contents : data.contents || ''
+            contents : data.contents || `agency:${data.agency} agency_code:${data.agency_code}`
         };
         if (!!data.account_id) result.id = data.account_id;
         return result;
@@ -44,7 +44,7 @@ class Account {
             currency : data.productData.currency || 'KRW',
             income : data.productData.income,
             expenditure : data.productData.expenditure,
-            cash : data.cash,
+            cash : data.cash || false,
             memo : data.account_memo || '',
             memo_history : [],
             contents : data.contents || '',
@@ -54,7 +54,7 @@ class Account {
                 id : data.reservation_id,
                 agency : data.agency || '',
                 tour_date : data.date,
-                nationality : (data.nationality || 'unknown').toUpperCase(),
+                nationality : (data.nationality ||'unknown').toUpperCase(),
                 adult : data.adult,
                 kid : data.kid,
                 infant : data.infant,
@@ -68,6 +68,13 @@ class Account {
             },
             operation : data.operationData
         };
+        if (result.reservation.nationality === 'UNKNOWN') {
+            if (data.hasOwnProperty('reservation')) {
+                if (data.reservation.hasOwnProperty('nationality')){
+                    result.reservation.nationality = data.reservation.nationality.toUpperCase();
+                }
+            }
+        }
         if (data.hasOwnProperty('account_memo')) {
             result.memo_history.push({
                 writer : result.writer,
@@ -131,71 +138,55 @@ class Account {
     /**
      * process account data from productData
      * @param prev_account {Object} previous account object
-     * @param data {Object} overall data object
      * @returns {*}
      */
-    static reverseAccountDataProcessing(prev_account, data) {
-        prev_account.prev_writer = prev_account.writer;
-        prev_account.prev_created_date = this.getLocalDate(prev_account.created_date, data.timezone || 'UTC+9');
-        prev_account.date = data.date;
-        prev_account.agency = data.agency;
-        if (!!data.card_number) prev_account.card_number = data.card_number;
-        if (!!data.cash) prev_account.cash = data.cash;
-        if (!!data.nationality)prev_account.nationality = data.nationality;
-        if (!!data.writer) prev_account.writer = data.writer;
-        if (!!prev_account.memo) prev_account.prev_memo = prev_account.memo;
-        if (!!data.account_memo) prev_account.account_memo = data.account_memo += ` / reverseAccount 인 ${prev_account.id} 의 정보 : [category : ${prev_account.category}], [sub_category : ${prev_account.sub_category}], [contents : ${prev_account.contents}]`;
-        else prev_account.account_memo = `reverseAccount 인 ${prev_account.id} 의 정보 : [category : ${prev_account.category}], [sub_category : ${prev_account.sub_category}], [contents : ${prev_account.contents}]`;
-        if (!!data.category) prev_account.category =  data.category;
-        if (!!data.sub_category) prev_account.sub_category = data.sub_category;
-        if (!!data.contents) prev_account.contents = data.contents + ` / ${prev_account.id} 의 수정회계`;
+    static reverseAccountDataProcessing(prev_account) {
+        if (!!prev_account.contents) prev_account.contents += ` / ${prev_account.id} 의 수정회계`;
         else prev_account.contents = `${prev_account.id} 의 수정회계`;
-        prev_account.productData = {
-            category : data.category || prev_account.category,
-            currency : prev_account.currency,
-            income : prev_account.income,
-            expenditure : prev_account.expenditure,
-            name : data.productData.name,
-            alias : data.productData.alias,
-            area : data.productData.area
-        };
         prev_account.created_date = Account.getGlobalDate();
-        prev_account.cash = data.cash;
+        if (prev_account.id) delete prev_account.id;
         return prev_account;
     }
 
     /**
      * get account data from SQL using reservation id.
      * if multiple account data is present, oldest account will be selected.
-     * @param data {Object} raw data object
+     * @param account_id {Object} raw data object
      * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
      * @returns {Promise<any | never>}
      */
-    static processReverseAccount(data, testObj) {
+    static processReverseAccount(account_id, testObj) {
         if (testObj.isTest && testObj.fail && testObj.target === 'account' && testObj.detail.processReverseAccount) return Promise.resolve(false);
-        const queryColumns = 'account.id, account.writer, category, sub_category, contents, currency, income, expenditure, cash, reservation_id, account.created_date';
-        const query = `SELECT ${queryColumns} FROM reservation, account WHERE reservation.id = account.reservation_id AND reservation.id = '${data.previous_reservation_id}'`;
+        const query = `SELECT * FROM account WHERE id='${account_id}'`;
+        let reverseSQLAccount;
+        let reverseElasticAccount;
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
                 if (err) {
                     log.warn('Model', 'processReverseAccount', `query from Account failed : ${query}`);
-                    return false;
-                }
-                log.debug('Model','processReverseAccount',`query from Account success! target reservation id : ${data.previous_reservation_id}`);
-                resolve(result.rows[0])})})
+                    resolve(false);
+                } else {
+                    log.debug('Model','processReverseAccount',`query from Account success! target account id : ${account_id}`);
+                    resolve(result.rows[0])
+                }})})
             .then(existSQLAccount => {
                 if (!existSQLAccount) {
                     log.warn('Model', 'processReverseAccount', `Account load from SQL failed`);
                     return false;
                 } else {
-                    const tempAccount = new Account(Account.reverseAccountDataProcessing(existSQLAccount, data));
-                    tempAccount.sqlData = Account.reverseMoneyProcess(tempAccount.sqlData);
-                    tempAccount.elasticData = Account.reverseMoneyProcess(tempAccount.elasticData);
-                    if (tempAccount.id) delete tempAccount.id;
-                    log.debug('Model', 'processReverseAccount', 'reverse Account process success!');
-                    return tempAccount;
+                    const prev_account_id = existSQLAccount.id;
+                    reverseSQLAccount = Account.reverseMoneyProcess(Account.reverseAccountDataProcessing(JSON.parse(JSON.stringify(existSQLAccount))));
+                    return this.getElastic({id : prev_account_id});
+                }})
+            .then(existElasticAccount => {
+                if (!existElasticAccount) {
+                    log.warn('Model', 'processReverseAccount', `Account load from Elastic failed`);
+                    return false;
+                } else {
+                    reverseElasticAccount = Account.reverseMoneyProcess(Account.reverseAccountDataProcessing(JSON.parse(JSON.stringify(existElasticAccount[account_id]))));
+                    return {sqlData : reverseSQLAccount, elasticData : reverseElasticAccount};
                 }
-            });
+            })
     };
 
     /**
@@ -219,6 +210,18 @@ class Account {
                 resolve(result.rows[0]);
             });
         });
+    }
+
+    static getAccountId(reservation_id) {
+        const query = `SELECT id FROM account where reservation_id = '${reservation_id}'`;
+        return new Promise((resolve ,reject) => {
+            sqlDB.query(query, (err, result) => {
+                if (err) {
+                    log.warn('Model','Account-getSQL',`get SQL failed query : ${query}`);
+                    resolve(false);
+                } else resolve(result.rows[0].id)
+            })
+        })
     }
 
     /**

@@ -52,7 +52,7 @@ class Reservation {
             tour_date : data.date,
             pickup : {
                 place : data.pickup || '',
-                location : data.pickupData
+                location : data.pickupData.location
             },
             options : data.options || [],
             adult : this.peopleNumberPreprocess(data.adult),
@@ -73,10 +73,10 @@ class Reservation {
             team_id : data.team_id
         };
         if (!!data.operation_memo) {
-            if (data.operation_memo.match('중국어')) result.language = 'CHINESE';
+            if (data.operation_memo.match('중국어')) result.language = 'Chinese';
         }
         if (!!data.guide_memo) {
-            if (data.guide_memo.match('중국어')) result.language = 'CHINESE';
+            if (data.guide_memo.match('중국어')) result.language = 'Chinese';
         }
         if (data.requestType === 'POST') {result.created_date = currentDate } 
         else { result.created_date = data.reservation_created_date }
@@ -123,7 +123,7 @@ class Reservation {
         };
         if (!!data.reservation_id) { result.id = data.reservation_id }
         if (!!data.operation_memo) {
-            if (!!data.operation_memo.match('중국어')) result.language = 'CHINESE';
+            if (!!data.operation_memo.match('중국어')) result.language = 'Chinese';
         }
         if (data.requestType === 'POST') { result.created_date = currentDate }
         else {result.created_date = data.reservation_created_date}
@@ -152,7 +152,7 @@ class Reservation {
             o : data.o || false,
             language : data.language || 'English'
         };
-        if (!!data.operation_memo.match('중국어')) result.language = 'CHINESE';
+        if (!!data.operation_memo.match('중국어')) result.language = 'Chinese';
         return result;
     }
 

@@ -2,6 +2,7 @@ const sqlDB = require('../auth/postgresql');
 const fbDB = require('../auth/firebase').database;
 const Reservation = require('../models/reservation');
 const Product = require('../models/product');
+const Pickup = require('../models/pickups');
 const accountRouter = require('./v2Account');
 const log = require('../../log');
 const env = require('../../package.json').env;
@@ -9,16 +10,16 @@ sqlDB.connect();
 
 exports.post = (req, res) => {
     if (!req.get('Content-Type')) return res.status(400).json({message:"Content-Type should be json", task:{}});
-    routerHandler(req, res, 'POST')
+    postRouterHandler(req, res)
         .catch(err => {
             log.error('Router', 'RESERVATION export-POST', `unhandled error occurred! error : ${err}`);
             res.status(500).send('unhandled RESERVATION POST error')
         });
 };
 
-exports.update = (req, res) => {
+exports.delete = (req, res) => {
     if (!req.get('Content-Type')) return res.status(400).json("Content-Type should be json");
-    routerHandler(req, res, 'UPDATE')
+    deleteRouterHandler(req, res)
         .catch(err => {
             log.error('Router', 'RESERVATION export-UPDATE', `unhandled error occurred! error : ${err}`);
             res.status(500).send(`unhandled RESERVATION UPDATE error`)
@@ -31,76 +32,49 @@ exports.update = (req, res) => {
  * After reservationHandler is finished, account router is being called.
  * @param req {Object} request object from express
  * @param res {Object} response object from express
- * @param requestType {String} POST || UPDATE
  * @returns {Promise<T | never>}
  */
-function routerHandler(req, res, requestType) {
+function postRouterHandler(req, res) {
     let data = req.body;
     let testObj;
     if (req.body.hasOwnProperty('testObj')) testObj = req.body.testObj;
     else testObj = testManager(req, env);
     if (!data.message_id) data.message_id = "NM-" + new Date().getTime();
+    data.requestType = 'POST';
     data.reservationResult = false;
-    return Reservation.pickupPlaceFinder(data)
-        .then(location => {
-            data.pickupData = location;
+    let reservation;
+    return Pickup.getPickup(data.pickup)
+        .then(pickupData => {
+            data.pickupData = pickupData;
             return Product.productDataExtractFromFB(data)})
         .then(productData => {
             if (!productData) return {
-                type:requestType,
+                type: 'POST',
                 reservationResult : false,
-                reservationTask : {
-                    type : requestType === 'POST' ? 'CREATE' : 'UPDATE',
-                    validation : false,
-                    validationDetail : {tour_date:false}
-                }
+                reservationTask : {type : 'CREATE', validation : false, validationDetail : {tour_date:false}}
             };
             data.productData = productData;
-            data.requestType = requestType;
             log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
-            const reservation = new Reservation(data);
-            return reservationHandler(reservation, data, requestType, testObj)})
+            reservation = new Reservation(data);
+            return Reservation.validationCreate(reservation)})
+        .then(validCheck => {
+            if (!validCheck.result) {
+                const tempResult = {type:'POST', reservationResult:false, reservationTask:{validation:false}};
+                tempResult.reservationTask.type = 'CREATE';
+                tempResult.reservationTask.validationDetail = validCheck.detail;
+                return tempResult;}
+            else {
+                return createReservation(reservation, data, testObj)
+            }})
         .then(resultData => {
             if (!resultData.reservationResult) return res.status(500).json({
                 message:'reservationHandler failed',
                 reservationTask:resultData.reservationTask
             });
             req.body = resultData;
-            if (requestType === 'POST') {
-                log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
-                return accountRouter.post(req, res);
-            } else {
-                log.debug('Router', 'v2Reservation', 'all task done successfully [UPDATE]. goto v2Account router');
-                return accountRouter.delete(req, res);
-            }
+            log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
+            return accountRouter.post(req, res);
         });
-}
-
-/**
- * Reservation handler for inserting data to SQL, EL, FB
- * @param reservation {Object} reservation
- * @param data {Object} raw requested data
- * @param requestType {String} POST / PUT
- * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
- * @returns {Promise<boolean | never | never>}
- */
-function reservationHandler(reservation, data, requestType, testObj) {
-    const tempResult = {type:requestType, reservationResult:false, reservationTask:{validation:false}};
-    if (requestType === 'POST') { return Reservation.validationCreate(reservation)
-        .then(validCheck => {
-            if (!validCheck.result) {
-                tempResult.reservationTask.type = 'CREATE';
-                tempResult.reservationTask.validationDetail = validCheck.detail;
-                return tempResult;}
-            return createReservation(reservation, data, requestType, testObj)})}
-    else { return Reservation.validationUpdate(reservation)
-        .then(validCheck => {
-            if (!validCheck.result) {
-                tempResult.reservationTask.type = 'UPDATE';
-                tempResult.reservationTask.validationDetail = validCheck.detail;
-                return tempResult;}
-            return updateReservation(reservation, data, requestType, testObj)
-        })}
 }
 
 /**
@@ -109,11 +83,10 @@ function reservationHandler(reservation, data, requestType, testObj) {
  * if EL insert fail, SQL data will be canceled and FB data will be deleted.
  * @param reservation {Object} reservation object
  * @param data {Object} raw requested data
- * @param requestType {String} request type : POST / UPDATE
  * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
- * @returns {Promise<boolean | never>}
+ * @returns {Promise<any>}
  */
-function createReservation(reservation, data, requestType, testObj) {
+function createReservation(reservation, data, testObj) {
     let task = {type:'CREATE', router:'reservation', validation:true, insertSQL:false, insertFB:false, insertElastic:false, deleteFB:false, deleteSQL:false};
     return Reservation.insertSQL(reservation.sqlData, testObj)
         .then(result => {
@@ -135,7 +108,7 @@ function createReservation(reservation, data, requestType, testObj) {
         .then(result => {
             data.reservationTask = task;
             if (!result) {
-                return failureManager(reservation, data, task, requestType, testObj).then(failureTask => {
+                return failureManager(reservation, data, task, 'POST', testObj).then(failureTask => {
                     data.reservationTask = failureTask;
                     return data;
                 });
@@ -154,38 +127,45 @@ function createReservation(reservation, data, requestType, testObj) {
  * Reservation edit function and update SQL, delete and create EL, FB
  * For next createReservation task, reservation id is deleted in reservation object.
  * if update fail is present for SQL / FB / Elastic, only log will be called because original data will not be modified due to error.
- * @param reservation {Object} reservation
- * @param data {Object} raw requested data
- * @param requestType {String} request type POST / UPDATE
- * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
+ * @param req {Object} requested object
+ * @pram rew {Object} response object
  * @returns {Promise<boolean | never | never>}
  */
-function updateReservation(reservation, data, requestType, testObj) {
+function deleteRouterHandler(req, res) {
+    const reservation_id = req.body.reservation_id;
+    const data = req.body;
+    let testObj;
+    if (data.hasOwnProperty('testObj')) testObj = data.testObj;
+    else testObj = testManager(req, env);
     let task = {type:'UPDATE',router:'reservation', validation:true, checkSQLcanceled:false, cancelSQL:false, cancelElastic:false};
-    return Reservation.checkSQLcanceled(data.reservation_id, testObj)
+    return Reservation.checkSQLcanceled(reservation_id, testObj)
         .then(result => {
             if (!result) return false;
             task.checkSQLcanceled = true;
-            return Reservation.cancelSQL(data.reservation_id, testObj)})
+            return Reservation.cancelSQL(reservation_id, testObj)})
         .then(result => {
             if (!result) return false;
             task.cancelSQL = true;
-            data.previous_reservation_id = data.reservation_id;
-            return Reservation.cancelElastic(data.reservation_id, testObj)})
+            req.body.previous_reservation_id = reservation_id;
+            return Reservation.cancelElastic(reservation_id, testObj)})
         .then(result => {
             data.reservationTask = task;
             if (!result) {
-                return failureManager(reservation, data, task, requestType, testObj).then(failureTask => {
+                return failureManager(reservation_id, data, task, 'CANCEL_RESERVATION', testObj).then(failureTask => {
                     data.reservationTask = failureTask;
-                    return data;
+                    return res.status(500).json({
+                        message:'reservationHandler failed',
+                        reservationTask : data.reservationTask
+                    });
                 })
             }
             data.reservationTask.cancelElastic = true;
             data.reservationResult = true;
-            log.debug('Router', 'updateReservation', 'all process success!');
-            return data;})
+            log.debug('Router', 'Reservation-deleteRouterHandler', 'all process success!');
+            req.body = data;
+            return accountRouter.delete(req, res);})
         .catch(err => {
-            log.warn('Router', 'updateReservation', `updateReservation unhandled error. task : ${task}`);
+            log.warn('Router', 'Reservation-deleteRouterHandler', `Reservation-deleteRouterHandler unhandled error. task : ${task}`);
             return err;
         });
 }
@@ -250,5 +230,3 @@ function testManager(req, env){
     });
     return result;
 }
-
-// pickupPlaceFinder({pickup:'Seomyun'}).then(result=>console.log(result))
