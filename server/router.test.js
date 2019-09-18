@@ -38,52 +38,6 @@ describe('v2Reservation CREATE test, ', function() {
     });
 });
 
-describe('v2Reservation UPDATE test , ', function() {
-    this.timeout(10000);
-    before(async function() {
-        const promiseArr = [];
-        for (let key of Object.keys(RESERVATION_UPDATE_TEST_CASE)) {
-            let testTask = TEST_CASE_RESULT.rut[key].reservationTask;
-            if (testTask.hasOwnProperty('checkSQLcanceled') && !testTask.checkSQLcanceled) {
-                console.log('no canceled reset!! : ', key)
-            } else {
-                let reservation_id = RESERVATION_UPDATE_TEST_CASE[key].reservation_id;
-                await promiseArr.push(Reservation.undoCancelSQL(reservation_id));
-                await promiseArr.push(Reservation.undoCancelElastic(reservation_id));
-            }
-        }
-        Promise.all(promiseArr).then(result => {
-            if (result.includes(false)) console.log(`failure exist : ${result}`);
-            else console.log(`all SQL & Elastic test cases's canceled column data changed to true. ready to test!`);
-        });
-    });
-    const RUT_RESULT = TEST_CASE_RESULT.rut;
-    Object.keys(RESERVATION_UPDATE_TEST_CASE).forEach(test_case => {
-        it(`test case : ${test_case}`, (done) => {
-            supertest.put('/v2/reservation')
-                .send(RESERVATION_UPDATE_TEST_CASE[test_case])
-                .set('Accept', 'application/json')
-                // .expect(201)
-                .then(res => {
-                    let resTask = JSON.parse(res.text).reservationTask;
-                    let taskResult = RUT_RESULT[test_case].reservationTask;
-                    Object.keys(taskResult).forEach(key => {
-                        if (key === 'validationDetail') {
-                            Object.keys(taskResult.validationDetail).forEach(subKey => {
-                                expect(resTask.validationDetail[subKey]).to.equal(taskResult.validationDetail[subKey]);
-                                // console.log(`response : ${resTask[key][subKey]} :: result : ${taskResult[key][subKey]}`);
-                            })
-                        } else {
-                            expect(resTask[key]).to.equal(taskResult[key]);
-                            // console.log(`response : ${resTask[key]} :: result : ${taskResult[key]}`);
-                        }
-                    });
-                    done()
-                }).catch(err => console.log(err));
-        });
-    });
-});
-
 describe('v2Account test, ', function() {
     this.timeout(10000);
     before(function() {
