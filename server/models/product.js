@@ -245,8 +245,9 @@ class Product {
                             }
                         });
                     } else {
-                        let valid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), date.timezone || 'UTC+9'), item.reserve_begin, item.reserve_end, date.timezone || 'UTC+9');
-                        if (valid) {
+                        let reserveValid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), date.timezone || 'UTC+9'), item.reserve_begin, item.reserve_end, date.timezone || 'UTC+9');
+                        let tourValid = Product.checkTourDateInValidRange(data.date, item.tour_begin, item.tour_end, date.timezone || 'UTC+9');
+                        if (reserveValid && tourValid) {
                             item.byAgency.forEach(agencyData => {
                                 if (agencyData.agencies.includes(data.agency)) {
                                     priceAgencyMatch = true;
