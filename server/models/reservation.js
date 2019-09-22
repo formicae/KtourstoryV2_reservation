@@ -72,23 +72,23 @@ class Reservation {
             star : false,
             team_id : data.team_id
         };
-        if (!!data.operation_memo) {
+        if (data.hasOwnProperty('operation_memo')) {
             if (data.operation_memo.match('중국어')) result.language = 'Chinese';
         }
-        if (!!data.guide_memo) {
+        if (data.hasOwnProperty('guide_memo')) {
             if (data.guide_memo.match('중국어')) result.language = 'Chinese';
         }
-        if (data.requestType === 'POST') {result.created_date = currentDate } 
+        if (data.requestType === 'POST') {result.created_date = currentDate }
         else { result.created_date = data.reservation_created_date }
         if (data.memo_history) {result.memo_history = data.memo_history;}
-        if (!!result.operation_memo) {
+        if (data.hasOwnProperty('operation_memo')) {
             result.operation_memo_history.push({
                 writer : result.writer,
                 memo : result.operation_memo,
                 date : result.created_date
             })
         }
-        if (!!result.guide_memo) {
+        if (data.hasOwnProperty('guide_memo')) {
             result.guide_memo_history.push({
                 writer : result.writer,
                 memo : result.guide_memo,
@@ -121,8 +121,8 @@ class Reservation {
             canceled : data.canceled,
             modified_date : currentDate,
         };
-        if (!!data.reservation_id) { result.id = data.reservation_id }
-        if (!!data.operation_memo) {
+        if (data.hasOwnProperty('reservation_id')) { result.id = data.reservation_id }
+        if (data.hasOwnProperty('operation_memo')) {
             if (!!data.operation_memo.match('중국어')) result.language = 'Chinese';
         }
         if (data.requestType === 'POST') { result.created_date = currentDate }
@@ -152,7 +152,9 @@ class Reservation {
             o : data.o || false,
             language : data.language || 'English'
         };
-        if (!!data.operation_memo.match('중국어')) result.language = 'Chinese';
+        if (data.hasOwnProperty('operation_memo')){
+            if (data.operation_memo.match('중국어')) result.language = 'Chinese';
+        }
         return result;
     }
 
@@ -321,13 +323,13 @@ class Reservation {
      */
     static undoCancelSQL(reservation_id) {
         return new Promise((resolve, reject) => {
-           sqlDB.query(`UPDATE reservation SET canceled = false WHERE id = '${reservation_id}' RETURNING *`, (err, result) => {
-               if (err) resolve(false);
-               if (result.rows[0]) {
-                   console.log(`undoCancelSQL - ${reservation_id} result : success`)
-                   resolve(true);
-               }
-           })
+            sqlDB.query(`UPDATE reservation SET canceled = false WHERE id = '${reservation_id}' RETURNING *`, (err, result) => {
+                if (err) resolve(false);
+                if (result.rows[0]) {
+                    console.log(`undoCancelSQL - ${reservation_id} result : success`)
+                    resolve(true);
+                }
+            })
         });
     }
 
@@ -567,7 +569,7 @@ class Reservation {
             })
         })
     }
-    
+
     static findFbObj(date, product_id, team_id, reservation_id) {
         return new Promise((resolve, reject) => {
             fbDB.ref('operation').child(date).child(product_id).child('teams').child(team_id).child('reservations').child(reservation_id).once('value', (snapshot) => {
@@ -575,7 +577,7 @@ class Reservation {
             })
         })
     }
-    
+
     static findFBTeamId(date, product_id, reservation_id) {
         return new Promise((resolve, reject) => {
             fbDB.ref('operation').child(date).child(product_id).child('teams').once('value', (snapshot) => {
@@ -845,5 +847,5 @@ async function valDataInsertElastic(elasticData) {
         await Reservation.insertElastic(data, {});
     }
 }
-// valDataInsertElastic(elasticData);
+
 module.exports = Reservation;

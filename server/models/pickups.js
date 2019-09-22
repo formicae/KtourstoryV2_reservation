@@ -23,10 +23,13 @@ class Pickup {
             if (pickupMap.size === 0 || incomingMap.size === 0) {
                 setTimeout(() => { resolve(Pickup.getPickup(input)) }, 200);
             } else {
-                Pickup.pickupStringMatch(input).then(result => {
-                    if (!result) resolve(false);
-                    else resolve(pickupMap.get(result));
-                });
+                if (!input) resolve({location : {lat:0, lon:0}});
+                else {
+                    Pickup.pickupStringMatch(input).then(result => {
+                        if (!result) resolve(false);
+                        else resolve(pickupMap.get(result));
+                    });
+                }
             }
         })
     }
