@@ -43,24 +43,32 @@ function postRouterHandler(req, res) {
     data.requestType = 'POST';
     data.reservationResult = false;
     let reservation;
+    let reservationTask = {type : 'CREATE', pickupDataFound : false, priceGroupFound : false, validation : false, validationDetail : {}};
     return Pickup.getPickup(data.pickup)
         .then(pickupData => {
             data.pickupData = pickupData;
+            reservationTask.pickupDataFound = true;
             return Product.productDataExtractFromFB(data)})
         .then(productData => {
-            if (!productData) return {
-                type: 'POST',
-                reservationResult : false,
-                reservationTask : {type : 'CREATE', validation : false, validationDetail : {tour_date:false}}
-            };
-            data.productData = productData;
-            log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
-            reservation = new Reservation(data);
-            return Reservation.validationCreate(reservation)})
+            if (!productData) {
+                log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`)
+                return {
+                    result : false,
+                    type: 'POST',
+                    reservationResult : false,
+                    reservationTask : reservationTask,
+                    detail : ''
+                };
+            } else {
+                reservationTask.priceGroupFound = true;
+                data.productData = productData;
+                log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
+                reservation = new Reservation(data);
+                return Reservation.validationCreate(reservation)
+            }})
         .then(validCheck => {
             if (!validCheck.result) {
-                const tempResult = {type:'POST', reservationResult:false, reservationTask:{validation:false}};
-                tempResult.reservationTask.type = 'CREATE';
+                const tempResult = {type:'POST', reservationResult:false, reservationTask:reservationTask};
                 tempResult.reservationTask.validationDetail = validCheck.detail;
                 return tempResult;}
             else {

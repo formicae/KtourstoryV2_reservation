@@ -27,7 +27,7 @@ class Account {
             reservation_id : data.reservation_id,
             card_number : data.card_number || '',
             sub_category: data.sub_category || '',
-            contents : data.contents || `agency:${data.agency} agency_code:${data.agency_code}`
+            contents : data.contents || `agency:${data.agency} agency_code:${data.agency_code || ''}`
         };
         if (!!data.account_id) result.id = data.account_id;
         return result;

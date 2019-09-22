@@ -100,36 +100,44 @@ function accountHandler(req, res, requestType) {
                 resolve(data.productData);
             }
         }).then(productData => {
-            data.productData = productData;
-            if (!data.hasOwnProperty('cash')) data.cash = false;
-            const account = new Account(data);
-            const task = {validation : false, insertSQL : false, insertElastic: false};
-            return Account.validation(account)
-                .then(validCheck => {
-                    if (!validCheck.result) {
-                        log.warn('Router', 'accountHandler', `ValidDataCheck failed [Account - ${requestType}], [${data.reservation_id}]`);
-                        task.validationDetail = validCheck.detail;
-                        return false;
-                    }
-                    task.validation = true;
-                    return Account.insertSQL(account.sqlData, testObj)})
-                .then(result => {
-                    if (!result) return false;
-                    task.insertSQL = true;
-                    account.sqlData.id = result.id;
-                    account.elasticData.id = result.id;
-                    return Account.insertElastic(account.elasticData, testObj)})
-                .then(result => {
-                    data.accountTask = task;
-                    if (!result) return failureManager(account.sqlData,task, requestType, testObj).then(failureTask => {
-                        data.accountTask = failureTask;
+            if (!productData) {
+                log.warn('Router', 'accountHandler', `productData load failed. product : ${data.product}`);
+                return {
+                    accountResult : false,
+                    detail : 'priceGroup matching failed'
+                };
+            } else {
+                data.productData = productData;
+                if (!data.hasOwnProperty('cash')) data.cash = false;
+                const account = new Account(data);
+                const task = {validation : false, insertSQL : false, insertElastic: false};
+                return Account.validation(account)
+                    .then(validCheck => {
+                        if (!validCheck.result) {
+                            log.warn('Router', 'accountHandler', `ValidDataCheck failed [Account - ${requestType}], [${data.reservation_id}]`);
+                            task.validationDetail = validCheck.detail;
+                            return false;
+                        }
+                        task.validation = true;
+                        return Account.insertSQL(account.sqlData, testObj)})
+                    .then(result => {
+                        if (!result) return false;
+                        task.insertSQL = true;
+                        account.sqlData.id = result.id;
+                        account.elasticData.id = result.id;
+                        return Account.insertElastic(account.elasticData, testObj)})
+                    .then(result => {
+                        data.accountTask = task;
+                        if (!result) return failureManager(account.sqlData,task, requestType, testObj).then(failureTask => {
+                            data.accountTask = failureTask;
+                            return data;
+                        });
+                        data.accountTask.insertElastic = true;
+                        data.accountResult = true;
+                        log.debug('Router','accountHandler [CREATE]', 'all process success!');
                         return data;
                     });
-                    data.accountTask.insertElastic = true;
-                    data.accountResult = true;
-                    log.debug('Router','accountHandler [CREATE]', 'all process success!');
-                    return data;
-                });
+            }
         })
     }
 }

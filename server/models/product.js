@@ -213,7 +213,6 @@ class Product {
 
     static productDataExtractFromFB(data) {
         let product;
-        let result;
         return Product.getProduct(data.product)
             .then(productData => {
                 if (!productData) {
@@ -221,32 +220,60 @@ class Product {
                     return false;
                 }
                 product = productData;
-                productData.sales.forEach(item => { if (item.default) {
-                    result = {
-                        id : product.id,
-                        name : product.name,
-                        alias : product.alias,
-                        category : product.category,
-                        area : product.area,
-                        geos : product.geos,
-                        currency : item.currency,
-                        income : Product.incomeCalculation(data, product, item),
-                        expenditure : 0,
-                        bus : {}
-                    }}});
-                if (!!productData.bus) result.bus = productData.bus;
-                else result.bus = {
+                let defaultPrice = false;
+                let priceAgencyMatch = false;
+                let priceGroup = {
+                    id : product.id,
+                    name : product.name,
+                    alias : product.alias,
+                    category : product.category,
+                    area : product.area,
+                    geos : product.geos,
+                    currency : null,
+                    income : 0,
+                    expenditure : 0,
+                    bus : {}
+                };
+                productData.sales.forEach(item => {
+                    if (item.default) {
+                        defaultPrice = true;
+                        item.byAgency.forEach(agencyData => {
+                            if (agencyData.agencies.includes(data.agency)) {
+                                priceAgencyMatch = true;
+                                priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales)
+                                priceGroup.currency = agencyData.currency
+                            }
+                        });
+                    } else {
+                        let valid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), date.timezone || 'UTC+9'), item.reserve_begin, item.reserve_end, date.timezone || 'UTC+9');
+                        if (valid) {
+                            item.byAgency.forEach(agencyData => {
+                                if (agencyData.agencies.includes(data.agency)) {
+                                    priceAgencyMatch = true;
+                                    priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales)
+                                    priceGroup.currency = agencyData.currency
+                                }
+                            });
+                        }
+                    }
+                });
+                if (!priceAgencyMatch) {
+                    log.warn('product', 'productDataExtractFromFB', `price data matching failed : ${product.id} / ${product.alias} / ${data.agency}`);
+                    return false;
+                }
+                if (!!productData.bus) priceGroup.bus = productData.bus;
+                else priceGroup.bus = {
                     company : 'busking',
                     size : 43,
                     cost : 0
                 };
-                return result;
+                return priceGroup;
             })
     }
 
     static incomeCalculation(data, product, targetItem) {
         let income = 0;
-        targetItem.sales.forEach(priceItem => {
+        targetItem.forEach(priceItem => {
             let price = Product.priceCalculation(priceItem, data);
             income += price;
         });

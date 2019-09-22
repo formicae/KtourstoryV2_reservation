@@ -45,7 +45,7 @@ class Reservation {
                 geos : this.locationPreprocess(data.productData.geos),
                 bus : data.productData.bus
             },
-            agency : data.agency || '',
+            agency : data.agency,
             agency_code : data.agency_code || '',
             name : data.name || '',
             nationality : (data.nationality || 'unknown').toUpperCase(),
@@ -111,7 +111,7 @@ class Reservation {
             writer : data.writer || data.agency,
             product_id : data.productData.id,
             agency : data.agency,
-            agency_code : data.agency_code,
+            agency_code : data.agency_code || '',
             tour_date : data.date,
             options : data.options || {},
             adult : this.peopleNumberPreprocess(data.adult),
@@ -847,5 +847,50 @@ async function valDataInsertElastic(elasticData) {
         await Reservation.insertElastic(data, {});
     }
 }
-
+function getAll() {
+    return new Promise((resolve, reject) => {
+        const result = [];
+        elasticDB.search({
+            index:'product',
+            type:'_doc',
+            body:{
+                query : { match_all : {} },
+                size : 121
+            }
+        }, (err, resp) => {
+            if (err || resp.timed_out) {
+                log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
+            }
+            if (resp._shards.successful <= 0) resolve(result);
+            resp.hits.hits.forEach(item => {
+                result.push(item._source.id);
+            });
+            resolve(result);
+        });
+    })
+}
+function getProduct(query) {
+    return new Promise((resolve, reject) => {
+        const result = [];
+        elasticDB.search({
+            index:'product',
+            type:'_doc',
+            body:{
+                query : { match : JSON.parse(JSON.stringify(query)) }
+            }
+        }, (err, resp) => {
+            if (err || resp.timed_out) {
+                log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
+            }
+            if (resp._shards.successful <= 0) resolve(result);
+            resp.hits.hits.forEach(item => {
+                result.push(item._source);
+            });
+            resolve(result);
+        });
+    })
+}
+// getAll().then(result => console.log(JSON.stringify(result)))
 module.exports = Reservation;

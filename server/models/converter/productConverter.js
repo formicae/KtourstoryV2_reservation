@@ -194,6 +194,7 @@ class v2ProductConveter {
                 description : v1ProductData.info.description,
                 memo : v1ProductData.info.memo,
                 expenses : [],
+                cost : {},
                 on : v1ProductData.info.status,
                 deadline : v1ProductData.info.deadline,
                 days : v1ProductData.info.available.filter((val, idx) => idx < 7),
@@ -203,29 +204,54 @@ class v2ProductConveter {
                 tour_end : v1ProductData.info.period[0].to,
                 ignore_options : [],
                 options : [],
-                sales : [{
-                    default : true,
-                    name : v1ProductData.price.default.title,
-                    agency : [],
-                    currency : v1ProductData.price.default.byAgencies[0].currency,
-                    reserve_begin : v1ProductData.price.default.reservationDate_from,
-                    reserve_end : v1ProductData.price.default.reservationDate_to,
-                    tour_begin : v1ProductData.price.default.tourDate_from,
-                    tour_end : v1ProductData.price.default.tourDate_to,
-                    sales : [{type : 'adult', gross : v1ProductData.price.default.byAgencies[0].adult_gross, net : v1ProductData.price.default.byAgencies[0].adult_net},
-                        {type : 'kid', gross : v1ProductData.price.default.byAgencies[0].kid_gross, net : v1ProductData.price.default.byAgencies[0].kid_net},
-                        {type : 'infant', gross : v1ProductData.price.default.byAgencies[0].infant_gross, net : v1ProductData.price.default.byAgencies[0].infant_net},
-                        {type : '-', cost : 0}]
-                }]
+                sales : []
             };
-            if (v1ProductData.price.default.byAgencies[0].agency) {
-                result.sales[0].agency = v1ProductData.price.default.byAgencies[0].agency;
-            }
+            Object.entries(v1ProductData.price).forEach(temp0 => {
+                let priceGroup = temp0[0];
+                let priceData = temp0[1];
+                let tempResult = {
+                    default : priceData.forAll,
+                    name : priceData.title,
+                    reserve_begin : priceData.reservationDate_from,
+                    reserve_end : priceData.reservationDate_to,
+                    tour_begin : priceData.tourDate_from,
+                    tour_end : priceData.tourDate_to,
+                    byAgency : []
+                };
+                priceData.byAgencies.forEach(agencyData => {
+                    let agency = [];
+                    if (agencyData.hasOwnProperty('agency')) agency = agencyData.agency;
+                    tempResult.byAgency.push({
+                        agencies : agency,
+                        currency : agencyData.currency,
+                        sales : [
+                            {type : 'adult', gross : agencyData.adult_gross, net : agencyData.adult_net},
+                            {type : 'kid', gross : agencyData.kid_gross, net : agencyData.kid_net},
+                            {type : 'infant', gross : agencyData.infant_gross, net : agencyData.infant_net}
+                        ]
+                    })
+                });
+                result.sales.push(tempResult);
+            });
             if (v1ProductData.possibles) {
                 result.incoming = v1ProductData.possibles;
             }
             if (v1ProductData.info.pickup) {
                 v1ProductData.info.pickup.forEach(each => {result.pickups.push({place:each, lat:"", lon:""})});
+            }
+            if (v1ProductData.cost) {
+                let costData = {bus:[], wage:0};
+                if (v1ProductData.cost.bus) {
+                    v1ProductData.cost.bus.forEach(bus => {
+                        bus.size.forEach(size => {
+                            if (size.max === 43) costData.bus.push({type:'default', cost: size.cost})
+                        })
+                    });
+                }
+                if (v1ProductData.cost.wage){
+                    costData.wage = v1ProductData.cost.wage;
+                }
+                result.cost = costData;
             }
             if (v1ProductData.cost.item) {
                 v1ProductData.cost.item.forEach(item => {
@@ -371,7 +397,7 @@ class v2ProductConveter {
 
     static async mainConverter(v1ProductBulkData) {
         let count = 0;
-        // await fbDB.ref('product').remove().then(result => console.log(result));
+        await fbDB.ref('product').remove().then(result => console.log(result));
         for (let temp of Object.entries(v1ProductBulkData)) {
             let v1ProductData = temp[1];
             await this.insertV2DataToFirebaseAndElastic(v1ProductData);
@@ -419,559 +445,6 @@ class v2ProductConveter {
     }
 }
 
-const v1ProductBulkData = require('../dataFiles/intranet-64851-product-export.json');
-const tmpProduct = {
-    "-Kxq-TuaU1DVVULpL2LT" : {
-        "agency" : {
-            "12" : "undefined",
-            "BFT" : "undefined",
-            "BK" : "undefined",
-            "BN" : "Ongoing",
-            "CHA" : "undefined",
-            "COLA" : "undefined",
-            "CR" : "undefined",
-            "CRE" : "undefined",
-            "CV" : "undefined",
-            "ETC" : "undefined",
-            "EXP" : "undefined",
-            "F" : "Ongoing",
-            "GB" : "undefined",
-            "GG" : "undefined",
-            "GT" : "undefined",
-            "HC" : "undefined",
-            "HO" : "undefined",
-            "HP" : "undefined",
-            "HT" : "undefined",
-            "ID" : "undefined",
-            "INS" : "undefined",
-            "JJ" : "undefined",
-            "KK" : "Ongoing",
-            "KR" : "Ongoing",
-            "KT" : "Unassigned",
-            "L" : "Ongoing",
-            "LOT" : "undefined",
-            "P" : "undefined",
-            "PL" : "undefined",
-            "PS" : "undefined",
-            "SJ" : "undefined",
-            "SP" : "undefined",
-            "T" : "Ongoing",
-            "TA" : "undefined",
-            "TB" : "undefined",
-            "TE" : "Ongoing",
-            "TF" : "undefined",
-            "TL" : "Ongoing",
-            "VE" : "Ongoing",
-            "VI" : "Ongoing",
-            "WG" : "Ongoing",
-            "hana" : "undefined"
-        },
-        "cost" : {
-            "bus" : [ {
-                "max" : 43,
-                "name" : "Default",
-                "size" : [ {
-                    "cost" : 0,
-                    "max" : 10,
-                    "min" : 1
-                }, {
-                    "cost" : 250000,
-                    "max" : 17,
-                    "min" : 11
-                }, {
-                    "cost" : 300000,
-                    "max" : 23,
-                    "min" : 18
-                }, {
-                    "cost" : 350000,
-                    "max" : 43,
-                    "min" : 24
-                } ]
-            } ],
-            "item" : [ {
-                "adultAge_max" : 99,
-                "adultAge_min" : 19,
-                "adult_cost" : 10000,
-                "free_cost" : 0,
-                "item" : "Nami",
-                "kidAge_max" : 12,
-                "kidAge_min" : 3,
-                "kid_cost" : 7000,
-                "pre" : false,
-                "youngAge_max" : 18,
-                "youngAge_min" : 9,
-                "young_cost" : 0
-            }, {
-                "adultAge_max" : 99,
-                "adultAge_min" : 19,
-                "adult_cost" : 6000,
-                "free_cost" : 0,
-                "item" : "Petite",
-                "kidAge_max" : 12,
-                "kidAge_min" : 3,
-                "kid_cost" : 5000,
-                "pre" : false,
-                "youngAge_max" : 18,
-                "youngAge_min" : 13,
-                "young_cost" : 5000
-            }, {
-                "adultAge_max" : 99,
-                "adultAge_min" : 19,
-                "adult_cost" : 0,
-                "free_cost" : 0,
-                "item" : "Garden",
-                "kidAge_max" : 12,
-                "kidAge_min" : 3,
-                "kid_cost" : 4500,
-                "pre" : false,
-                "youngAge_max" : 18,
-                "youngAge_min" : 13,
-                "young_cost" : 5500
-            } ],
-            "wage" : 108000
-        },
-        "id" : "Seoul_Regular_남쁘아",
-        "info" : {
-            "area" : "Seoul",
-            "available" : [ true, true, true, true, true, true, true, true ],
-            "cancellation" : "3days before 100%, 2 days before 50%, 1days or tour date 0% refund",
-            "category" : "Regular",
-            "deadline" : 14,
-            "description" : "",
-            "exclude" : "",
-            "include" : "",
-            "itinerary" : "",
-            "language" : [ true, false, true, false, true, false, false, false, false, false, false, false ],
-            "memo" : "KK: https://www.kkday.com/ko/product/8974\nL: https://www.klook.com/activity/2528-nami-island-garden-morning-calm-seoul/\nF: https://www.indiway.com/en/prod/nami-island-petite-france-garden-of-morning-calm-shuttle-package\nT: https://www.trazy.com/experience/detail/nami-island-petite-france-the-garden-of-morning-calm-tour\nTE: https://www.koreatraveleasy.com/product/nami-island-petite-france-garden-of-morning-calm-1-day-shuttle-package-tour/\nBN: https://www.bnbhero.com/tours/587\nKR: http://korealtrip.com/tours/nami-island-petite-france-garden-morning-calm-day-trip/\nVE: https://www.veltra.com/en/asia/korea/seoul/a/142631\nVI: https://www.viator.com/tours/Seoul/Day-Tour-of-Nami-Island-with-Petite-France-and-Garden-of-Morning-Calm/d973-48881P5\nWG: https://www.waug.com/good/?idx=104931\nTL: https://touristly.com/offers/11585?trip=14629",
-            "name" : "남쁘아",
-            "others" : "",
-            "period" : [ {
-                "from" : "2017-01-01",
-                "to" : "2020-12-31"
-            } ],
-            "pickup" : [ "Dongdaemoon" ],
-            "status" : "ON"
-        },
-        "possibles" : [ "Nami + Petite france + The Garden of Morning Calm / Nami Island, Petite France and The Garden of Morning Calm", "남이+쁘띠+아침고요", "Seoul_Regular_남쁘아", "Nami Island, Garden of Morning Calm and More by KTOURSTORYNami + Petite France + The Garden of Morning Calm", "Nami Island &amp Petite France &amp Garden of Morning Calm Shuttle Package", "Seoul Vicinity: NamiIsland + Petite France + Garden of Morning CalmDay Tour - From Dongdaemun History & Culture ParkStation", "Nami Island, Garden of Morning Calm and More Nami + Petite France + The Garden of Morning Calm", "Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour From Hongik Univ. Station", "Nami Island, Garden of Morning Calm & More Nami + Petite France + The Garden of Morning Calm", "Nami Island, Garden of Morning Calm & More Nami + Petite France + Garden (From 27 March)", "Nami Island, Garden of Morning Calm & More Nami + Petite France + Garden", "Nami Island, Petite France and The Garden of Morning Calm Tour", "Seoul Vicinity: NamiIsland + Petite France + Garden of Morning CalmDay Tour - From Hongik Univ. Station", "아남쁘", "Nami Island, Garden of Morning Calm & MoreNami + Petite France + Garden", "겨울아남쁘", "Seoul Vicinity: NamiIsland + Petite France + Garden of Morning CalmDay Tour - From Myeongdong Station", "Nami Island& The Garden of Morning Calm One-day tour Nami + Petite France + The Garden of Morning Calm", "Day Trip to Nami Island with Petite France and Garden of Morning Calm", "Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour - From Dongdaemun History & Culture ParkStation", "Nami Island, Petite France, Garden of Morning Calm, & Gangchon Rail Bike Day Trip from Seoul (KTOURSTORY)Nami Island + Petite France + The Garden of Morning Calm", "Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour - From Hongik Univ. Station", "Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour - From Myeongdong Station", "Gangwon-do Nami Island & The Garden of Morning Calm Day Tour Nami + Petite France + The Garden of Morning Calm", "Nami Island, Garden of Morning Calm & More (Ktourstory) Nami + Petite France + The Garden of Morning Calm", "Nami Island, Garden of Morning Calm and More (Ktourstory) Nami + Petite France + The Garden of Morning Calm", "Nami Island + Petite France + Garden of MorningCalm Day Tour From Dongdaemun History & Culture ParkStation", "Nami Island + Petite France + Garden of MorningCalm Day Tour From Myeongdong Station", "Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour From Myeongdong Station", "Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour From Dongdaemun History & Culture ParkStation", "Seoul Vicinity:Nami Island + Petite France + Garden of MorningCalm Day Tour", "Nami Island, Garden of Morning Calm & More by KTOURSTORY Nami + Petite France + The Garden of Morning Calm", "Nami Island, Garden of Morning Calm and More by KTOURSTORY Nami + Petite France + The Garden of Morning Calm", "Nami + Petite france + The Garden of Morning Calm / Standard Tour", "Nami Island, Petite France, Garden of Morning Calm, and Gangchon Rail Bike Day Trip from Seoul (KTOURSTORY)Nami Island + Petite France + The Garden of Morning Calm" ],
-        "price" : {
-            "default" : {
-                "byAgencies" : [ {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 65000,
-                    "adult_net" : 56000,
-                    "agency" : [ "L", "T", "VE", "F", "TE", "SP", "SP", "PS", "GT", "KR", "BN", "CRE", "INS", "BK", "CR", "HP", "WG", "ID", "KT", "ETC", "HT", "TL", "12", "PL", "TA", "TF", "LOT", "JJ", "TB", "SJ", "GB", "BFT", "CV", "CHA", "hana", "HC", "COLA", "HO", "TLO" ],
-                    "currency" : "KRW",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 60000,
-                    "kid_net" : 51000
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 65000,
-                    "adult_net" : 56000,
-                    "agency" : [ "KK" ],
-                    "currency" : "KRW",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 60000,
-                    "kid_net" : 51000
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 65000,
-                    "adult_net" : 56000,
-                    "agency" : [ "P" ],
-                    "currency" : "KRW",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 60000,
-                    "kid_net" : 51000
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 63.8,
-                    "adult_net" : 51.04,
-                    "agency" : [ "VI" ],
-                    "currency" : "USD",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 58,
-                    "kid_net" : 46.4
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 68,
-                    "adult_net" : 51,
-                    "agency" : [ "EXP" ],
-                    "currency" : "USD",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 61.8,
-                    "kid_net" : 46.35
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 72.5,
-                    "adult_net" : 51,
-                    "agency" : [ "GG" ],
-                    "currency" : "USD",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 66.29,
-                    "kid_net" : 46.4
-                } ],
-                "description" : "Default price option",
-                "forAll" : true,
-                "reservationDate_from" : "2017-01-01 ",
-                "reservationDate_to" : " 2020-12-31",
-                "title" : "DEFAULT",
-                "tourDate_from" : "2017-01-01 ",
-                "tourDate_to" : " 2020-12-31"
-            }
-        }
-    },
-    "-Kxq-Tuhzqnk5DGmUjWv" : {
-        "agency" : {
-            "12" : "undefined",
-            "BFT" : "undefined",
-            "BK" : "undefined",
-            "BN" : "undefined",
-            "CR" : "Ongoing",
-            "CRE" : "undefined",
-            "CV" : "undefined",
-            "ETC" : "undefined",
-            "EXP" : "undefined",
-            "F" : "Ongoing",
-            "GB" : "undefined",
-            "GG" : "undefined",
-            "GT" : "undefined",
-            "HP" : "undefined",
-            "HT" : "undefined",
-            "ID" : "undefined",
-            "INS" : "undefined",
-            "JJ" : "undefined",
-            "KK" : "Ongoing",
-            "KR" : "undefined",
-            "KT" : "undefined",
-            "L" : "Ongoing",
-            "LOT" : "undefined",
-            "P" : "undefined",
-            "PL" : "undefined",
-            "PS" : "undefined",
-            "SJ" : "undefined",
-            "SP" : "undefined",
-            "T" : "Ongoing",
-            "TA" : "undefined",
-            "TB" : "undefined",
-            "TE" : "undefined",
-            "TF" : "undefined",
-            "TL" : "undefined",
-            "VE" : "undefined",
-            "VI" : "undefined",
-            "WG" : "undefined"
-        },
-        "cost" : {
-            "bus" : [ {
-                "max" : 43,
-                "name" : "Default",
-                "size" : [ {
-                    "cost" : 0,
-                    "max" : 10,
-                    "min" : 1
-                }, {
-                    "cost" : 250000,
-                    "max" : 17,
-                    "min" : 11
-                }, {
-                    "cost" : 300000,
-                    "max" : 23,
-                    "min" : 18
-                }, {
-                    "cost" : 350000,
-                    "max" : 43,
-                    "min" : 24
-                } ]
-            } ],
-            "wage" : 0
-        },
-        "id" : "Seoul_Spring_진해",
-        "info" : {
-            "area" : "Seoul",
-            "available" : [ true, true, true, true, true, true, true, false ],
-            "cancellation" : "3days before 100%, 2 days before 50%, 1days or tour date 0% refund",
-            "category" : "Spring",
-            "deadline" : 14,
-            "description" : "",
-            "exclude" : "",
-            "include" : "",
-            "itinerary" : "",
-            "language" : [ true, false, true, false, true, false, true, false, false, false, false, false ],
-            "memo" : "KK: https://www.kkday.com/ko/product/18772\nT: https://www.trazy.com/experience/detail/jinhae-cherry-blossom-festival-gunhangje-day-tour\nF: https://www.funtastickorea.com/en/prod/jinhae-cherry-blossom-festival-shuttle-package\n",
-            "name" : "진해",
-            "others" : "",
-            "period" : [ {
-                "from" : "2019-03-27",
-                "to" : "2019-04-07"
-            } ],
-            "pickup" : [ "Hongdae", "Myungdong", "Dongdaemoon" ],
-            "status" : "ON"
-        },
-        "possibles" : [ "Spring Special: JinhaeCherry Blossom Festival 2017 1 Day Tour - From Dongdaemun H&C Station", "Jinhae Cherry BlossomFestival 1 Day Tour - from Busan (Apr 1~10) - From Haeundae Station", "Jinhae Cherry Blossom Festival (Jinhae Gunhangje) Jinhae Day Tour", "Jinhae Cherry Blossom Festival (Departing From Seoul)", "Spring Special: Jinhae Cherry Blossom Festival 2019 1 Day Tour - from Seoul/Busan (Mar 27~Apr 7)  From Seoul - From Hongik Univ. Station", "Jinhae Cherry Blossom Festival (Jinhae Gunhangje) by KTOURSTORYJinhae Day Tour", "Spring Special: Jinhae Cherry Blossom Festival 2018 1 Day Tour (Mar 30~Apr 9) - From Dongdaemun H&C Station", "Spring Special:Jinhae Cherry Blossom Festival 2018 1 Day Tour(Mar 30~Apr 9) - From Myeongdong Station", "Spring Special:Jinhae Cherry Blossom Festival 2017 1 Day Tour(Apr 1~10) - From Hongik Univ. Station", "Spring Special:Jinhae Cherry Blossom Festival 2019 1 Day Tour -from Seoul/Busan (Mar 29~Apr 7) From Seoul - From MyeongdongStation", "Spring Special: JinhaeCherry Blossom Festival 2017 1 Day Tour (Apr1~10) - From Myeongdong Station", "Spring Special: JinhaeCherry Blossom Festival 2017 1 Day Tour (Apr1~10) - From Hongik Univ. Station", "Spring Special: JinhaeCherry Blossom Festival 2017 1 Day Tour (Apr1~10) - From Dongdaemun H&C Station", "진해 군항제(서울출발)", "진해벚꽃", "Spring Special:Jinhae Cherry Blossom Festival 2018 1 Day Tour(Mar 30~Apr 10) - From Myeongdong Station", "Spring Special:Jinhae Cherry Blossom Festival 2018 1 Day Tour(Mar 30~Apr 10) - From Hongik Univ. Station", "Spring Special:Jinhae Cherry Blossom Festival 2018 1 Day Tour -from Seoul/Busan (Mar 30~Apr 10) - From Seoul - From MyeongdongStation", "Jinhae Cherry Blossom Festival (Jinhae Gunhangje)Jinhae Day Tour", "Jinhae Cherry Blossom Festival (Jinhae Gunhangje) – Departing From Seoul", "Spring Special:Jinhae Cherry Blossom Festival 2018 1 Day Tour -from Seoul/Busan (Mar 30~Apr 10) - From Seoul - From Hongik Univ.Station", "Spring Special:Jinhae Cherry Blossom Festival 2018 1 Day Tour -from Seoul/Busan (Mar 30~Apr 10) - From Seoul - From Dongdaemun H&CStation", "Spring Special:Jinhae Cherry Blossom Festival 2019 1 Day Tour -from Seoul/Busan (Mar 27~Apr 7) From Seoul - From Hongik Univ.Station", "Spring Special:Jinhae Cherry Blossom Festival 2019 1 Day Tour -from Seoul/Busan (Mar 27~Apr 7) From Seoul - From Dongdaemun H&CStation", "Spring Special:Jinhae Cherry Blossom Festival 2019 1 Day Tour -from Seoul/Busan (Mar 27~Apr 7) From Seoul - From MyeongdongStation", "Jinhae Gunhangje Cherry Blossom Festival Day Tour from Seoul by KTOURSTORYJinhae Day Tour" ],
-        "price" : {
-            "default" : {
-                "byAgencies" : [ {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 20,
-                    "adult_gross" : 50000,
-                    "adult_net" : 40000,
-                    "agency" : [ "L", "T", "P", "VI", "VE", "F", "TLO" ],
-                    "currency" : "KRW",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 19,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 50000,
-                    "kid_net" : 40000
-                } ],
-                "description" : "Default price option",
-                "forAll" : true,
-                "reservationDate_from" : "2017-01-01 ",
-                "reservationDate_to" : " 2019-12-31",
-                "title" : "DEFAULT",
-                "tourDate_from" : "2019-03-20 ",
-                "tourDate_to" : " 2019-04-10"
-            }
-        }
-    },
-    "-Kxq-TuSl0xhkmGC5elO" : {
-        "agency" : {
-            "12" : "undefined",
-            "BFT" : "undefined",
-            "BK" : "undefined",
-            "BN" : "undefined",
-            "CHA" : "undefined",
-            "COLA" : "undefined",
-            "CR" : "undefined",
-            "CRE" : "undefined",
-            "CV" : "undefined",
-            "ETC" : "undefined",
-            "EXP" : "undefined",
-            "GB" : "undefined",
-            "GG" : "undefined",
-            "GT" : "undefined",
-            "HC" : "undefined",
-            "HO" : "undefined",
-            "HP" : "undefined",
-            "HT" : "undefined",
-            "ID" : "undefined",
-            "INS" : "undefined",
-            "JJ" : "undefined",
-            "KK" : "undefined",
-            "KR" : "undefined",
-            "KT" : "undefined",
-            "L" : "undefined",
-            "LOT" : "undefined",
-            "P" : "undefined",
-            "PL" : "undefined",
-            "PS" : "undefined",
-            "SJ" : "undefined",
-            "SP" : "undefined",
-            "T" : "undefined",
-            "TA" : "undefined",
-            "TB" : "undefined",
-            "TE" : "undefined",
-            "TF" : "undefined",
-            "TL" : "undefined",
-            "VE" : "undefined",
-            "VI" : "undefined",
-            "WG" : "undefined",
-            "hana" : "undefined"
-        },
-        "cost" : {
-            "bus" : [ {
-                "max" : 43,
-                "name" : "Default",
-                "size" : [ {
-                    "cost" : 0,
-                    "max" : 10,
-                    "min" : 1
-                }, {
-                    "cost" : 25000,
-                    "max" : 17,
-                    "min" : 11
-                }, {
-                    "cost" : 30000,
-                    "max" : 23,
-                    "min" : 18
-                }, {
-                    "cost" : 35000,
-                    "max" : 43,
-                    "min" : 24
-                } ]
-            } ],
-            "item" : [ {
-                "adultAge_max" : 65,
-                "adultAge_min" : 19,
-                "adult_cost" : 17000,
-                "free_cost" : 0,
-                "item" : "루지",
-                "kidAge_max" : 12,
-                "kidAge_min" : 3,
-                "kid_cost" : 17000,
-                "pre" : false,
-                "youngAge_max" : 13,
-                "youngAge_min" : 9,
-                "young_cost" : 17000
-            }, {
-                "adultAge_max" : 65,
-                "adultAge_min" : 19,
-                "adult_cost" : 12000,
-                "free_cost" : 0,
-                "item" : "케이블카",
-                "kidAge_max" : 12,
-                "kidAge_min" : 3,
-                "kid_cost" : 9500,
-                "pre" : false,
-                "youngAge_max" : 18,
-                "youngAge_min" : 13,
-                "young_cost" : 12000
-            } ],
-            "wage" : 108000
-        },
-        "id" : "Busan_Regular_통영",
-        "info" : {
-            "area" : "Busan",
-            "available" : [ false, true, false, true, false, false, false, true ],
-            "cancellation" : "3days before 100%, 2 days before 50%, 1days or tour date 0% refund",
-            "category" : "Regular",
-            "deadline" : 14,
-            "description" : "",
-            "exclude" : "",
-            "include" : "",
-            "itinerary" : "",
-            "language" : [ true, false, true, false, false, false, false, false, false, false, false, false ],
-            "memo" : "",
-            "name" : "통영",
-            "others" : "",
-            "period" : [ {
-                "from" : "2017-01-01",
-                "to" : "2022-12-31"
-            } ],
-            "status" : "ON"
-        },
-        "option" : [ {
-            "option" : "LUGE",
-            "possibles" : [ "With Cable Car & Luge", "" ],
-            "price" : 15000
-        }, {
-            "option" : "Ignore",
-            "possibles" : [ "With Cable Car" ],
-            "price" : 0
-        } ],
-        "possibles" : [ "Full-Day Tongyeong Tour from Busan", "통영", "[From Busan] Tongyeong One day City Tour", "Tongyeong Day Tour With Cable Car", "Tongyeong Day Tour by KTOURSTORYWith Cable Car & Luge", "Tongyeong Day Tour With Cable Car & Luge", "Tongyeong 1 Day Tour (from Busan Station) - Cable Car + Luge + Joongnag Market + Dongpirang Village", "Tongyeong 1 DaySmall Group Tour (from Busan) - Cable Car & Luge - From HaeundaeStation", "통영 케이블카 + 루지 + 통영중앙시장 + 동피랑마을", "Tongyeong Day Tour by KTOURSTORY With Cable Car & Luge", "Tongyeong Day Tour by KTOURSTORY With Cable Car", "Tongyeong Day Tour by KTOURSTORYWith Cable Car", "Tongyeong Day TourWith Cable Car & Luge" ],
-        "price" : {
-            "default" : {
-                "byAgencies" : [ {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 20,
-                    "adult_gross" : 70000,
-                    "adult_net" : 55000,
-                    "agency" : [ "L", "T", "P", "VE", "F", "KK", "TE", "SP", "SP", "KR", "BN", "BK", "CR", "HP", "WG", "ID", "PS", "GT", "KT", "ETC", "HT", "TL", "12", "PL", "TA", "TF", "LOT", "JJ", "TB", "SJ", "GB", "BFT", "INS", "CV", "CRE", "CHA", "TLO" ],
-                    "currency" : "KRW",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 19,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 70000,
-                    "kid_net" : 55000
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 67,
-                    "adult_net" : 50,
-                    "agency" : [ "GG" ],
-                    "currency" : "USD",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 67,
-                    "kid_net" : 50
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 63,
-                    "adult_net" : 49,
-                    "agency" : [ "VI" ],
-                    "currency" : "USD",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 63,
-                    "kid_net" : 49
-                }, {
-                    "adultAge_max" : 99,
-                    "adultAge_min" : 13,
-                    "adult_gross" : 66.7,
-                    "adult_net" : 50.02,
-                    "agency" : [ "EXP" ],
-                    "currency" : "USD",
-                    "infantAge_max" : 2,
-                    "infantAge_min" : 0,
-                    "infant_gross" : 0,
-                    "infant_net" : 0,
-                    "kidAge_max" : 12,
-                    "kidAge_min" : 3,
-                    "kid_gross" : 66.7,
-                    "kid_net" : 50.05
-                } ],
-                "description" : "Default price option",
-                "forAll" : true,
-                "reservationDate_from" : "2017-01-01 ",
-                "reservationDate_to" : " 2020-12-31",
-                "title" : "DEFAULT",
-                "tourDate_from" : "2017-01-01 ",
-                "tourDate_to" : " 2020-12-31"
-            }
-        }
-    },
-};
-// let result = v2ProductConveter.mainConverter(v1ProductBulkData);
 // fbDB.ref('product').once('value', snapshot => {
 //     let data = snapshot.val();
 //     console.log(JSON.stringify(data['test1']));
@@ -994,9 +467,7 @@ async function test(v1Product) {
 // test(tmpProduct)
 // fbDB.ref('product').child('test4').update()
 // fbDB.ref('product').remove().then(result => console.log(result));
-// v2ProductConveter.checkEmptyElasticProduct();
-// v2ProductConveter.checkEmptyElasticProduct(v1ProductBulkData)
-// v2ProductConveter.doubleCheckBetweenSQLandElastic();
-// v2ProductConveter.getElastic('남이엘리').then(result => console.log(result))
+const v1ProductBulkData = require('../dataFiles/intranet-64851-product-export.json');
+// v2ProductConveter.mainConverter(v1ProductBulkData)
 
 module.exports = v2ProductConveter;
