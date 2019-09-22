@@ -1,7 +1,7 @@
 const fbDB = require('../auth/firebase').database;
 const sqlDB = require('../auth/postgresql');
 const log = require('../../log');
-const TIME_OFFSET_MAP = require('../models/validation').TIME_OFFSET_MAP;
+const TIME_OFFSET_MAP = {'UTC0':0,'UTC+1':-60,'UTC+2':-120,'UTC+3':-180,'UTC+4':-240,'UTC+5':-300,'UTC+6':-360, 'UTC+7':-420,'UTC+8':-480,'UTC+9':-540,'UTC+10':-600,'UTC+11':-660,'UTC+12':-720,'UTC-1':60,'UTC-2':120,'UTC-3':180,'UTC-4':240,'UTC-5':300,'UTC-6':360,'UTC-7':420,'UTC-8':480,'UTC-9':540,'UTC-10':600,'UTC-11':660};
 const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Busan_Regular_부산 Scenic', '부산Scenic'],
     ['Seoul_Regular_에버', '서울에버'],
@@ -160,16 +160,27 @@ class Product {
 
     /**
      * return available price group from Firebase based on tour_date and sales status.
-     * @param tour_date
-     * @param product
+     * @param tour_date {String} tour date
+     * @param product {Object} product object
+     * @param agency {String} agency
      * @returns {Array}
      */
-    static getAvailablePriceGroup(tour_date, product) {
+    static getAvailablePriceGroup(tour_date, product, agency) {
         const availableGroup = [];
         product.sales.forEach(item => {
             if (item.default) {
                 if (Product.checkTourDateInValidRange(tour_date, item.tour_begin, item.tour_end, product.timezone)) {
                     availableGroup.push(item);
+                }
+            } else {
+                let reserveValid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), product.timezone), item.reserve_begin, item.reserve_end, product.timezone);
+                let tourValid = Product.checkTourDateInValidRange(tour_date, item.tour_begin, item.tour_end, product.timezone);
+                if (reserveValid && tourValid) {
+                    item.byAgency.forEach(agencyData => {
+                        if (agencyData.agencies.includes(agency)) {
+                            availableGroup.push(item);
+                        }
+                    });
                 }
             }
         });
@@ -195,6 +206,7 @@ class Product {
         const newBegin = new Date(array.begin[0], array.begin[1]-1, array.begin[2]);
         const newTarget = new Date(array.target[0], array.target[1]-1, array.target[2]);
         const newEnd = new Date(array.end[0], array.end[1]-1,array.end[2]);
+        log.debug('model', 'checkTourDateInValidRange', `checkTourDateInValidRange : ${newBegin} < ${newTarget} < ${newEnd}`);
         return newBegin <= newTarget && newTarget <= newEnd;
     }
 
@@ -213,15 +225,19 @@ class Product {
 
     static productDataExtractFromFB(data) {
         let product;
+        let productExtractTask = {getProduct :false, defaultPrice:false, reserveValid : false, tourValid : false, priceAgencyMatch:false};
         return Product.getProduct(data.product)
             .then(productData => {
                 if (!productData) {
                     log.warn('Router', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
-                    return false;
+                    return {
+                        result : false,
+                        priceGroup : null,
+                        detail : productExtractTask
+                    };
                 }
+                productExtractTask.getProduct = true;
                 product = productData;
-                let defaultPrice = false;
-                let priceAgencyMatch = false;
                 let priceGroup = {
                     id : product.id,
                     name : product.name,
@@ -236,39 +252,54 @@ class Product {
                 };
                 productData.sales.forEach(item => {
                     if (item.default) {
-                        defaultPrice = true;
+                        productExtractTask.defaultPrice = true;
                         item.byAgency.forEach(agencyData => {
                             if (agencyData.agencies.includes(data.agency)) {
-                                priceAgencyMatch = true;
-                                priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales)
+                                productExtractTask.priceAgencyMatch = true;
+                                priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales);
                                 priceGroup.currency = agencyData.currency
                             }
                         });
                     } else {
-                        let reserveValid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), date.timezone || 'UTC+9'), item.reserve_begin, item.reserve_end, date.timezone || 'UTC+9');
-                        let tourValid = Product.checkTourDateInValidRange(data.date, item.tour_begin, item.tour_end, date.timezone || 'UTC+9');
-                        if (reserveValid && tourValid) {
+                        let timezone;
+                        if (data.hasOwnProperty('timezone')) timezone = data.timezone;
+                        else timezone = 'UTC+9';
+                        productExtractTask.reserveValid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), timezone), item.reserve_begin, item.reserve_end, timezone);
+                        productExtractTask.tourValid = Product.checkTourDateInValidRange(data.date, item.tour_begin, item.tour_end, timezone);
+                        if (productExtractTask.reserveValid && productExtractTask.tourValid) {
                             item.byAgency.forEach(agencyData => {
                                 if (agencyData.agencies.includes(data.agency)) {
-                                    priceAgencyMatch = true;
-                                    priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales)
-                                    priceGroup.currency = agencyData.currency
+                                    productExtractTask.priceAgencyMatch = true;
+                                    priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales);
+                                    priceGroup.currency = agencyData.currency;
                                 }
                             });
+                        } else {
+                            log.warn('product', 'productDataExtractFromFB', `date validCheck failed. reserve_date : ${productExtractTask.reserveValid} / tour_date : ${productExtractTask.tourValid}`);
                         }
                     }
                 });
-                if (!priceAgencyMatch) {
+                if (!productExtractTask.priceAgencyMatch) {
                     log.warn('product', 'productDataExtractFromFB', `price data matching failed : ${product.id} / ${product.alias} / ${data.agency}`);
-                    return false;
+                    console.log('what is wrong?????', productExtractTask.priceAgencyMatch)
+                    return {
+                        result : false,
+                        priceGroup : null,
+                        detail : productExtractTask
+                    };
+                } else {
+                    if (!!productData.bus) priceGroup.bus = productData.bus;
+                    else priceGroup.bus = {
+                        company : 'busking',
+                        size : 43,
+                        cost : 0
+                    };
+                    return {
+                        result : true,
+                        priceGroup : priceGroup,
+                        detail : productExtractTask
+                    };
                 }
-                if (!!productData.bus) priceGroup.bus = productData.bus;
-                else priceGroup.bus = {
-                    company : 'busking',
-                    size : 43,
-                    cost : 0
-                };
-                return priceGroup;
             })
     }
 

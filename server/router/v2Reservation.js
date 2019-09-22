@@ -50,18 +50,18 @@ function postRouterHandler(req, res) {
             reservationTask.pickupDataFound = true;
             return Product.productDataExtractFromFB(data)})
         .then(productData => {
-            if (!productData) {
+            if (!productData.result) {
                 log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`)
                 return {
                     result : false,
                     type: 'POST',
                     reservationResult : false,
                     reservationTask : reservationTask,
-                    detail : ''
+                    detail : productData.detail
                 };
             } else {
                 reservationTask.priceGroupFound = true;
-                data.productData = productData;
+                data.productData = productData.priceGroup;
                 log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
                 reservation = new Reservation(data);
                 return Reservation.validationCreate(reservation)

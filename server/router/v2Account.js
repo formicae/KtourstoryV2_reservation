@@ -12,7 +12,8 @@ exports.post = (req, res) => {
             if (!resultData.accountResult) return res.status(500).json({
                 message : 'accountHandler failed',
                 reservationTask : resultData.reservationTask,
-                accountTask : resultData.accountTask
+                accountTask : resultData.accountTask,
+                detail : resultData.detail
             });
             log.debug('Router', 'v2Account', 'all task done successfully [POST]');
             return res.status(201).json({
@@ -97,17 +98,21 @@ function accountHandler(req, res, requestType) {
                 data.infant = data.reservation.infant;
                 resolve(Product.productDataExtractFromFB(data));
             } else {
-                resolve(data.productData);
+                resolve({
+                    result : true,
+                    priceGroup : data.productData
+                });
             }
         }).then(productData => {
-            if (!productData) {
+            if (!productData.result) {
                 log.warn('Router', 'accountHandler', `productData load failed. product : ${data.product}`);
+                console.log(productData);
                 return {
                     accountResult : false,
-                    detail : 'priceGroup matching failed'
+                    detail : productData.detail
                 };
             } else {
-                data.productData = productData;
+                data.productData = productData.priceGroup;
                 if (!data.hasOwnProperty('cash')) data.cash = false;
                 const account = new Account(data);
                 const task = {validation : false, insertSQL : false, insertElastic: false};

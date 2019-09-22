@@ -76,7 +76,7 @@ function RESERVATION_VALID_CHECK_PARAMETER_MAP(data) {
         ['writer', [data.writer, 'string']],
         ['agency', [data.agency, 'string']],
         ['agency_code', [data.agency_code, 'string']],
-        ['tour_date', [data.tour_date, data.product_id]],
+        ['tour_date', [data.tour_date, data.product_id, data.agency]],
         ['options', [data.options, 'object']],
         ['adult', [data.adult]],
         ['kid', [data.kid]],
@@ -84,7 +84,7 @@ function RESERVATION_VALID_CHECK_PARAMETER_MAP(data) {
         ['canceled', [data.canceled, 'boolean']],
         ['created_date', [data.created_date]],
         ['modified_date', [data.modified_date]],
-        ['productCheck', [data.product_id, data.tour_date]],
+        ['productCheck', [data.product_id, data.tour_date, data.agency]],
         ['totalPeopleNumberCheck', [data.adult, data.kid, data.infant]],
     ]);
 }
@@ -182,7 +182,7 @@ function validCheckObjectSQL(table, field, objectId) {
  * @param tour_date {String || Date}
  * @returns {Promise<T | never>}
  */
-function validCheckProduct(product_id, tour_date) {
+function validCheckProduct(product_id, tour_date, agency) {
     let product;
     return Product.getProduct(product_id)
         .then(result => {
@@ -196,7 +196,7 @@ function validCheckProduct(product_id, tour_date) {
                 log.warn('Validation','validCheckProduct', 'statusCheck failed. product.on is not TRUE');
                 return false;}
             log.debug('Debug','validCheckProduct status check', `statusCheck success with ${product_id}`);
-            return Product.getAvailablePriceGroup(tour_date, product) })
+            return Product.getAvailablePriceGroup(tour_date, product, agency) })
         .then(availablePriceGroup => {
             if (!availablePriceGroup) return false;
             if (availablePriceGroup.length === 0) {
@@ -241,10 +241,12 @@ function validCheckOptionalItem(item, type) {
  * simple string, availability of day of week, tour_date valid check with available reservation date, price group is checked.
  * @param tour_date {Date} Local date (UTC+9)
  * @param product_id {Number} product id
+ * @param agency {String} agency
  * @returns {PromiseLike<any | never | boolean | never>}
  */
-function validCheckOperationDateTime(tour_date, product_id) {
+function validCheckOperationDateTime(tour_date, product_id, agency) {
     let product;
+    let dayCheckData;
     const tourDateCheckTask = {simpleLengthCheck:false, getProduct:false, validCheckDayOfWeek:false, checkTourDateInValidRange:false, getAvailablePriceGroup:false};
     if (!tour_date) {
         log.warn('Validation', 'validCheckOperationDateTime', 'tour_date is undefined');
@@ -265,7 +267,8 @@ function validCheckOperationDateTime(tour_date, product_id) {
             log.debug('Validation','validCheckOperationDateTime','get Product passed');
             return validCheckDayOfWeek(product, tour_date)})
         .then(dayCheck => {
-            if (!dayCheck) return false;
+            dayCheckData = dayCheck;
+            if (!dayCheck.result) return false;
             tourDateCheckTask.validCheckDayOfWeek = true;
             log.debug('Validation','validCheckOperationDateTime','dayCheck passed');
             return Product.checkTourDateInValidRange(tour_date, product.tour_begin, product.tour_end, product.timezone)})
@@ -273,7 +276,7 @@ function validCheckOperationDateTime(tour_date, product_id) {
             if (!tourDateCheck) return false;
             tourDateCheckTask.checkTourDateInValidRange = true;
             log.debug('Validation','validCheckOperationDateTime','tourDateCheck passed');
-            return Product.getAvailablePriceGroup(tour_date, product)})
+            return Product.getAvailablePriceGroup(tour_date, product, agency)})
         .then((priceGroupCheck) => {
             if (!priceGroupCheck) return false;
             tourDateCheckTask.getAvailablePriceGroup = true;
@@ -285,7 +288,7 @@ function validCheckOperationDateTime(tour_date, product_id) {
             if (result) return true;
             if (!tourDateCheckTask.simpleLengthCheck) log.warn('Validation', 'simpleLengthCheck',`simple lenght check failed : ${tour_date}`);
             else if (!tourDateCheckTask.getProduct) log.warn('Validation', 'validCheckOperationDateTime',`getProduct failed. [${product_id}] is not in productMap.`);
-            else if (!tourDateCheckTask.validCheckDayOfWeek) log.warn('Validation', 'validCheckOperationDateTime', 'dayCheck failed. invalid operation day of week');
+            else if (!tourDateCheckTask.validCheckDayOfWeek) log.warn('Validation', 'validCheckOperationDateTime', `dayCheck failed. invalid operation day of week. day of tour_date : ${DAY_MAP[dayCheckData.tourDay]} / firebase Tour day array : ${JSON.stringify(dayCheckData.productDayArray)}`);
             else if (!tourDateCheckTask.checkTourDateInValidRange) log.warn('Validation','validCheckOperationDateTime', 'tourDateCheck failed');
             else if (!tourDateCheckTask.getAvailablePriceGroup) log.warn('Valdation','validCheckOperationDateTime', 'priceGroupCheck failed. no existing price group in product');
             return false;
@@ -368,11 +371,18 @@ function validCheckDayOfWeek(product, date) {
     let correctedDate;
     if (new Date().getTimezoneOffset() === 0) correctedDate = new Date(date);
     else correctedDate = Product.getReverseTimezoneDate(date, new Date().getTimezoneOffset());
-    // console.log('validCheckDayOfWeek : ', date, ' correctedDate -> ', correctedDate);
     let tourDay = new Date(correctedDate).getDay() - 1;
     tourDay = (tourDay < 0) ? 6 : tourDay;
     log.debug('Validation', 'validCheckDayOfWeek', `tourDay : ${tourDay}, operation day : ${JSON.stringify(product.days)}`)
-    return product.days[tourDay];
+    let productDayArray = {};
+    for (let i=0; i<product.days.length; i++) {
+        productDayArray[DAY_MAP[i]] = product.days[i];
+    }
+    return {
+        result : product.days[tourDay],
+        tourDay : tourDay,
+        productDayArray : productDayArray
+    };
 }
 
 /**
