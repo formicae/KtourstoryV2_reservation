@@ -42,7 +42,7 @@ class Reservation {
                 alias : data.productData.alias,
                 category : data.productData.category,
                 area : data.productData.area,
-                geos : this.locationPreprocess(data.productData.geos),
+                geos : this.locationPreprocess(data.productData),
                 bus : data.productData.bus
             },
             agency : data.agency,
@@ -167,15 +167,19 @@ class Reservation {
         return TIME_OFFSET_MAP[utc.toUpperCase()];
     }
 
-    static locationPreprocess(object) {
-        let temp = object;
-        if (typeof object === 'string') temp = JSON.parse(object);
-        return {
-            place : temp.place,
-            location : {
-                lat : Number(temp.location.lat) ? Number(temp.location.lat) : 35.4,
-                lon : Number(temp.location.lon) ? Number(temp.location.lon) : 127.58
+    static locationPreprocess(productData) {
+        let temp = productData.geos;
+        if (typeof temp === 'string') temp = JSON.parse(temp);
+        let location = {lat:0, lon:0};
+        let place = productData.area;
+        temp.forEach(data => {
+            if (data.place === productData.area) {
+                location = data.location;
             }
+        });
+        return {
+            place : place,
+            location : location
         }
     }
 

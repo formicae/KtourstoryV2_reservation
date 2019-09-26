@@ -171,6 +171,7 @@ const ALL_V2_PRODUCT_ALIAS = ['레송감국',
     '어묵체험',
     '부산핑크뮬리',
     '비발디only'];
+const Pickup = require('../../models/pickups');
 const log = require('../../../log');
 const Product = require('../../models/product');
 
@@ -179,148 +180,156 @@ class v2ProductConveter {
         this.fbData = v2ProductConveter.generateFBObject(v1ProductData, v2SQLData);
         this.elasticData = v2ProductConveter.generateElasticObject(v1ProductData, v2SQLData);
     }
-    static generateFBObject(v1ProductData, v2SQLData) {
-        return new Promise((resolve, reject) => {
-            const tempOutput = {};
-            const result = {
-                id : v2SQLData.id,
-                name : v2SQLData.name,
-                alias : v2SQLData.alias,
-                category : v2SQLData.category || v1ProductData.info.category,
-                area : v2SQLData.area || v1ProductData.info.area,
-                timezone : 'UTC+9',
-                geos : {place : v1ProductData.info.area, location : {lat:0.00,lon:0.00}},
-                pickups : [],
-                description : v1ProductData.info.description,
-                memo : v1ProductData.info.memo,
-                expenses : [],
-                cost : {},
-                on : v1ProductData.info.status,
-                deadline : v1ProductData.info.deadline,
-                days : v1ProductData.info.available.filter((val, idx) => idx < 7),
-                reserve_begin : v1ProductData.price.default.reservationDate_from,
-                reserve_end : v1ProductData.price.default.reservationDate_to,
-                tour_begin : v1ProductData.info.period[0].from,
-                tour_end : v1ProductData.info.period[0].to,
-                ignore_options : [],
-                options : [],
-                sales : []
+    static async generateFBObject(v1ProductData, v2SQLData) {
+        const tempOutput = {};
+        const result = {
+            id : v2SQLData.id,
+            name : v2SQLData.name,
+            alias : v2SQLData.alias,
+            category : v2SQLData.category || v1ProductData.info.category,
+            area : v2SQLData.area || v1ProductData.info.area,
+            timezone : 'UTC+9',
+            geos : [],
+            pickups : [],
+            description : v1ProductData.info.description,
+            memo : v1ProductData.info.memo,
+            expenses : [],
+            cost : {},
+            on : v1ProductData.info.status,
+            deadline : v1ProductData.info.deadline,
+            days : v1ProductData.info.available.filter((val, idx) => idx < 7),
+            reserve_begin : v1ProductData.price.default.reservationDate_from,
+            reserve_end : v1ProductData.price.default.reservationDate_to,
+            tour_begin : v1ProductData.info.period[0].from,
+            tour_end : v1ProductData.info.period[0].to,
+            ignore_options : [],
+            options : [],
+            sales : []
+        };
+        Object.entries(v1ProductData.price).forEach(temp0 => {
+            let priceGroup = temp0[0];
+            let priceData = temp0[1];
+            let tempResult = {
+                default : priceData.forAll,
+                name : priceData.title,
+                reserve_begin : priceData.reservationDate_from,
+                reserve_end : priceData.reservationDate_to,
+                tour_begin : priceData.tourDate_from,
+                tour_end : priceData.tourDate_to,
+                byAgency : []
             };
-            Object.entries(v1ProductData.price).forEach(temp0 => {
-                let priceGroup = temp0[0];
-                let priceData = temp0[1];
-                let tempResult = {
-                    default : priceData.forAll,
-                    name : priceData.title,
-                    reserve_begin : priceData.reservationDate_from,
-                    reserve_end : priceData.reservationDate_to,
-                    tour_begin : priceData.tourDate_from,
-                    tour_end : priceData.tourDate_to,
-                    byAgency : []
-                };
-                priceData.byAgencies.forEach(agencyData => {
-                    let agency = [];
-                    if (agencyData.hasOwnProperty('agency')) agency = agencyData.agency;
-                    tempResult.byAgency.push({
-                        agencies : agency,
-                        currency : agencyData.currency,
-                        sales : [
-                            {type : 'adult', gross : agencyData.adult_gross, net : agencyData.adult_net},
-                            {type : 'kid', gross : agencyData.kid_gross, net : agencyData.kid_net},
-                            {type : 'infant', gross : agencyData.infant_gross, net : agencyData.infant_net}
-                        ]
+            priceData.byAgencies.forEach(agencyData => {
+                let agency = [];
+                if (agencyData.hasOwnProperty('agency')) agency = agencyData.agency;
+                tempResult.byAgency.push({
+                    agencies : agency,
+                    currency : agencyData.currency,
+                    sales : [
+                        {type : 'adult', gross : agencyData.adult_gross, net : agencyData.adult_net},
+                        {type : 'kid', gross : agencyData.kid_gross, net : agencyData.kid_net},
+                        {type : 'infant', gross : agencyData.infant_gross, net : agencyData.infant_net}
+                    ]
+                })
+            });
+            result.sales.push(tempResult);
+        });
+        let geoData = await Pickup.getPickup(v1ProductData.info.area);
+        if (!geoData) result.geos.push({place:v1ProductData.info.area, location : {lat : 0, lon : 0}});
+        else result.geos.push({place:v1ProductData.info.area, location : geoData.location});
+        if (v1ProductData.possibles) {
+            result.incoming = v1ProductData.possibles;
+        }
+        if (v1ProductData.info.pickup) {
+            v1ProductData.info.pickup.forEach(async each => {
+                let pickupData = await Pickup.getPickup(each)
+                result.pickups.push({
+                        place : each,
+                        location : pickupData.location
+                    }
+                )});
+        }
+        if (v1ProductData.cost) {
+            let costData = {bus:[], wage:0};
+            if (v1ProductData.cost.bus) {
+                v1ProductData.cost.bus.forEach(bus => {
+                    bus.size.forEach(size => {
+                        if (size.max === 43) costData.bus.push({type:'default', cost: size.cost})
                     })
                 });
-                result.sales.push(tempResult);
+            }
+            if (v1ProductData.cost.wage){
+                costData.wage = v1ProductData.cost.wage;
+            }
+            result.cost = costData;
+        }
+        if (v1ProductData.cost.item) {
+            v1ProductData.cost.item.forEach(item => {
+                let tempData = {
+                    name : item.item,
+                    expenses : [
+                        {type : 'adult', cost : item.adult_cost},
+                        {type : 'kid', cost : item.kid_cost},
+                        {type : 'young', cost : item.young_cost},
+                        {type : '-', cost : 0},
+                    ]
+                };
+                result.expenses.push(tempData);
             });
-            if (v1ProductData.possibles) {
-                result.incoming = v1ProductData.possibles;
-            }
-            if (v1ProductData.info.pickup) {
-                v1ProductData.info.pickup.forEach(each => {result.pickups.push({place:each, lat:"", lon:""})});
-            }
-            if (v1ProductData.cost) {
-                let costData = {bus:[], wage:0};
-                if (v1ProductData.cost.bus) {
-                    v1ProductData.cost.bus.forEach(bus => {
-                        bus.size.forEach(size => {
-                            if (size.max === 43) costData.bus.push({type:'default', cost: size.cost})
-                        })
+        }
+        if (v1ProductData.option) {
+            Object.keys(v1ProductData.option).forEach(op => {
+                if (v1ProductData.option[op].option === 'Ignore') {
+                    v1ProductData.option[op].possibles.forEach(each => {
+                        if (each) result.ignore_options.push(each);
                     });
-                }
-                if (v1ProductData.cost.wage){
-                    costData.wage = v1ProductData.cost.wage;
-                }
-                result.cost = costData;
-            }
-            if (v1ProductData.cost.item) {
-                v1ProductData.cost.item.forEach(item => {
+                } else {
                     let tempData = {
-                        name : item.item,
-                        expenses : [
-                            {type : 'adult', cost : item.adult_cost},
-                            {type : 'kid', cost : item.kid_cost},
-                            {type : 'young', cost : item.young_cost},
-                            {type : '-', cost : 0},
-                        ]
+                        price : v1ProductData.option[op].price,
+                        name : v1ProductData.option[op].option,
+                        incoming : []
                     };
-                    result.expenses.push(tempData);
-                });
-            }
-            if (v1ProductData.option) {
-                Object.keys(v1ProductData.option).forEach(op => {
-                    if (v1ProductData.option[op].option === 'Ignore') {
-                        v1ProductData.option[op].possibles.forEach(each => {
-                            if (each) result.ignore_options.push(each);
-                        });
-                    } else {
-                        let tempData = {
-                            price : v1ProductData.option[op].price,
-                            name : v1ProductData.option[op].option,
-                            incoming : []
-                        };
-                        v1ProductData.option[op].possibles.forEach(each => {
-                            if (each) tempData.incoming.push(each);
-                        });
-                        result.options.push(tempData);
-                    }
-                });
-            }
-            tempOutput[v2SQLData.id] = result;
-            resolve(tempOutput);
-        })
+                    v1ProductData.option[op].possibles.forEach(each => {
+                        if (each) tempData.incoming.push(each);
+                    });
+                    result.options.push(tempData);
+                }
+            });
+        }
+        tempOutput[v2SQLData.id] = result;
+        return tempOutput;
     }
 
-    static generateElasticObject(v1ProductData, v2SQLData) {
-        return new Promise((resolve, reject) => {
-            const result = {
-                id : v2SQLData.id,
-                name : v2SQLData.name,
-                alias : v2SQLData.alias,
-                category : v2SQLData.category || v1ProductData.info.category,
-                area : v2SQLData.area || v1ProductData.info.area,
-                geos : {place : v2SQLData.area || v1ProductData.info.area, location : {lat:0.00,lon:0.00}},
-                description : v1ProductData.info.description,
-                memo : v1ProductData.info.memo,
-                on : v1ProductData.info.status === "ON",
-                reserve_begin : Product.getLocalDate(v1ProductData.price.default.reservationDate_from, 'UTC+9'),
-                reserve_end : Product.getLocalDate(v1ProductData.price.default.reservationDate_to,'UTC+9'),
-                tour_begin : Product.getLocalDate(v1ProductData.info.period[0].from, 'UTC+9'),
-                tour_end : Product.getLocalDate(v1ProductData.info.period[0].to, 'UTC+9'),
-                options : []
-            };
-            if (v1ProductData.option) {
-                Object.keys(v1ProductData.option).forEach(op => {
-                    if (v1ProductData.option[op].option !== 'Ignore') {
-                        result.options.push({
-                            name : v1ProductData.option[op].option,
-                            price : v1ProductData.option[op].price,
-                        });
-                    }
-                });
-            }
-            resolve(result);
-        })
+    static async generateElasticObject(v1ProductData, v2SQLData) {
+        const result = {
+            id : v2SQLData.id,
+            name : v2SQLData.name,
+            alias : v2SQLData.alias,
+            category : v2SQLData.category || v1ProductData.info.category,
+            area : v2SQLData.area || v1ProductData.info.area,
+            geos : [],
+            description : v1ProductData.info.description,
+            memo : v1ProductData.info.memo,
+            on : v1ProductData.info.status === "ON",
+            reserve_begin : Product.getLocalDate(v1ProductData.price.default.reservationDate_from, 'UTC+9'),
+            reserve_end : Product.getLocalDate(v1ProductData.price.default.reservationDate_to,'UTC+9'),
+            tour_begin : Product.getLocalDate(v1ProductData.info.period[0].from, 'UTC+9'),
+            tour_end : Product.getLocalDate(v1ProductData.info.period[0].to, 'UTC+9'),
+            options : []
+        };
+        let geoData = await Pickup.getPickup(v1ProductData.info.area);
+        if (!geoData) result.geos.push({place:v1ProductData.info.area, location : {lat : 0, lon : 0}});
+        else result.geos.push({place:v1ProductData.info.area, location : geoData.location});
+        if (v1ProductData.option) {
+            Object.keys(v1ProductData.option).forEach(op => {
+                if (v1ProductData.option[op].option !== 'Ignore') {
+                    result.options.push({
+                        name : v1ProductData.option[op].option,
+                        price : v1ProductData.option[op].price,
+                    });
+                }
+            });
+        }
+        return result;
     }
 
     static async insertFB(data){

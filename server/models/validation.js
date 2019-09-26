@@ -188,23 +188,29 @@ function validCheckProduct(product_id, tour_date, agency) {
         .then(result => {
             if (!result) {
                 log.warn('Validation','validCheckProduct', `getProduct failed : ${product_id}`);
-                return false;}
-            product = result;
-            return product.on === 'ON' })
+                return false;
+            } else {
+                product = result;
+                return product.on === 'ON';
+            }})
         .then(statusCheck => {
             if (!statusCheck) {
                 log.warn('Validation','validCheckProduct', 'statusCheck failed. product.on is not TRUE');
-                return false;}
-            log.debug('Debug','validCheckProduct status check', `statusCheck success with ${product_id}`);
-            return Product.getAvailablePriceGroup(tour_date, product, agency) })
+                return false;
+            } else {
+                log.debug('Debug','validCheckProduct status check', `statusCheck success with ${product_id}`);
+                return Product.getAvailablePriceGroup(tour_date, product, agency)
+            }})
         .then(availablePriceGroup => {
+            console.log('validation - availablePriceGroup', availablePriceGroup)
             if (!availablePriceGroup) return false;
             if (availablePriceGroup.length === 0) {
                 log.warn('Validation','validCheckProduct', `availablePriceGroup failed number of available price group : ${availablePriceGroup.length}`);
                 return false;
+            } else {
+                log.debug('Debug','validCheckProduct price group check', `availablePriceGroup check success with ${availablePriceGroup[0].name}`);
+                return availablePriceGroup.length > 0;
             }
-            log.debug('Debug','validCheckProduct price group check', `availablePriceGroup check success with ${availablePriceGroup[0].name}`);
-            return availablePriceGroup.length > 0;
         });
 }
 
