@@ -1,5 +1,6 @@
 const Product = require('../../models/product');
 const Reservation = require('../../models/reservation');
+const Pickup = require('../../models/pickups')
 const sqlDB = require('../../auth/postgresql');
 const fbDB = require('../../auth/firebase').database;
 const elasticDB = require('../../auth/elastic');
@@ -223,7 +224,8 @@ class v2ReservationConverter {
      */
     static async elasticDataMatch(v1Reservation, v2ProductData, team_id, v2SQLData, v2ElasticReservation) {
         if (v1Reservation) {
-            let pickupLocation = await Reservation.pickupPlaceFinder({pickup:v1Reservation.pickupPlace});
+            let pickupLocation = await Pickup.getPickup(v1Reservation.pickupPlace);
+            // let pickupLocation = await Reservation.pickupPlaceFinder({pickup:v1Reservation.pickupPlace});
             const result = {
                 id: v2SQLData.id,
                 message_id: v1Reservation.id,

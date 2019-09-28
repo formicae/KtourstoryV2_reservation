@@ -225,91 +225,98 @@ class Product {
         else return new Date(date - ((-1) * timeOffset * 60000));
     }
 
-    static productDataExtractFromFB(data) {
-        let product;
-        let productExtractTask = {getProduct :false, defaultPrice:false, reserveValid : false, tourValid : false, priceAgencyMatch:false};
-        return Product.getProduct(data.product)
-            .then(productData => {
-                if (!productData) {
-                    log.warn('Router', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
-                    return {
-                        result : false,
-                        priceGroup : null,
-                        detail : productExtractTask
-                    };
+    static async agencyMatching(data, productData, salesItem, task) {
+        let result = {income : 0, currency : null};
+        for (let agencyData of salesItem.byAgency) {
+            if (agencyData.hasOwnProperty('agencies')) {
+                task.has_agencies = true;
+                if (agencyData.agencies.includes(data.agency)) {
+                    task.priceAgencyMatch = true;
+                    result.income = Product.incomeCalculation(data, productData, agencyData.sales);
+                    result.currency = agencyData.currency
                 }
-                productExtractTask.getProduct = true;
-                product = productData;
-                let priceGroup = {
-                    id : product.id,
-                    name : product.name,
-                    alias : product.alias,
-                    category : product.category,
-                    area : product.area,
-                    geos : product.geos,
-                    currency : null,
-                    income : 0,
-                    expenditure : 0,
-                    bus : {}
-                };
-                productData.sales.forEach(item => {
-                    if (item.default) {
-                        productExtractTask.defaultPrice = true;
-                        item.byAgency.forEach(agencyData => {
-                            if (agencyData.hasOwnProperty('agencies')){
-                                if (agencyData.agencies.includes(data.agency)) {
-                                    productExtractTask.priceAgencyMatch = true;
-                                    priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales);
-                                    priceGroup.currency = agencyData.currency
-                                }
-                            } else {
-                                productExtractTask.priceAgencyMatch = true;
-                                priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales);
-                                priceGroup.currency = agencyData.currency
-                            }
-                        });
-                    } else {
-                        let timezone;
-                        if (data.hasOwnProperty('timezone')) timezone = data.timezone;
-                        else timezone = 'UTC+9';
-                        productExtractTask.reserveValid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), timezone), item.reserve_begin, item.reserve_end, timezone);
-                        productExtractTask.tourValid = Product.checkTourDateInValidRange(data.date, item.tour_begin, item.tour_end, timezone);
-                        if (productExtractTask.reserveValid && productExtractTask.tourValid) {
-                            item.byAgency.forEach(agencyData => {
-                                if (agencyData.agencies.includes(data.agency)) {
-                                    productExtractTask.priceAgencyMatch = true;
-                                    priceGroup.income = Product.incomeCalculation(data, product, agencyData.sales);
-                                    priceGroup.currency = agencyData.currency;
-                                }
-                            });
-                        } else {
-                            log.warn('product', 'productDataExtractFromFB', `date validCheck failed. reserve_date : ${productExtractTask.reserveValid} / tour_date : ${productExtractTask.tourValid}`);
-                        }
-                    }
-                });
+            } else {
+                task.has_agencies = false;
+                task.priceAgencyMatch = true;
+                result.income = Product.incomeCalculation(data, productData, agencyData.sales);
+                result.currency = agencyData.currency
+            }
+        }
+        if (task.has_agencies && !task.priceAgencyMatch) {
+            log.warn('Model', 'Product - agencyMatching', `agencyMatching failed : ${data.agency} / product : ${data.product}, ${data.productData.id}`);
+        }
+        result.task = task;
+        return result;
+    }
+
+    /**
+     * sales matching function
+     * @param data {Object} requested data
+     * @param productData {Object} product data
+     * @param task {Object} internal task object
+     * @returns {Promise<{task: Object}>}
+     */
+    static async salesMatch(data, productData, task) {
+        task.salesMatch = false;
+        for (let item of productData.sales) {
+            if (item.default) {
+                task.salesMatch = true;
+                task.defaultPrice = true;
+                return await this.agencyMatching(data, productData, item, task);
+            } else {
+                let timezone = (data.hasOwnProperty('timezone')) ? data.timezone : 'UTC+9';
+                task.reserveValid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), timezone), item.reserve_begin, item.reserve_end, timezone);
+                task.tourValid = Product.checkTourDateInValidRange(data.date, item.tour_begin, item.tour_end, timezone);
+                if (task.reserveValid && task.tourValid) {
+                    task.salesMatch = true;
+                    return await this.agencyMatching(data, productData, item, task);
+                }
+            }
+        }
+        if (!task.salesMatch) {
+            log.warn('Router', 'salesMatch', `sales data matching failed! ${data.product}, ${data.agency}`);
+            return {task : task};
+        }
+    }
+
+    static async productDataExtractFromFB(data) {
+        let productExtractTask = {getProduct :false, defaultPrice:false, reserveValid : false, tourValid : false, priceAgencyMatch:false};
+        let productData = await Product.getProduct(data.product);
+        if (!productData) {
+            log.warn('Router', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
+            return {result : false, priceGroup : null, detail : productExtractTask};
+        } else {
+            productExtractTask.getProduct = true;
+            let priceGroup = {
+                id : productData.id,
+                name : productData.name,
+                alias : productData.alias,
+                category : productData.category,
+                area : productData.area,
+                geos : productData.geos,
+                currency : null,
+                income : 0,
+                expenditure : 0,
+                bus : {}
+            };
+            let salesData = await this.salesMatch(data, productData, productExtractTask);
+            if (!salesData.task.salesMatch) {
+                return {result : false, priceGroup : null, detail:salesData.task};
+            } else {
+                productExtractTask = salesData.task;
+                priceGroup.income = salesData.income;
+                priceGroup.currency = salesData.currency;
+                console.log('sales data : ',salesData);
                 if (!productExtractTask.priceAgencyMatch) {
-                    log.warn('product', 'productDataExtractFromFB', `price data matching failed : ${product.id} / ${product.alias} / ${data.agency}`);
-                    console.log('what is wrong?????', productExtractTask.priceAgencyMatch)
-                    return {
-                        result : false,
-                        priceGroup : null,
-                        detail : productExtractTask
-                    };
+                    log.warn('product', 'productDataExtractFromFB', `price data matching failed : ${productData.id} / ${productData.alias} / ${data.agency}`);
+                    return {result : false, priceGroup : null, detail : productExtractTask};
                 } else {
                     if (!!productData.bus) priceGroup.bus = productData.bus;
-                    else priceGroup.bus = {
-                        company : 'busking',
-                        size : 43,
-                        cost : 0
-                    };
-                    return {
-                        id : productData.id,
-                        result : true,
-                        priceGroup : priceGroup,
-                        detail : productExtractTask
-                    };
+                    else priceGroup.bus = {company : 'busking', size : 43, cost : 0};
+                    return {id : productData.id, result : true, priceGroup : priceGroup, detail : productExtractTask};
                 }
-            })
+            }
+        }
     }
 
     static incomeCalculation(data, product, targetItem) {

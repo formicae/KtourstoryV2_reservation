@@ -202,7 +202,6 @@ function validCheckProduct(product_id, tour_date, agency) {
                 return Product.getAvailablePriceGroup(tour_date, product, agency)
             }})
         .then(availablePriceGroup => {
-            console.log('validation - availablePriceGroup', availablePriceGroup)
             if (!availablePriceGroup) return false;
             if (availablePriceGroup.length === 0) {
                 log.warn('Validation','validCheckProduct', `availablePriceGroup failed number of available price group : ${availablePriceGroup.length}`);

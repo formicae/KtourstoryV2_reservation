@@ -21,7 +21,7 @@ exports.post = (req, res) => {
                 reservationTask : resultData.reservationTask,
                 accountTask:resultData.accountTask})})
         .catch(err => {
-            log.error('Router', 'ACCOUNT export-POST', `unhandled error occurred! error : ${err}`);
+            log.error('Router', 'ACCOUNT export-POST', `unhandled error occurred! error`);
             res.status(500).send(`unhandled ACCOUNT POST error`)
         });
 };
@@ -41,7 +41,7 @@ exports.delete = (req, res) => {
                 reservationTask : resultData.reservationTask,
                 accountTask: resultData.accountTask})})
         .catch(err => {
-            log.error('Router', 'ACCOUNT export-REVERSE_CREATE', `unhandled error occurred! error : ${err}`);
+            log.error('Router', 'ACCOUNT export-REVERSE_CREATE', `unhandled error occurred! error`);
             res.status(500).send(`unhandled ACCOUNT POST error`)
         });
 };

@@ -51,7 +51,7 @@ class Reservation {
             nationality : (data.nationality || 'unknown').toUpperCase(),
             tour_date : data.date,
             pickup : {
-                place : data.pickup || '',
+                place : data.pickupData.pickupPlace || data.productData.area,
                 location : data.pickupData.location
             },
             options : data.options || [],
@@ -138,7 +138,7 @@ class Reservation {
             agency : data.agency || '',
             agency_code : data.agency_code || '',
             writer : data.writer || '',
-            pickup : data.pickup || '',
+            pickup : data.pickupData.pickupPlace || data.productData.area,
             adult : this.peopleNumberPreprocess(data.adult),
             kid : this.peopleNumberPreprocess(data.kid),
             infant : this.peopleNumberPreprocess(data.infant),
@@ -195,26 +195,6 @@ class Reservation {
         if (phone.charAt(0) === "0") result = phone.slice(1, phone.length);
         if (phone.charAt(0) !== "+") result = "+" + result;
         return result;
-    }
-
-    static pickupPlaceFinder(data){
-        return new Promise((resolve, reject) => {
-            fbDB.ref('geos').once('value', (snapshot) => {
-                const geos = snapshot.val();
-                if (!geos) resolve({lat:0.00,lon:0.00});
-                else {
-                    Object.keys(geos.areas).forEach(key => {
-                        geos.areas[key].pickups.forEach(area => {
-                            if (area.name === data.pickup) resolve(area.location);
-                            area.incoming.forEach(incoming => {
-                                if (incoming === data.pickup) resolve(area.location);
-                            });
-                        })
-                    });
-                    resolve({lat:0.00,lon:0.00});
-                }
-            })
-        })
     }
 
     /**

@@ -12,7 +12,7 @@ exports.post = (req, res) => {
     if (!req.get('Content-Type')) return res.status(400).json({message:"Content-Type should be json", task:{}});
     postRouterHandler(req, res)
         .catch(err => {
-            log.error('Router', 'RESERVATION export-POST', `unhandled error occurred! error : ${err}`);
+            log.error('Router', 'RESERVATION export-POST', `unhandled error occurred! error`);
             res.status(500).send(`unhandled RESERVATION POST error`)
         });
 };
@@ -21,7 +21,7 @@ exports.delete = (req, res) => {
     if (!req.get('Content-Type')) return res.status(400).json("Content-Type should be json");
     deleteRouterHandler(req, res)
         .catch(err => {
-            log.error('Router', 'RESERVATION export-UPDATE', `unhandled error occurred! error : ${err}`);
+            log.error('Router', 'RESERVATION export-UPDATE', `unhandled error occurred! error`);
             res.status(500).send(`unhandled RESERVATION UPDATE error`)
         });
 };
@@ -34,7 +34,7 @@ exports.delete = (req, res) => {
  * @param res {Object} response object from express
  * @returns {Promise<T | never>}
  */
-function postRouterHandler(req, res) {
+async function postRouterHandler(req, res) {
     let data = req.body;
     let testObj;
     if (req.body.hasOwnProperty('testObj')) testObj = req.body.testObj;
@@ -43,46 +43,46 @@ function postRouterHandler(req, res) {
     data.requestType = 'POST';
     data.reservationResult = false;
     let reservation;
-    let reservationTask = {type : 'CREATE', pickupDataFound : false, priceGroupFound : false, validation : false, validationDetail : {}};
-    return Pickup.getPickup(data.pickup)
-        .then(pickupData => {
-            data.pickupData = pickupData;
-            reservationTask.pickupDataFound = true;
-            return Product.productDataExtractFromFB(data)})
-        .then(productData => {
-            if (!productData.result) {
-                log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`)
-                return {
-                    result : false,
-                    type: 'POST',
-                    reservationResult : false,
-                    reservationTask : reservationTask,
-                    detail : productData.detail
-                };
-            } else {
-                reservationTask.priceGroupFound = true;
-                data.productData = productData.priceGroup;
-                log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
-                reservation = new Reservation(data);
-                return Reservation.validationCreate(reservation)
-            }})
-        .then(validCheck => {
-            if (!validCheck.result) {
-                const tempResult = {type:'POST', reservationResult:false, reservationTask:reservationTask};
-                tempResult.reservationTask.validationDetail = validCheck.detail;
-                return tempResult;}
-            else {
-                return createReservation(reservation, data, testObj)
-            }})
-        .then(resultData => {
-            if (!resultData.reservationResult) return res.status(500).json({
-                message:'reservationHandler failed',
-                reservationTask:resultData.reservationTask
-            });
-            req.body = resultData;
-            log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
-            return accountRouter.post(req, res);
+    let reservationTask = {type : 'CREATE', pickupDataFound : false, priceGroupFound : false};
+    let pickupData = await Pickup.getPickup(data.pickup);
+    data.pickupData = pickupData;
+    if (pickupData.hasOwnProperty('pickupPlace')) reservationTask.pickupDataFound = true;
+    let productData = await Product.productDataExtractFromFB(data);
+    if (!productData.result) {
+        log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`);
+        return res.status(500).json({
+            message:'reservationHandler failed in productData matching',
+            type: 'POST',
+            reservationTask : reservationTask,
+            detail : productData.detail
         });
+    } else {
+        reservationTask.priceGroupFound = true;
+        data.productData = productData.priceGroup;
+        log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
+        reservation = await new Reservation(data);
+        let validCheck = await Reservation.validationCreate(reservation);
+        reservationTask.validation = false;
+        if (!validCheck.result) {
+            reservationTask.validationDetail = validCheck.detail;
+            return res.status(500).json({
+                message:'reservationHandler failed in validation',
+                reservationTask: reservationTask
+            });
+        } else {
+            let resultData = await createReservation(reservation, data, testObj);
+            if (!resultData.reservationResult) {
+                return res.status(500).json({
+                    message:'reservationHandler failed in createReservation',
+                    reservationTask:resultData.reservationTask
+                });
+            } else {
+                req.body = resultData;
+                log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
+                return accountRouter.post(req, res);
+            }
+        }
+    }
 }
 
 /**
