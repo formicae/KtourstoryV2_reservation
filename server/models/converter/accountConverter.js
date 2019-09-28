@@ -700,7 +700,12 @@ class v2AccountConverter {
                                             let accountSales2 = await this.v1v2AccountSales(v1_fb_key, v1Account, v2AccountArr[1]);
                                             if (accountSales1.match || accountSales2.match) {
                                                 if (accountSales1.identical || accountSales2.identical) {taskObj.error[messageId] = await this.taskManager(this,'Pass - 2', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `same account exist in SQL`);}
-                                                else {taskObj.error[messageId] = await this.taskManager(this,'Pass - 3', v2Reservation.id, v2AccountArr.map(data=>data.id), messageId, [], [], null, `no identical account exist but two same account exist in SQL`,null);}
+                                                else {
+                                                    // (3-2ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 2개 존재 (둘다 v1 Account와 매칭됨) --> 새로운 reservation + account 생성
+                                                    let v2SQLReservation = await this.reservationCreateAndInsert(this,null, v2Product, minus_v1Account, v2Reservation, v1Account);
+                                                    let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
+                                                    taskObj[v2AccountId] = await this.taskManager(this, '[3-2ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`, null, v2SQLReservation);
+                                                }
                                             } else {
                                                 // (4ra) : v1Canceled data 없음 + 1개 SQL reservation 존재(canceled = true) + 관련 SQL account 2개 존재 + v1 Account가 존재하는 SQL account와 무관 --> reservation + account 생성 (canceled 정보는 account 정보에 따라 바뀜)
                                                 let v2SQLReservation = await this.reservationCreateAndInsert(this,null, v2Product, minus_v1Account, v2Reservation, v1Account);
