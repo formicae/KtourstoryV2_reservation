@@ -22,7 +22,7 @@ describe('v2Reservation CREATE test, ', function() {
                     let taskResult = RCT_RESULT[test_case].reservationTask;
                     // console.log(`${test_case} : ${JSON.stringify(resTask)} // ${JSON.stringify(taskResult)}`);
                     Object.keys(taskResult).forEach(key => {
-                        if (key === 'validationDetail') {
+                        if (key === 'validationDetail' || key === 'detail') {
                             Object.keys(taskResult.validationDetail).forEach(subKey => {
                                 expect(resTask.validationDetail[subKey]).to.equal(taskResult.validationDetail[subKey]);
                                 // console.log(`response : ${resTask[key][subKey]} :: result : ${taskResult[key][subKey]}`);

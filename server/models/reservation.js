@@ -876,5 +876,13 @@ function getProduct(query) {
         });
     })
 }
+
+async function testReservationUpload(){
+    let testReservation = require('./validationTestFile/v2ElasticTestReservation.json');
+    for (let reservation of Object.values(testReservation)) {
+        await Reservation.insertElastic(reservation, {});
+    }
+}
+
 // getAll().then(result => console.log(JSON.stringify(result)))
 module.exports = Reservation;

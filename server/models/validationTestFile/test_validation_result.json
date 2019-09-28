@@ -43,13 +43,6 @@
         "validationDetail" : {"writer" : false}
       }
     },
-    "rct5": {
-      "reservationTask" : {
-        "type": "CREATE",
-        "validation" : false,
-        "validationDetail" : {"options" : false}
-      }
-    },
     "rct6": {
       "reservationTask" : {
         "type": "CREATE",
@@ -60,15 +53,10 @@
     "rct7": {
       "reservationTask" : {
         "type": "CREATE",
-        "validation" : false,
-        "validationDetail" : {"agency" : false}
-      }
-    },
-    "rct8": {
-      "reservationTask" : {
-        "type": "CREATE",
-        "validation" : false,
-        "validationDetail" : {"agency_code" : false}
+        "priceGroupFound" : false
+      },
+      "detail" : {
+        "no_agency" : true
       }
     },
     "rct9": {
@@ -95,8 +83,11 @@
     "rct12": {
       "reservationTask" : {
         "type": "CREATE",
-        "validation" : false,
-        "validationDetail" : {"tour_date" : false}
+        "priceGroupFound" : false,
+        "detail" : {
+          "getProduct": false,
+          "priceAgencyMatch": false
+        }
       }
     },
     "rct13": {

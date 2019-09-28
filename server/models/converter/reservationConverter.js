@@ -224,7 +224,7 @@ class v2ReservationConverter {
      */
     static async elasticDataMatch(v1Reservation, v2ProductData, team_id, v2SQLData, v2ElasticReservation) {
         if (v1Reservation) {
-            let pickupLocation = await Pickup.getPickup(v1Reservation.pickupPlace);
+            let pickupData = await Pickup.getPickup(v1Reservation.pickupPlace);
             // let pickupLocation = await Reservation.pickupPlaceFinder({pickup:v1Reservation.pickupPlace});
             const result = {
                 id: v2SQLData.id,
@@ -242,7 +242,7 @@ class v2ReservationConverter {
                 name: v1Reservation.clientName,
                 nationality: v1Reservation.nationality.toUpperCase(),
                 tour_date: v1Reservation.date,
-                pickup: { place: v1Reservation.pickupPlace, location:pickupLocation || {lat:0.0, lon:0.0}},
+                pickup: { place: v1Reservation.pickupPlace, location:pickupData.location || {lat:0.0, lon:0.0}},
                 options : v2SQLData.options || [],
                 adult: v1Reservation.adult,
                 kid: v1Reservation.kid,
@@ -631,7 +631,7 @@ class v2ReservationConverter {
         let data;
         let firebaseRemoveArr = [];
         Object.keys(v1OperationData).forEach(date => {
-            firebaseRemoveArr.push(fbDB.ref('operation').child('date').remove());
+            firebaseRemoveArr.push(fbDB.ref('operation').child(date).remove());
         });
         return Promise.all(firebaseRemoveArr)
             .then(() => {
@@ -815,9 +815,9 @@ function deleteFirebaseData(year, month){
 }
 
 const v1OperationBulkData = require('../dataFiles/intranet-64851-operation-export.json');
-const v1Operation_2019_JuneToOct = require('../dataFiles/v1OperationData_2019_JuneToOct.json');
+const v1Operation_2019_June = require('../dataFiles/v1OperationData_2019_June.json');
 // v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '6~8', 'server/models/dataFiles/v1OperationData_2019_JuneToOct.json');
-// let result = v2ReservationConverter.mainConverter(v1Operation_2019_JuneToOct);
+// let result = v2ReservationConverter.mainConverter(v1Operation_2019_June);
 // deleteFirebaseData(2019,7);
 // v2ReservationConverter.convertElasticToFile(require('../dataFiles/v1OperationData_2019_July'), 'server/models/tempDataFiles/v2ConvertedElasticData.json')
 //     .then(result => console.log('result : ',result));

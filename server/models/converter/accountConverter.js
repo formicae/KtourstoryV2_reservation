@@ -788,6 +788,7 @@ class v2AccountConverter {
                                         }
                                     } else {
                                         // (14ra) : v1Canceled data 없음 + 여러 개 SQL reservation 존재 + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 하지 않음 --> reservation + account 생성 (canceled 정보는 minus_v1Account에 따라 변경됨)
+                                        let v2Reservation = (obj.normalObj.length > 0) ? obj.normalObj[0] : v2ReservationArr[0];
                                         let v2Product = await Product.getProduct(v2Reservation.product_id);
                                         let v2SQLReservation = await this.reservationCreateAndInsert(this, null, v2Product, minus_v1Account, v2Reservation, v1Account);
                                         let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
@@ -904,8 +905,7 @@ class v2AccountConverter {
                                             }
                                         } else {
                                             // (28ra) : v1Canceled data 있음 + 여러 개 SQL reservation 존재 + 존재하는 v2 Account중 v1 Account와 reverse관계인 것 없음 + 관련 account가 0개인 reservation 존재 하지 않음 --> reservation + account 생성 (canceled 정보는 minus_v1Account에 따라 변경됨)
-                                            let v2Reservation = null;
-                                            if (obj.normalObj.length > 0) {v2Reservation = obj.normalObj[0];}
+                                            let v2Reservation = (obj.normalObj.length > 0) ? obj.normalObj[0] : v2ReservationArr[0];
                                             let v2SQLReservation = await this.reservationCreateAndInsert(this, v1CanceledData, v2Product, minus_v1Account, v2Reservation, v1Account);
                                             let v2AccountId = await this.accountCreateAndInsert(this, v1FbTeamBulkData, v1_fb_key, v1Account, v2SQLReservation, true, false, null);
                                             taskObj[v2AccountId] = await this.taskManager(this, '[28ra]',v2SQLReservation.id, v2AccountId, messageId, ['insertSQL', 'insertElastic'], ['insertSQL', 'insertElastic'], `success - ${v1Account.category}`,null, v2SQLReservation)
@@ -1021,6 +1021,8 @@ class v2AccountConverter {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 3) result = this.dataStore(result, v1Account, date, v1_fb_key);
             } else if (month === '4~6') {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 4 && Number(dateArr[1]) <= 6) result = this.dataStore(result, v1Account, date, v1_fb_key);
+            } else if (month === '6') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) === 6) result = this.dataStore(result, v1Account, date, v1_fb_key);
             } else if (month === '~6') {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 6) result = this.dataStore(result, v1Account, date, v1_fb_key);
             } else if (month === '6~8') {
@@ -1323,50 +1325,23 @@ const testCase = {
 
 const v1AccountBulkData = require('../dataFiles/intranet-64851-account-export.json');
 // const v1Account_2019_JuneToOct = require('../dataFiles/v1AccountData_2019_JuneToOct.json');
-const temp_v1Account_due_to_error_2019_JuneToOct = require('../dataFiles/temp_v1AccountData_2019_JuneToOct.json');
+const temp_v1Account_due_to_error_2019_June = require('../dataFiles/temp_v1AccountData_2019_June.json');
+const v1Account_2019_June = require('../dataFiles/v1AccountData_2019_June.json');
 const v1CanceledBulkDataData = require('../dataFiles/intranet-64851-canceled-export.json');
 const v1FbTeamBulkData = require('../dataFiles/v1FbTeamBulkData_noDate.json');
-
-// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, '6~8', 'server/models/dataFiles/v1AccountData_2019_JuneToOct.json').then(result => console.log('result : ', result));
+// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, '6', 'server/models/dataFiles/v1AccountData_2019_June.json').then(result => console.log('result : ', result));
 // v2AccountConverter.reservationCancelSQLandELASTICandFB({tour_date: '2019-07-15',product_id:'p360',id:'r32623'}).then(result=>console.log(result));
 // v2AccountConverterTest(testCase, v1CanceledBulkDataData);
-v2AccountConverter.mainConverter(temp_v1Account_due_to_error_2019_JuneToOct, v1CanceledBulkDataData, v1FbTeamBulkData);
-// v2AccountConverter.mainConverter({'2019-07-19' : {
-//         "-LjmkzfaD75Fr2-EfEAP": {
-//             "card": 280000,
+v2AccountConverter.mainConverter(temp_v1Account_due_to_error_2019_June, v1CanceledBulkDataData, v1FbTeamBulkData);
+// v2AccountConverter.mainConverter({'2019-06-29' : {
+//         "-LiH7E94RsXoqrSKYcLj": {
+//             "card": 794000,
 //             "category": "Reservation",
 //             "currency": "KRW",
-//             "date": "2019-07-16",
-//             "detail": "Created: 2019-07-14\nagency: L\nproduct: Busan_Regular_통영 \npeople: 4(4/0/0\noption: [object Object]",
-//             "id": "16b6b4af10939cbc",
-//             "writer": "L"
-//         }}}, v1CanceledBulkDataData, v1FbTeamBulkData);
+//             "date": "2019-06-29",
+//             "detail": "Created: 2019-06-26\nagency: KT\nproduct: Seoul_Regular_레남쁘 \npeople: 14(14/0/0\noption: [object Object]",
+//             "id": "NM-1561278149235",
+//             "writer": "KT"
+//         },}}, v1CanceledBulkDataData, v1FbTeamBulkData);
 // v2AccountConverter.fbTeamDataProcess(v1FbTeamBulkData, 'server/models/dataFiles/v1FbTeamBulkData_noDate.json').then(result => console.log('result : ',result));
-
-const v2Reservation = {
-    message_id: 'NM-1560833492407',
-    product_id: 'p380',
-    agency: 'BN',
-    writer: 'BN',
-    tour_date: new Date('2019-07-31T09:00:00.000'),
-    options: [],
-    adult: 3,
-    kid: 1,
-    infant: 0,
-    canceled: false,
-    created_date: new Date('2019-06-18T04:51:32.000'),
-    modified_date: new Date('2019-06-18T04:51:32.000'),
-    id: 'r49859',
-    agency_code: 'NM-1560833492407',
-    nationality: 'RUSSIAN FEDERATION' };
-
-const teamV1Account = {
-    "card": 0,
-    "category": "Reservation",
-    "currency": "KRW",
-    "date": "2019-07-18",
-    "detail": "Created: 2019-07-11\nagency: GT\nproduct: Busan_Private_Private(B) \npeople: 3(3/0/0\noption: ",
-    "id": "NM-1562888720981",
-    "writer": "GT"
-};
 // v2AccountConverter.reservationCancelSQLandELASTICandFB(v2Reservation).then(result => console.log('result : ',result));

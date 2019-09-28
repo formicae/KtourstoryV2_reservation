@@ -139,11 +139,11 @@ class Product {
             alias : product.alias,
             category : product.category,
             area : product.area,
-            geos : {
+            geos : [{
                 place : product.geos.place,
                 lat : product.geos.lat,
                 lon : product.geos.lon
-            },
+            }],
             description : product.description,
             memo : product.memo,
             on : product.on,
@@ -227,26 +227,37 @@ class Product {
 
     static async agencyMatching(data, productData, salesItem, task) {
         let result = {income : 0, currency : null};
-        for (let agencyData of salesItem.byAgency) {
-            if (agencyData.hasOwnProperty('agencies')) {
-                task.has_agencies = true;
-                if (agencyData.agencies.includes(data.agency)) {
+        if (!data.hasOwnProperty('agency')) {
+            task.no_agency = true;
+            return {task : task}
+        } else {
+            for (let agencyData of salesItem.byAgency) {
+                if (agencyData.hasOwnProperty('agencies')) {
+                    task.has_agencies = true;
+                    if (agencyData.agencies.includes(data.agency)) {
+                        task.priceAgencyMatch = true;
+                        result.income = Product.incomeCalculation(data, productData, agencyData.sales);
+                        result.currency = agencyData.currency
+                        result.task = task;
+                        return result;
+                    }
+                } else {
+                    task.has_agencies = false;
                     task.priceAgencyMatch = true;
                     result.income = Product.incomeCalculation(data, productData, agencyData.sales);
                     result.currency = agencyData.currency
+                    result.task = task;
+                    return result;
                 }
+            }
+            if (task.has_agencies && !task.priceAgencyMatch) {
+                log.warn('Model', 'Product - agencyMatching', `agencyMatching failed : ${data.agency} / product : ${data.product}, ${data.productData.id}`);
+                return {task : task}
             } else {
-                task.has_agencies = false;
-                task.priceAgencyMatch = true;
-                result.income = Product.incomeCalculation(data, productData, agencyData.sales);
-                result.currency = agencyData.currency
+                log.error('Model', 'Product - agencyMatching', `unExpected error : ${data.agency} / product : ${data.product}, ${data.productData.id}`)
+                return {task : task}
             }
         }
-        if (task.has_agencies && !task.priceAgencyMatch) {
-            log.warn('Model', 'Product - agencyMatching', `agencyMatching failed : ${data.agency} / product : ${data.product}, ${data.productData.id}`);
-        }
-        result.task = task;
-        return result;
     }
 
     /**
@@ -258,6 +269,7 @@ class Product {
      */
     static async salesMatch(data, productData, task) {
         task.salesMatch = false;
+        task.agency = data.agency;
         for (let item of productData.sales) {
             if (item.default) {
                 task.salesMatch = true;
@@ -280,7 +292,7 @@ class Product {
     }
 
     static async productDataExtractFromFB(data) {
-        let productExtractTask = {getProduct :false, defaultPrice:false, reserveValid : false, tourValid : false, priceAgencyMatch:false};
+        let productExtractTask = {getProduct :false, defaultPrice:false, priceAgencyMatch:false};
         let productData = await Product.getProduct(data.product);
         if (!productData) {
             log.warn('Router', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
@@ -288,25 +300,24 @@ class Product {
         } else {
             productExtractTask.getProduct = true;
             let priceGroup = {
-                id : productData.id,
-                name : productData.name,
-                alias : productData.alias,
-                category : productData.category,
-                area : productData.area,
-                geos : productData.geos,
-                currency : null,
-                income : 0,
-                expenditure : 0,
-                bus : {}
+                id: productData.id,
+                name: productData.name,
+                alias: productData.alias,
+                category: productData.category,
+                area: productData.area,
+                geos: productData.geos,
+                currency: null,
+                income: 0,
+                expenditure: 0,
+                bus: {}
             };
             let salesData = await this.salesMatch(data, productData, productExtractTask);
-            if (!salesData.task.salesMatch) {
-                return {result : false, priceGroup : null, detail:salesData.task};
+            if (!salesData.task.salesMatch || salesData.task.no_agency) {
+                return {result: false, priceGroup: null, detail: salesData.task};
             } else {
                 productExtractTask = salesData.task;
                 priceGroup.income = salesData.income;
                 priceGroup.currency = salesData.currency;
-                console.log('sales data : ',salesData);
                 if (!productExtractTask.priceAgencyMatch) {
                     log.warn('product', 'productDataExtractFromFB', `price data matching failed : ${productData.id} / ${productData.alias} / ${data.agency}`);
                     return {result : false, priceGroup : null, detail : productExtractTask};
@@ -551,71 +562,17 @@ async function KKdayIncomingUpdate(incomingMap) {
     }
 }
 
+function testProductUpload(){
+    const testProduct = require('./validationTestFile/v2FbTestProduct.json');
+    Object.entries(testProduct).forEach(temp => {
+        let id = temp[0];
+        let data = {};
+        data[id] = temp[1];
+        fbDB.ref('product').update(data);
+    })
+}
+// testProductUpload();
 // Product.getProduct('Seoul_Regular_남쁘아').then(result=>console.log(result));
 monitorProduct();
-
-const incomingMap = {
-    '대구내장산' : 'Magnificent Naejangsan National Park One Day Tour from Daegu',
-    '대구이월드' : 'Daegu E-world and Kim Kwangseok-gil Street One Day Tour from Busan',
-    '어묵체험' : 'Busan Fish Cake Experience & Local Market Food Trip Half Day Tour',
-    'BTS' : 'BTS Fan Day Tour',
-    '민속촌우주' : 'Korean Folk Village Uiwang Railbike OOZOO Light Garden One Day Tour',
-    '부산딸기' : 'Busan Strawberry Picking & Gamcheon Culture Village One Day Tour',
-    '베어스타운' : 'Bears Town Ski Resort Day Tour from Seoul',
-    '부산단풍랜덤' : 'Busan Autumn Foliage Random Tour',
-    '경주단풍' : 'Gyeongju Autumn Foliage One day Tour',
-    '가을팔공산' : 'Palgongsan Natural Park Autumn Foliage Day Tour',
-    '속리산' : 'Songnisan National Park Autumn Foliage Tour',
-    '단양' : '【夏日私藏景點】清風文化財園區、九景市場、丹陽滿天下 Sky Walk（首爾出發）',
-    '대구시티투어' : '【夏日私藏景點】八公山、桐華寺、金光石街、青羅之丘、E-world（大邱出發）',
-    '부산Scenic' : '【釜山名勝一日遊】蔚山艮絕岬、竹城教堂、海東龍宮寺、青沙浦天空步道、特麗愛3D美術館',
-    '남이섬짚라인' : 'Nami Island and Gapyeong Kalbongsan Zipline Day Tour',
-    '동부산에덴루지' : '【韓國釜山一日遊】伊甸園斜坡滑車、九頭山竹林、海東龍宮寺、竹城教堂一日遊',
-    '포천' : '【秋季唯美楓之旅】抱川藝術谷、迷你蘋果採摘、香草島樂園一日遊（首爾出發）',
-    '부산야경투어' : '【釜山夜景遊】 歷史的 Diorama＆山腹道路、松島海洋公園、虎泉村南日 Bar、荒嶺山',
-    '여수' : '【夏日私藏景點】 向日庵、麗水海上纜車、麗水海洋鐵路自行車一日遊',
-    '민속촌레일광명' : '【楓遊京畿道】韓國民俗村、光明洞窟、義王鐵道自行車一日遊',
-    '제주동부' : '【韓國濟州東部】Eco Land、城山日出峰、萬丈窟、月汀里一日遊',
-    '제주서부' : '【韓國濟州西部】挾才海水浴場、山房窟寺、O‘sulloc 綠茶博物館、松岳山一日遊',
-    '라이트월드' : 'Wonju Suspension Bridge and Chung ju Light World One Day Tour',
-    'DMZ' : 'Cheorwon Korean Demilitarized Zone (DMZ) Day Tour',
-    '안동' : '【夏日私藏景點】世界遺產安東河回村、 月映橋、晚休亭一日遊',
-    '알파카' : '【江原道新興景點】草泥馬牧場、九峰山觀景臺咖啡街、 JADE GARDEN樹木園春川一日遊',
-    '남설' : 'Nami Island & Mountain Seoraksan Day Tour from Seoul',
-    '제주벚꽃' : '【濟州賞櫻推薦】三姓穴、東門傳統市場、濟州大學櫻花路、鹿山路一日遊',
-    '서울광양구례' : 'Gwangyang Maehwa & Gurye Sansuyu Festival Day Tour from Seoul',
-    '태안딸기' : '【韓國鬱金花慶典】泰安鬱金香節＋現採草莓一日遊（首爾出發）',
-    '부산보성녹차' : 'Boseong Green Tea Festival from Seoul or Busan / Busan',
-    '서울보성녹차' : 'Boseong Green Tea Festival from Seoul or Busan / Seoul',
-    '대구벚꽃주' : 'Daegu E-World Cherry Blossom Viewing Day / Night Tour from Busan',
-    '남해' : 'Namhae Day Tour from Busan: Geumsan Boriam Temple, Daraengi Village, and Yangmori Sheep Farm',
-    '서울해돋이' : 'COEX Fireworks Display and Gyeongpo Beach Sunrise Tour',
-    '남이비발디' : 'Nami Island and Vivaldi Ski Resort Day Tour from Seoul',
-    '주왕산' : '(한국 관광 메이플 투어) 조완산, 다댕 사원 (부산 출항)',
-    '경주벚꽃' : 'Romantic Gyeongju Cherry Blossom Festival (Depart from Busan)',
-    '서울진해' : 'Romantic Jinhae Cherry Blossom Festival Day Tour from Seoul',
-    '경주' : '[Funtastic Summer] Day Tour from Busan: Gyeongju UNESCO World Heritage Site',
-    '에덴감천' : 'Eden Valley Ski Resort and Gamcheon Culture Village Day Tour from Busan',
-    '지리산' : 'Jirisan Mountain Autumn Maple Day Tour from Busan',
-    '가야산' : 'South Gyeongsang Autumn Maple Day Tour from Busan: Gayasan Mountain & Haeinsa Temple',
-    '부산내장산' : 'Jeolla-buk Do Autumn Day Tour: Naejangsan National Park from Busan',
-    '대둔산' : 'Daedunsan Mountain Autumn Day Tour from Seoul',
-    '오대산' : 'Gangwon-do Maple Day Tour from Seoul: Odaesan National Park and Woljeongsa Temple',
-    '외도' : 'Korea Geoje Island Day Tour from Busan: Windy Hill and Oedo Island',
-    '부산머드' : '2019 Boryeong Mud Festival & K-POP Concert (From Seoul or Busan) / Busan',
-    '머드' : '2019 Boryeong Mud Festival & K-POP Concert (From Seoul or Busan) / Seoul',
-    '통영' : 'Busan Day Tour in Korea: Tongyeong Jungang Market, Hallyeosudo Cable Car and Skyline Luge',
-    '레송감국' : '[Funtastic Summer] Day Tour: Gamcheon Culture Village, Gimhae Bike, Raspberry Wine Cave, Songdo Skywalk & BIFF Square (Nampo-dong)',
-    '태감송해' : 'Busan Day Tour: Haedong Yonggungsa Temple, Gamcheon Culture Village & Taejongdae',
-    '서울진도' : 'Jindo Miracle Sea Road Festival Tour from Seoul or Busan / Seoul',
-    '부산진도' : 'Jindo Miracle Sea Road Festival Tour from Seoul or Busan / Busan',
-    '서울벚꽃랜덤' : 'Seoul Cherry Blossom Day Tour 2019',
-    '딸남쁘아' : 'Strawberry Picking Day Tour from Seoul: Nami Island, Petite France & Garden of Morning Calm',
-    '전주' : 'Jeonju Hanok Village, Korean Traditional Cuisine Lesson, and Korean Dessert Making Day Tour from Seoul',
-    '서울에버' : 'Everland Theme Park Day Tour (Depart from Seoul)',
-    '쁘남레아' : 'Chuncheon Day Tour from Seoul: Gangchon Rail Bike, Nami Island, Petite France, and The Garden of Morning Calm',
-    '설낙' : 'Mt. Seorak，Naksansa Temple One Day Tour',
-    '남쁘아' : 'Day Tour from Seoul: Nami Island, Petite France, and Garden of Morning Calm',
-};
 // KKdayIncomingUpdate(incomingMap);
 module.exports = Product;

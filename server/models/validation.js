@@ -28,7 +28,7 @@ const ACCOUNT_VALID_CHECK_LIST_MAP = {
 const RESERVATION_UPDATE_VALID_CHECK_LIST_MAP = {
     'id':true,
     'message_id':true,
-    'writer':false,
+    'writer':true,
     'agency':true,
     'agency_code':false,
     'tour_date':true,
@@ -47,7 +47,7 @@ const RESERVATION_UPDATE_VALID_CHECK_LIST_MAP = {
 const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
     'id':false,
     'message_id':true,
-    'writer':false,
+    'writer':true,
     'agency':true,
     'agency_code':false,
     'tour_date':true,
