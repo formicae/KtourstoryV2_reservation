@@ -54,7 +54,7 @@ class Account {
                 id : data.reservation_id,
                 agency : data.agency || '',
                 tour_date : data.date,
-                nationality : (data.nationality ||'unknown').toUpperCase(),
+                nationality : data.nationality ||'English',
                 adult : data.adult,
                 kid : data.kid,
                 infant : data.infant,

@@ -23,7 +23,7 @@ class Pickup {
             if (pickupMap.size === 0 || incomingMap.size === 0) {
                 setTimeout(() => { resolve(Pickup.getPickup(input)) }, 200);
             } else {
-                if (!input) resolve({location : {lat:0, lon:0}});
+                if (!input) resolve(false);
                 else {
                     Pickup.pickupStringMatch(input).then(result => {
                         if (!result) resolve(false);

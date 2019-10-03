@@ -231,18 +231,18 @@ class Product {
             task.no_agency = true;
             return {task : task}
         } else {
+            task.has_agencies = false;
             for (let agencyData of salesItem.byAgency) {
                 if (agencyData.hasOwnProperty('agencies')) {
                     task.has_agencies = true;
                     if (agencyData.agencies.includes(data.agency)) {
                         task.priceAgencyMatch = true;
                         result.income = Product.incomeCalculation(data, productData, agencyData.sales);
-                        result.currency = agencyData.currency
+                        result.currency = agencyData.currency;
                         result.task = task;
                         return result;
                     }
                 } else {
-                    task.has_agencies = false;
                     task.priceAgencyMatch = true;
                     result.income = Product.incomeCalculation(data, productData, agencyData.sales);
                     result.currency = agencyData.currency
@@ -294,6 +294,7 @@ class Product {
     static async productDataExtractFromFB(data) {
         let productExtractTask = {getProduct :false, defaultPrice:false, priceAgencyMatch:false};
         let productData = await Product.getProduct(data.product);
+        data.productData = productData;
         if (!productData) {
             log.warn('Router', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
             return {result : false, priceGroup : null, detail : productExtractTask};

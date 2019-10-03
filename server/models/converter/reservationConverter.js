@@ -94,6 +94,16 @@ class v2ReservationConverter {
             if (!v1Reservation.language) v2FbReservation.language = 'English';
             else if (v1Reservation.language === 'N/A') v2FbReservation.language = 'English';
             else v2FbReservation.language = v1Reservation.language;
+            if (v2FbReservation.hasOwnProperty('operation_memo')) {
+                if (v2FbReservation.operation_memo.match('중국어')) v2FbReservation.language = 'Chinese';
+                else if (v2FbReservation.operation_memo.match('일본어')) v2FbReservation.language = 'Japanese';
+                else if (v2FbReservation.operation_memo.match('English')) v2FbReservation.language = 'English';
+            }
+            if (v2FbReservation.hasOwnProperty('guide_memo')) {
+                if (v2FbReservation.guide_memo.match('중국어')) v2FbReservation.language = 'Chinese';
+                else if (v2FbReservation.guide_memo.match('일본어')) v2FbReservation.language = 'Japanese';
+                else if (v2FbReservation.guide_memo.match('English')) v2FbReservation.language = 'English';
+            }
         }
         return v2FbReservation;
     }
@@ -278,6 +288,16 @@ class v2ReservationConverter {
             } else {
                 result.language = v1Reservation.language
             }
+            if (result.hasOwnProperty('operation_memo')) {
+                if (result.operation_memo.match('중국어')) result.language = 'Chinese';
+                else if (result.operation_memo.match('일본어')) result.language = 'Japanese';
+                else if (result.operation_memo.match('English')) result.language = 'English';
+            }
+            if (result.hasOwnProperty('guide_memo')) {
+                if (result.guide_memo.match('중국어')) result.language = 'Chinese';
+                else if (result.guide_memo.match('일본어')) result.language = 'Japanese';
+                else if (result.guide_memo.match('English')) result.language = 'English';
+            }
             return result;
         } else {
             const result = {
@@ -374,7 +394,7 @@ class v2ReservationConverter {
                     return result;
                 } else {
                     console.log('Product not found : ',v1Reservation.product, v1ProductName);
-                    return false;
+                    return {fail: true, product:v1Reservation.product};
                 }
 
             });
@@ -515,7 +535,7 @@ class v2ReservationConverter {
         return result;
     }
 
-    static async convertAndInsertV1OperationToSQLBulk(v1OperationBulkData) {
+    static async convertAndInsertV1OperationToSQLBulk(v1OperationBulkData, countObj) {
         let sqlGeneratePromiseArr = [];
         let checkReservationPromiseArr = [];
         let insertReservationProsmieArr = [];
@@ -537,13 +557,21 @@ class v2ReservationConverter {
             .then(resultArr => {
                 console.log(' >> generate v2 reservation done');
                 resultArr.forEach(v2Reservation => {
-                    checkReservationPromiseArr.push(this.checkSameReservationExist(v2Reservation));
+                    countObj.total += 1;
+                    if (v2Reservation.fail) {
+                        countObj.failed += 1;
+                        console.log(`error! maybe no product data : ${v2Reservation.product}`);
+                    } else {
+                        checkReservationPromiseArr.push(this.checkSameReservationExist(v2Reservation));
+                    }
                 });
                 return Promise.all(checkReservationPromiseArr);})
             .then(checkArr => {
-                console.log(' >> check v2 reservation done');
+                console.log(' >> check v2 reservation done : ', checkArr);
                 checkArr.forEach(check => {
                     if (!check.result) {
+                        countObj.failed += 1;
+                        console.log('reservation : ',check.data, check.v2Reservation)
                         insertReservationProsmieArr.push(Reservation.insertSQL(check.v2Reservation, {}));
                     } else {
                         console.log(`Pass - duplicate reservation : ${check.v2Reservation.message_id} --> ${check.data.id}`);
@@ -657,12 +685,12 @@ class v2ReservationConverter {
             const text = reservationQueryProcessing(v2Reservation);
             const query = `SELECT id FROM reservation WHERE ${text}`;
             sqlDB.query(query, (err, result) => {
-                if (err) resolve(console.log('checkSameReservationExist error : ', JSON.stringify(err)));
-                resolve({
-                    result : result.rowCount > 0,
-                    data : result.rows[0],
-                    v2Reservation : v2Reservation
-                });
+                if (err) {
+                    console.log(console.log('checkSameReservationExist error : ', text, JSON.stringify(err)));
+                    resolve({result:false})
+                } else {
+                    resolve({result : result.rowCount > 0, data : result.rows[0], v2Reservation : v2Reservation})
+                }
             })
         })
     }
@@ -700,11 +728,14 @@ class v2ReservationConverter {
      */
     static async mainConverter(v1OperationData) {
         console.log(' >> SQL process');
-        let isSQLDataInsertSuccess = await this.convertAndInsertV1OperationToSQLBulk(v1OperationData);
+        this.total = 0;
+        this.failed = 0;
+        let isSQLDataInsertSuccess = await this.convertAndInsertV1OperationToSQLBulk(v1OperationData, this);
         if (!isSQLDataInsertSuccess) return console.log('SQL data insert failed!');
         console.log(' >> FB / Elastic process');
         let isFbElasticDataInsertSuccess =  await this.convertAndInsertV1OperationToFB(v1OperationData);
         if (!isFbElasticDataInsertSuccess) return console.log('FB / Elastic data insert failed!');
+        console.log(`total data : ${this.total}, failed data : ${this.failed}`);
         return console.log('SQL / FB / Elastic data insert done!');
     }
 
@@ -758,6 +789,8 @@ class v2ReservationConverter {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 7) result[date] = v1Operation;
             } else if (month === '10~'){
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 10) result[date] = v1Operation;
+            } else if (month === '9~10') {
+                if (Number(dateArr[0]) === year && Number(dateArr[1]) >= 9 && Number(dateArr[1]) <= 10) result[date] = v1Operation;
             } else {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) === month) result[date] = v1Operation;
             }
@@ -813,11 +846,11 @@ function deleteFirebaseData(year, month){
         })
     }
 }
-
+// deleteFirebaseData(2019,9)
 const v1OperationBulkData = require('../dataFiles/intranet-64851-operation-export.json');
-const v1Operation_2019_June = require('../dataFiles/v1OperationData_2019_June.json');
-// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '6~8', 'server/models/dataFiles/v1OperationData_2019_JuneToOct.json');
-// let result = v2ReservationConverter.mainConverter(v1Operation_2019_June);
+const v1Operation_2019_SepOct = require('../dataFiles/v1OperationData_2019_SepOct.json');
+// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '9~10', 'server/models/dataFiles/v1OperationData_2019_SepOct.json');
+// let result = v2ReservationConverter.mainConverter(v1Operation_2019_SepOct);
 // deleteFirebaseData(2019,7);
 // v2ReservationConverter.convertElasticToFile(require('../dataFiles/v1OperationData_2019_July'), 'server/models/tempDataFiles/v2ConvertedElasticData.json')
 //     .then(result => console.log('result : ',result));

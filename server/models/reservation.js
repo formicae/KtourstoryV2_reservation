@@ -48,7 +48,7 @@ class Reservation {
             agency : data.agency,
             agency_code : data.agency_code || '',
             name : data.name || '',
-            nationality : (data.nationality || 'unknown').toUpperCase(),
+            nationality : data.nationality || 'English',
             tour_date : data.date,
             pickup : {
                 place : data.pickupData.pickupPlace || data.productData.area,
@@ -72,12 +72,6 @@ class Reservation {
             star : false,
             team_id : data.team_id
         };
-        if (data.hasOwnProperty('operation_memo')) {
-            if (data.operation_memo.match('중국어')) result.language = 'Chinese';
-        }
-        if (data.hasOwnProperty('guide_memo')) {
-            if (data.guide_memo.match('중국어')) result.language = 'Chinese';
-        }
         if (data.requestType === 'POST') {result.created_date = currentDate }
         else { result.created_date = data.reservation_created_date }
         if (data.memo_history) {result.memo_history = data.memo_history;}
@@ -117,27 +111,24 @@ class Reservation {
             adult : this.peopleNumberPreprocess(data.adult),
             kid : this.peopleNumberPreprocess(data.kid),
             infant : this.peopleNumberPreprocess(data.infant),
-            nationality : (data.nationality || 'unknown').toUpperCase(),
+            nationality : data.nationality || 'English',
             canceled : data.canceled,
             modified_date : currentDate,
         };
         if (data.hasOwnProperty('reservation_id')) { result.id = data.reservation_id }
-        if (data.hasOwnProperty('operation_memo')) {
-            if (!!data.operation_memo.match('중국어')) result.language = 'Chinese';
-        }
         if (data.requestType === 'POST') { result.created_date = currentDate }
         else {result.created_date = data.reservation_created_date}
         return result;
     }
 
     static generateFirebaseObject(data) {
-        const result = {
+        return {
             id : data.reservation_id,
             name : data.name || '',
-            nationality : (data.nationality || 'unknown').toUpperCase(),
-            agency : data.agency || '',
+            nationality : data.nationality || 'English',
+            agency : data.agency,
             agency_code : data.agency_code || '',
-            writer : data.writer || '',
+            writer : data.writer || data.agency,
             pickup : data.pickupData.pickupPlace || data.productData.area,
             adult : this.peopleNumberPreprocess(data.adult),
             kid : this.peopleNumberPreprocess(data.kid),
@@ -152,10 +143,6 @@ class Reservation {
             o : data.o || false,
             language : data.language || 'English'
         };
-        if (data.hasOwnProperty('operation_memo')){
-            if (data.operation_memo.match('중국어')) result.language = 'Chinese';
-        }
-        return result;
     }
 
     static getGlobalDate() {

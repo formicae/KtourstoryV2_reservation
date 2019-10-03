@@ -9,8 +9,14 @@ const env = require('../../package.json').env;
 sqlDB.connect();
 
 exports.post = (req, res) => {
-    if (!req.get('Content-Type')) return res.status(400).json({message:"Content-Type should be json", task:{}});
-    postRouterHandler(req, res)
+    if (!req.get('Content-Type')) {
+        log.warn('Router', 'RESERVATION export-POST', 'wrong Content-Type');
+        return res.status(400).json({message: "Content-Type should be json"});
+    } else if (!req.body.hasOwnProperty('reservationRouterAuth') || !req.body.reservationRouterAuth) {
+        log.warn('Router', 'RESERVATION export-POST', 'unAuthorized request');
+        return res.status(401).json({message:'reservation router unauthorized!'});
+    }
+    return postRouterHandler(req, res)
         .catch(err => {
             log.error('Router', 'RESERVATION export-POST', `unhandled error occurred! error`);
             res.status(500).send(`unhandled RESERVATION POST error`)
@@ -18,8 +24,14 @@ exports.post = (req, res) => {
 };
 
 exports.delete = (req, res) => {
-    if (!req.get('Content-Type')) return res.status(400).json("Content-Type should be json");
-    deleteRouterHandler(req, res)
+    if (!req.get('Content-Type')) {
+        log.warn('Router', 'RESERVATION export-DELETE', 'wrong Content-Type');
+        return res.status(400).json({message: "Content-Type should be json"});
+    } else if (!req.body.hasOwnProperty('reservationRouterAuth') || !req.body.reservationRouterAuth) {
+        log.warn('Router', 'RESERVATION export-DELETE', 'unAuthorized request');
+        return res.status(401).json({message:'reservation router unauthorized!'});
+    }
+    return deleteRouterHandler(req, res)
         .catch(err => {
             log.error('Router', 'RESERVATION export-UPDATE', `unhandled error occurred! error`);
             res.status(500).send(`unhandled RESERVATION UPDATE error`)
@@ -45,41 +57,52 @@ async function postRouterHandler(req, res) {
     let reservation;
     let reservationTask = {type : 'CREATE', pickupDataFound : false, priceGroupFound : false};
     let pickupData = await Pickup.getPickup(data.pickup);
-    data.pickupData = pickupData;
-    if (pickupData.hasOwnProperty('pickupPlace')) reservationTask.pickupDataFound = true;
-    let productData = await Product.productDataExtractFromFB(data);
-    if (!productData.result) {
-        log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`);
-        return res.status(500).json({
-            message:'reservationHandler failed in productData matching',
+    if (!pickupData) {
+        return res.status(400).json({
+            message:'reservationHandler failed in searching pickupData',
             type: 'POST',
             reservationTask : reservationTask,
-            detail : productData.detail
+            detail : `pickupData : ${JSON.stringify(pickupData)}`
         });
     } else {
-        reservationTask.priceGroupFound = true;
-        data.productData = productData.priceGroup;
-        log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
-        reservation = new Reservation(data);
-        let validCheck = await Reservation.validationCreate(reservation);
-        reservationTask.validation = false;
-        if (!validCheck.result) {
-            reservationTask.validationDetail = validCheck.detail;
-            return res.status(500).json({
-                message:'reservationHandler failed in validation',
-                reservationTask: reservationTask
+        data.pickupData = pickupData;
+        if (pickupData.hasOwnProperty('pickupPlace')) reservationTask.pickupDataFound = true;
+        let productData = await Product.productDataExtractFromFB(data);
+        if (!productData.result) {
+            log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`);
+            return res.status(400).json({
+                message:'reservationHandler failed in productData matching',
+                type: 'POST',
+                reservationTask : reservationTask,
+                detail : productData.detail
             });
         } else {
-            let resultData = await createReservation(reservation, data, testObj);
-            if (!resultData.reservationResult) {
-                return res.status(500).json({
-                    message:'reservationHandler failed in createReservation',
-                    reservationTask:resultData.reservationTask
+            reservationTask.priceGroupFound = true;
+            data.productData = productData.priceGroup;
+            log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
+            reservation = new Reservation(data);
+            let validCheck = await Reservation.validationCreate(reservation);
+            reservationTask.validation = false;
+            if (!validCheck.result) {
+                reservationTask.validationDetail = validCheck.detail;
+                return res.status(400).json({
+                    message:'reservationHandler failed in validation',
+                    reservationTask: reservationTask
                 });
             } else {
-                req.body = resultData;
-                log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
-                return accountRouter.post(req, res);
+                let resultData = await createReservation(reservation, data, testObj);
+                if (!resultData.reservationResult) {
+                    return res.status(500).json({
+                        message:'reservationHandler failed in createReservation',
+                        reservationResult : false,
+                        reservationTask:resultData.reservationTask
+                    });
+                } else {
+                    console.log('resultdata : ',resultData.reservationResult, resultData);
+                    req.body = resultData;
+                    log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
+                    return accountRouter.post(req, res);
+                }
             }
         }
     }
@@ -95,6 +118,7 @@ async function postRouterHandler(req, res) {
  * @returns {Promise<any>}
  */
 function createReservation(reservation, data, testObj) {
+    data.reservationResult = false;
     let task = {type:'CREATE', router:'reservation', validation:true, insertSQL:false, insertFB:false, insertElastic:false, deleteFB:false, deleteSQL:false};
     return Reservation.insertSQL(reservation.sqlData, testObj)
         .then(result => {
