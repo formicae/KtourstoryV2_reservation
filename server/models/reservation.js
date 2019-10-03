@@ -48,7 +48,7 @@ class Reservation {
             agency : data.agency,
             agency_code : data.agency_code || '',
             name : data.name || '',
-            nationality : data.nationality || 'English',
+            nationality : data.nationality || 'unknown',
             tour_date : data.date,
             pickup : {
                 place : data.pickupData.pickupPlace || data.productData.area,
@@ -68,7 +68,7 @@ class Reservation {
             canceled : data.canceled || false,
             modified_date : currentDate,
             timezone : data.timezone || 'UTC+9',
-            language : data.language,
+            language : data.language || 'English',
             star : false,
             team_id : data.team_id
         };
@@ -111,7 +111,7 @@ class Reservation {
             adult : this.peopleNumberPreprocess(data.adult),
             kid : this.peopleNumberPreprocess(data.kid),
             infant : this.peopleNumberPreprocess(data.infant),
-            nationality : data.nationality || 'English',
+            nationality : data.nationality || 'unknown',
             canceled : data.canceled,
             modified_date : currentDate,
         };
@@ -125,7 +125,7 @@ class Reservation {
         return {
             id : data.reservation_id,
             name : data.name || '',
-            nationality : data.nationality || 'English',
+            nationality : data.nationality || 'unknown',
             agency : data.agency,
             agency_code : data.agency_code || '',
             writer : data.writer || data.agency,

@@ -1,6 +1,7 @@
 const sqlDB = require('../auth/postgresql');
 const Account = require('../models/account');
 const Product = require('../models/product');
+const Nationality = require('../models/nationality');
 const log = require('../../log');
 const env = require('../../package.json').env;
 sqlDB.connect();
@@ -48,6 +49,8 @@ async function accountHandler(req, res, requestType) {
     if (req.body.hasOwnProperty('testObj')) testObj = req.body.testObj;
     else testObj = testManager(req, env);
     data.accountResult = false;
+    let nationalityData = await Nationality.getNationality(data.nationality);
+    if (nationalityData.result) data.nationality = nationalityData.data;
     if (requestType === 'REVERSE_CREATE') {
         const task = {processReverseAccount:false, insertSQL : false, insertElastic: false};
         if (!data.account_id) data.account_id = await Account.getAccountId(data.reservation_id);

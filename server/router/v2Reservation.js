@@ -3,6 +3,7 @@ const fbDB = require('../auth/firebase').database;
 const Reservation = require('../models/reservation');
 const Product = require('../models/product');
 const Pickup = require('../models/pickups');
+const Nationality = require('../models/nationality');
 const accountRouter = require('./v2Account');
 const log = require('../../log');
 const env = require('../../package.json').env;
@@ -56,6 +57,8 @@ async function postRouterHandler(req, res) {
     data.reservationResult = false;
     let reservation;
     let reservationTask = {type : 'CREATE', pickupDataFound : false, priceGroupFound : false};
+    let nationalityData = await Nationality.getNationality(data.nationality);
+    if (nationalityData.result) data.nationality = nationalityData.data;
     let pickupData = await Pickup.getPickup(data.pickup);
     if (!pickupData) {
         return res.status(400).json({

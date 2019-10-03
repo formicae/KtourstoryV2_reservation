@@ -54,7 +54,7 @@ class Account {
                 id : data.reservation_id,
                 agency : data.agency || '',
                 tour_date : data.date,
-                nationality : data.nationality ||'English',
+                nationality : data.nationality || 'unknown',
                 adult : data.adult,
                 kid : data.kid,
                 infant : data.infant,
@@ -68,7 +68,7 @@ class Account {
             },
             operation : data.operationData
         };
-        if (result.reservation.nationality === 'UNKNOWN') {
+        if (result.reservation.nationality === 'unknown') {
             if (data.hasOwnProperty('reservation')) {
                 if (data.reservation.hasOwnProperty('nationality')){
                     result.reservation.nationality = data.reservation.nationality.toUpperCase();
