@@ -10,9 +10,14 @@ exports.post = (req, res) => {
     if (!req.get('Content-Type')) {
         log.warn('Router', 'Account export-POST', 'wrong Content-Type');
         return res.status(400).json({message: "Content-Type should be json"});
-    } else if (!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth) {
-        log.warn('Router', 'Account export-POST', 'unAuthorized request');
-        return res.status(401).json({message:'account router unauthorized!'});
+    } else if (!req.body.reservationResult) {
+        if ((!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth)) {
+            log.warn('Router', 'Account export-POST', 'unAuthorized request');
+            return res.status(401).json({message:'account router unauthorized!'});
+        } else {
+            log.warn('Router', 'Account export-POST', 'failed request from reservation router');
+            return res.status(500).json({message:'failed request from reservation router!'});
+        }
     }
     return accountHandler(req, res, 'POST')
         .catch(err => {
@@ -25,9 +30,14 @@ exports.delete = (req, res) => {
     if (!req.get('Content-Type')) {
         log.warn('Router', 'Account export-DELETE', 'wrong Content-Type');
         return res.status(400).json({message: "Content-Type should be json"});
-    } else if (!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth) {
-        log.warn('Router', 'Account export-DELETE', 'unAuthorized request');
-        return res.status(401).json({message:'account router unauthorized!'});
+    }  else if (!req.body.reservationResult) {
+        if ((!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth)) {
+            log.warn('Router', 'Account export-DELETE', 'unAuthorized request');
+            return res.status(401).json({message:'account router unauthorized!'});
+        } else {
+            log.warn('Router', 'Account export-DELETE', 'failed request from reservation router');
+            return res.status(500).json({message:'failed request from reservation router!'});
+        }
     }
     return accountHandler(req, res, 'REVERSE_CREATE')
         .catch(err => {
@@ -56,54 +66,24 @@ async function accountHandler(req, res, requestType) {
         if (!data.account_id) data.account_id = await Account.getAccountId(data.reservation_id);
         let reverseAccount = await Account.processReverseAccount(data.account_id, testObj);
         if (!reverseAccount) {
-            log.warn('Router', 'accountHandler', `reverse account process failed. account id : ${data.account_id}`);
-            return res.status(500).json({
-                message:'accountHandler failed in processReverseAccount',
-                type: 'DELETE',
-                reservationResult : data.reservationResult || 'no reservation task done before',
-                accountResult : false,
-                reservationTask : data.reservationTask,
-                accountTask : task
-            });
+            return res.status(500).json(aRRM('DELETE', data, task, false, 1));
         } else {
             task.processReverseAccount = true;
             let reverseSqlAccount = await Account.insertSQL(reverseAccount.sqlData, testObj);
             if (!reverseSqlAccount) {
-                log.warn('Router', 'accountHandler', `insert account to SQL failed. account id : ${data.account_id}`);
-                return res.status(500).json({
-                    message:'accountHandler failed in insertSQL',
-                    type: 'DELETE',
-                    reservationResult : data.reservationResult || 'no reservation task done before',
-                    accountResult : false,
-                    reservationTask : data.reservationTask,
-                    accountTask : task
-                });
+                return res.status(500).json(aRRM('DELETE', data, task, false, 2));
             } else {
                 task.insertSQL = true;
                 reverseAccount.sqlData.id = reverseSqlAccount.id;
                 reverseAccount.elasticData.id = reverseSqlAccount.id;
+                data.reverseAccountId = reverseSqlAccount.id;
                 let elasticResult = await Account.insertElastic(reverseAccount.elasticData, testObj);
                 if (!elasticResult) {
-                    log.warn('Router', 'accountHandler', `insert account to Elastic failed. [${data.reservation_id} / ${data.account_id}]`);
                     let failureTask = await failureManager(reverseAccount.sqlData, task, requestType, testObj);
-                    return res.status(500).json({
-                        message:'accountHandler failed in insertSQL',
-                        type: 'DELETE',
-                        reservationResult : data.reservationResult || 'no reservation task done before',
-                        accountResult : false,
-                        reservationTask : data.reservationTask,
-                        accountTask : failureTask
-                    });
+                    return res.status(500).json(aRRM('DELETE', data, failureTask, false, 3));
                 } else {
                     task.insertElastic = true;
-                    log.debug('Router', 'v2Account', 'all task done successfully [DELETE]');
-                    return res.status(200).json({
-                        message:'Account saved properly : DELETE',
-                        reservationResult : data.reservationResult || 'no reservation task done before',
-                        reservationTask : data.reservationTask,
-                        accountResult : true,
-                        accountTask : task
-                    });
+                    return res.status(200).json(aRRM('DELETE', data, task, true, null));
                 }
             }
         }
@@ -118,85 +98,122 @@ async function accountHandler(req, res, requestType) {
             productData.result = true;
         }
         if (!productData.result) {
-            log.warn('Router', 'accountHandler', `productData load failed. product : ${data.product}`);
-            return res.status(500).json({
-                message:'accountHandler failed in processing productData',
-                type: 'POST',
-                reservationResult : data.reservationResult || 'no reservation task done before',
-                accountResult : false,
-                reservationTask : data.reservationTask,
-                accountTask : task,
-                detail : productData.detail
-            });
+            return res.status(400).json(aRRM('POST', data, task, false, 4));
         } else {
             task.productDataFound = true;
             if (!data.hasOwnProperty('cash')) data.cash = false;
             const account = new Account(data);
             let validCheck = await Account.validation(account);
             if (!validCheck.result) {
-                log.warn('Router', 'accountHandler', `ValidDataCheck failed, [${data.reservation_id}]`);
                 task.validationDetail = validCheck.detail;
-                return res.status(500).json({
-                    message:'accountHandler failed in account validation',
-                    type: 'POST',
-                    reservationResult : data.reservationResult || 'no reservation task done before',
-                    accountResult : false,
-                    reservationTask : data.reservationTask,
-                    accountTask : task
-                });
+                return res.status(400).json(aRRM('POST', data, task, false, 5));
             } else {
                 task.validation = true;
                 let sqlAccount = await Account.insertSQL(account.sqlData, testObj);
                 if (!sqlAccount) {
-                    log.warn('Router', 'accountHandler', `account insert failed, [${data.reservation_id}]`);
-                    return res.status(500).json({
-                        message:'accountHandler failed in insert account to SQL',
-                        type: 'POST',
-                        reservationResult : data.reservationResult || 'no reservation task done before',
-                        accountResult : false,
-                        reservationTask : data.reservationTask,
-                        accountTask : task
-                    });
+                    return res.status(500).json(aRRM('POST', data, task, false, 6));
                 } else {
                     task.insertSQL = true;
                     account.sqlData.id = sqlAccount.id;
                     account.elasticData.id = sqlAccount.id;
                     let elasticResult = await Account.insertElastic(account.elasticData, testObj);
                     if (!elasticResult) {
-                        log.warn('Router', 'accountHandler', `account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`);
                         let failureTask = await failureManager(account.sqlData, task, requestType, testObj);
-                        return res.status(500).json({
-                            message:'accountHandler failed in insert account to Elastic',
-                            type: 'POST',
-                            reservationResult : data.reservationResult || 'no reservation task done before',
-                            accountResult : false,
-                            reservationTask : data.reservationTask,
-                            accountTask : failureTask
-                        });
+                        return res.status(500).json(aRRM('POST', data, failureTask, false, 7));
                     } else {
                         task.insertElastic = true;
-                        log.debug('Router', 'v2Account', 'all task done successfully [POST]');
-                        return res.status(200).json({
-                            message:'Account saved properly : POST',
-                            resultData : {
-                                id : data.reservation_id,
-                                product: data.product,
-                                pickup : data.pickupData.pickupPlace,
-                                clientName : data.name,
-                                adult : data.adult,
-                                kid : data.kid,
-                                infant : data.infant
-                            },
-                            reservationResult : data.reservationResult || 'no reservation task done before',
-                            reservationTask : data.reservationTask,
-                            accountResult : true,
-                            accountTask : task
-                        })
+                        return res.status(200).json(aRRM('POST', data, task, true, null));
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * abbreviation explanation : account Router Response Manager
+ * @param requestType {String} request type (POST or DELETE)
+ * @param data {Object} reservation / account raw data
+ * @param accountTask {Object} account task object
+ * @param success {Boolean} boolean of success
+ * @param errorNumber {Number} error number when success is false
+ */
+function aRRM(requestType, data, accountTask, success, errorNumber) {
+    let result = {
+        requester : data.requester,
+        type : requestType,
+        reservationResult : data.reservationResult || 'no reservation task done before',
+        reservationTask : data.reservationTask,
+        accountResult : success
+    };
+    if (success) {
+        log.debug('Router', 'v2Account', `all task done successfully : ${requestType}`);
+        result.message = `Account saved properly : ${requestType}`;
+        if (requestType === 'POST') {
+            Object.entries({
+                resultData : {
+                    id : data.reservation_id,
+                    product: data.product,
+                    pickup : data.pickupData.pickupPlace,
+                    clientName : data.name,
+                    adult : data.adult, kid : data.kid, infant : data.infant
+                },
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        } else {
+            Object.entries({
+                id : data.reverseAccountId,
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        }
+    } else {
+        result.errorNumber = errorNumber;
+        if (errorNumber === 1) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / reverse account process failed. account id : ${data.account_id}`);
+            Object.entries({
+                message:`accountHandler failed in processReverseAccount : ${data.account_id}`,
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        } else if (errorNumber === 2) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / insert account to SQL failed. account id : ${data.account_id}`);
+            Object.entries({
+                message:`accountHandler failed in insert account to Elastic : ${data.reservation_id}`,
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        } else if (errorNumber === 3) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / insert account to Elastic failed. [${data.reservation_id} / ${data.account_id}]`);
+            Object.entries({
+                message:`accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`,
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        } else if (errorNumber === 4) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
+            Object.entries({
+                message:`accountHandler failed in processing productData : ${data.product}`,
+                accountTask : accountTask,
+                detail : data.productData.detail
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        } else if (errorNumber === 5) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / ValidDataCheck failed, [${data.reservation_id}]`);
+            Object.entries({
+                message: `accountHandler failed in account validation : ${data.reservation_id}`,
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        } else if (errorNumber === 6) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to SQL failed, [${data.reservation_id}]`);
+            Object.entries({
+                message: `accountHandler failed in insert account to SQL : ${data.reservation_id}`,
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        } else if (errorNumber === 7) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`);
+            Object.entries({
+                message:`accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`,
+                accountTask : accountTask
+            }).forEach(temp => {result[temp[0]] = temp[1]});
+        }
+    }
+    return result;
 }
 
 /**
