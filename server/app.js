@@ -10,6 +10,9 @@ const Auth = require('./auth/keys/reservationServerAuth');
 app.set("PORT", process.env.PORT || 4500);
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: false}));
+app.get('/healthcheck', (req, res, next) => {
+    res.status(200).send('health check success!');
+});
 app.use('/', (req, res, next) => {
     let header = req.headers;
     let auth = new Auth(header.requester, header.authkey).getAuth;
@@ -22,9 +25,6 @@ app.use('/', (req, res, next) => {
     }
 });
 app.use('/v2', v2);
-app.get('/healthcheck', (req, res, next) => {
-    res.status(200).send('health check success!');
-});
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'ejs');
 app.use(express.static(__dirname + '/routes'));
