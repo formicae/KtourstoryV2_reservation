@@ -55,55 +55,33 @@ async function postRouterHandler(req, res) {
     if (!data.message_id) data.message_id = "NM-" + new Date().getTime();
     data.requestType = 'POST';
     data.reservationResult = false;
-    let reservation;
-    let reservationTask = {type : 'CREATE', pickupDataFound : false, priceGroupFound : false};
+    let reservationTask = {type : 'CREATE', router:'reservation', pickupDataFound : false, priceGroupFound : false};
     let nationalityData = await Nationality.getNationality(data.nationality);
     if (nationalityData.result) data.nationality = nationalityData.data;
     let pickupData = await Pickup.getPickup(data.pickup);
+    data.pickupData = pickupData;
     if (!pickupData) {
-        return res.status(400).json({
-            message:'reservationHandler failed in searching pickupData',
-            type: 'POST',
-            reservationTask : reservationTask,
-            detail : `pickupData : ${JSON.stringify(pickupData)}`
-        });
+        return res.status(400).json(rRRM('POST', data, reservationTask, false, 1));
     } else {
-        data.pickupData = pickupData;
         if (pickupData.hasOwnProperty('pickupPlace')) reservationTask.pickupDataFound = true;
         let productData = await Product.productDataExtractFromFB(data);
         if (!productData.result) {
-            log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`);
-            return res.status(400).json({
-                message:'reservationHandler failed in productData matching',
-                type: 'POST',
-                reservationTask : reservationTask,
-                detail : productData.detail
-            });
+            return res.status(400).json(rRRM('POST', data, reservationTask, false, 2));
         } else {
             reservationTask.priceGroupFound = true;
             data.productData = productData.priceGroup;
             log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
-            reservation = new Reservation(data);
+            const reservation = new Reservation(data);
             let validCheck = await Reservation.validationCreate(reservation);
-            reservationTask.validation = false;
+            reservationTask.validation = validCheck.result;
+            reservationTask.validationDetail = validCheck.detail;
             if (!validCheck.result) {
-                reservationTask.validationDetail = validCheck.detail;
-                return res.status(400).json({
-                    message:'reservationHandler failed in validation',
-                    reservationTask: reservationTask
-                });
+                return res.status(400).json(rRRM('POST', data, reservationTask, false, 3));
             } else {
-                let resultData = await createReservation(reservation, data, testObj);
-                if (!resultData.reservationResult) {
-                    return res.status(500).json({
-                        message:'reservationHandler failed in createReservation',
-                        reservationResult : false,
-                        reservationTask:resultData.reservationTask
-                    });
-                } else {
-                    console.log('resultdata : ',resultData.reservationResult, resultData);
+                let resultData = await createReservation(res, reservation, data, reservationTask, testObj);
+                if (resultData.reservationResult) {
                     req.body = resultData;
-                    log.debug('Router', 'v2Reservation', 'all task done successfully [POST]. goto v2Account router');
+                    rRRM('POST', data, resultData.reservationTask, resultData.reservationResult, null);
                     return accountRouter.post(req, res);
                 }
             }
@@ -115,47 +93,48 @@ async function postRouterHandler(req, res) {
  * Reservation create function and insert to SQL, FB, EL
  * if FB insert fail, SQL data will be canceled.
  * if EL insert fail, SQL data will be canceled and FB data will be deleted.
+ * @param res {Object} response object of express
  * @param reservation {Object} reservation object
  * @param data {Object} raw requested data
+ * @param reservationTask {Object} reservation task object
  * @param testObj {Object} only for test purpose. "isTest" : flag for test, "fail" : flag that one of the functions should fail, "detail" : detailed object for fail function information
- * @returns {Promise<any>}
+ * @returns {Promise<Object>}
  */
-function createReservation(reservation, data, testObj) {
-    data.reservationResult = false;
-    let task = {type:'CREATE', router:'reservation', validation:true, insertSQL:false, insertFB:false, insertElastic:false, deleteFB:false, deleteSQL:false};
-    return Reservation.insertSQL(reservation.sqlData, testObj)
-        .then(result => {
-            if (!result) return false;
-            task.insertSQL = true;
-            log.debug('Router', 'createReservation', `insertSQL success! reservation id : ${result.id}`);
-            data.reservation_id = result.id;
-            reservation.fbData.id = result.id;
-            reservation.sqlData.id = result.id;
-            reservation.elasticData.id = result.id;
-            return Reservation.insertFB(reservation.fbData, data, testObj)})
-        .then(resultData => {
-            if (!resultData) return false;
-            data = resultData;
-            if (data.teamIdArr) {reservation.elasticData.team_id = data.teamIdArr[0];} 
+async function createReservation(res, reservation, data, reservationTask, testObj) {
+    Object.entries({insertSQL:false, insertFB:false, insertElastic:false, deleteFB:false, deleteSQL:false})
+        .forEach(temp => reservationTask[temp[0]] = temp[1]);
+    let sqlReservation = await Reservation.insertSQL(reservation.sqlData, testObj);
+    if (!sqlReservation) {
+        return res.status(500).json(rRRM('POST', data, reservationTask,false, 4))
+    } else {
+        reservationTask.insertSQL = true;
+        log.debug('Router', 'createReservation', `insertSQL success! reservation id : ${sqlReservation.id}`);
+        data.reservation_id = sqlReservation.id;
+        reservation.fbData.id = sqlReservation.id;
+        reservation.sqlData.id = sqlReservation.id;
+        reservation.elasticData.id = sqlReservation.id;
+        let firebaseData = await Reservation.insertFB(reservation.fbData, data, testObj);
+        if (!firebaseData) {
+            let failureTask = await failureManager(reservation, data, reservationTask, 'POST', testObj);
+            return res.status(500).json(rRRM('POST', data, failureTask, false, 5));
+        } else {
+            reservationTask.insertFB = true;
+            data = firebaseData;
+            if (data.teamIdArr) {reservation.elasticData.team_id = data.teamIdArr[0];}
             else {reservation.elasticData.team_id = data.team_id;}
-            task.insertFB = true;
-            return Reservation.insertElastic(reservation.elasticData, testObj)})
-        .then(result => {
-            data.reservationTask = task;
-            if (!result) {
-                return failureManager(reservation, data, task, 'POST', testObj).then(failureTask => {
-                    data.reservationTask = failureTask;
-                    return data;
-                });
+            let elasticResult = await Reservation.insertElastic(reservation.elasticData, testObj);
+            if (!elasticResult) {
+                let failureTask = await failureManager(reservation, data, reservationTask, 'POST', testObj);
+                return res.status(500).json(rRRM('POST', data, failureTask, false, 6));
+            } else {
+                reservationTask.insertElastic = true;
+                data.reservationResult = true;
+                data.reservationTask = reservationTask;
+                log.debug('Router', 'createReservation', `all process success!`);
+                return data;
             }
-            data.reservationTask.insertElastic = true;
-            data.reservationResult = true;
-            log.debug('Router', 'createReservation', `all process success!`);
-            return data;})
-        .catch(err => {
-            log.warn('Router', 'createReservation', `createReservation unhandled error. task : ${task}`);
-            return err;
-        })
+        }
+    }
 }
 
 /**
@@ -163,46 +142,100 @@ function createReservation(reservation, data, testObj) {
  * For next createReservation task, reservation id is deleted in reservation object.
  * if update fail is present for SQL / FB / Elastic, only log will be called because original data will not be modified due to error.
  * @param req {Object} requested object
- * @pram rew {Object} response object
+ * @param res {Object} response object
  * @returns {Promise<boolean | never | never>}
  */
-function deleteRouterHandler(req, res) {
+async function deleteRouterHandler(req, res) {
     const reservation_id = req.body.reservation_id;
     const data = req.body;
     let testObj;
     if (data.hasOwnProperty('testObj')) testObj = data.testObj;
     else testObj = testManager(req, env);
-    let task = {type:'UPDATE',router:'reservation', validation:true, checkSQLcanceled:false, cancelSQL:false, cancelElastic:false};
-    return Reservation.checkSQLcanceled(reservation_id, testObj)
-        .then(result => {
-            if (!result) return false;
-            task.checkSQLcanceled = true;
-            return Reservation.cancelSQL(reservation_id, testObj)})
-        .then(result => {
-            if (!result) return false;
-            task.cancelSQL = true;
+    let reservationTask = {type:'UPDATE',router:'reservation', validation:true, checkSQLcanceled:false, cancelSQL:false, cancelElastic:false};
+    let notCanceledYet = await Reservation.checkSQLcanceled(reservation_id, testObj);
+    if (!notCanceledYet) {
+        res.status(400).json(rRRM('DELETE', data, reservationTask, false, 7))
+    } else {
+        reservationTask.checkSQLcanceled = true;
+        let canceledSQLReservation = await Reservation.cancelSQL(reservation_id, testObj);
+        if (!canceledSQLReservation) {
+            res.status(500).json(rRRM('DELETE', data, reservationTask, false, 8))
+        } else {
             req.body.previous_reservation_id = reservation_id;
-            return Reservation.cancelElastic(reservation_id, testObj)})
-        .then(result => {
-            data.reservationTask = task;
-            if (!result) {
-                return failureManager(reservation_id, data, task, 'CANCEL_RESERVATION', testObj).then(failureTask => {
-                    data.reservationTask = failureTask;
-                    return res.status(500).json({
-                        message:'reservationHandler failed',
-                        reservationTask : data.reservationTask
-                    });
-                })
+            let cancelElasticResult = await Reservation.cancelElastic(reservation_id, testObj);
+            if (!cancelElasticResult) {
+                res.status(500).json(rRRM('DELETE', data, reservationTask, false, 9))
+            } else {
+                reservationTask.cancelElastic = true;
+                data.reservationTask = reservationTask;
+                data.reservationResult = true;
+                rRRM('DELETE', data, reservationTask, true, null);
+                req.body = data;
+                return accountRouter.delete(req, res);
             }
-            data.reservationTask.cancelElastic = true;
-            data.reservationResult = true;
-            log.debug('Router', 'Reservation-deleteRouterHandler', 'all process success!');
-            req.body = data;
-            return accountRouter.delete(req, res);})
-        .catch(err => {
-            log.warn('Router', 'Reservation-deleteRouterHandler', `Reservation-deleteRouterHandler unhandled error. task : ${task}`);
-            return err;
-        });
+        }
+    }
+}
+
+/**
+ * abbreviation description : reservation Router Response Manager
+ * @param requestType {String} request type (e.g. POST, DELETE)
+ * @param data {Object} reservation raw object
+ * @param reservationResult {Boolean} reservation task success boolean
+ * @param reservationTask {Object} reservation task object
+ * @param errorNumber {Number} error number
+ */
+function rRRM(requestType, data, reservationTask, reservationResult, errorNumber) {
+    let result = {
+        type : requestType,
+        requester : data.requester,
+        reservationResult : reservationResult,
+        reservationTask : reservationTask
+    };
+    if (reservationResult) {
+        if (requestType === 'POST') {
+            log.debug('Router', 'v2Reservation-postRouterHandler', 'all task done successfully [POST]. goto v2Account router');
+        } else {
+            log.debug('Router', 'v2Reservation-deleteRouterHandler', 'all task done successfully [DELETE]. goto v2Account router');
+        }
+    } else {
+        result.errorNumber = errorNumber;
+        if (errorNumber === 1) {
+            log.warn('Router', 'reservationHandler', `pickupData load failed. product : ${JSON.stringify(data.pickupData)}`);
+            Object.entries({
+                message:'reservationHandler failed in searching pickupData',
+                detail : data.pickupData
+            }).forEach(temp => result[temp[0]] = temp[1]);
+        } else if (errorNumber === 2) {
+            log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`);
+            Object.entries({
+                message : `reservationHandler failed in productData matching. product : ${data.product}}`,
+                detail : data.productData.detail
+            }).forEach(temp => result[temp[0]] = temp[1]);
+        } else if (errorNumber === 3) {
+            log.warn('Router', 'reservationHandler', `reservation validation failed in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`);
+            result.message = `reservationHandler failed in validation in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`;
+        } else if (errorNumber === 4) {
+            log.warn('Router', 'createReservation', `reservation insert into SQL failed. message_id : ${data.message_id}`);
+            result.message = `reservation insert into SQL failed. message_id : ${data.message_id}`;
+        } else if (errorNumber === 5) {
+            log.warn('Router', 'createReservation', `reservation insert into Firebase failed. reservation id : ${data.reservation_id}`);
+            result.message = `reservation insert into Firebase failed. reservation id : ${data.reservation_id}`;
+        } else if (errorNumber === 6) {
+            log.warn('Router', 'createReservation', `reservation insert into Elastic failed. reservation id : ${data.reservation_id}`);
+            result.message = `reservation insert into Elastic failed. reservation id : ${data.reservation_id}`;
+        } else if (errorNumber === 7) {
+            log.warn('Router', 'deleteRouterHandler', `reservation is already canceled. reservation id : ${data.reservation_id}`);
+            result.message = `reservation is already canceled. reservation id : ${data.reservation_id}`;
+        } else if (errorNumber === 8) {
+            log.warn('Router', 'deleteRouterHandler', `SQL reservation cancel failed. reservation id : ${data.reservation_id}`);
+            result.message = `SQL reservation cancel failed. reservation id : ${data.reservation_id}`;
+        } else if (errorNumber === 9) {
+            log.warn('Router', 'deleteRouterHandler', `Elastic reservation cancel failed. reservation id : ${data.reservation_id}`);
+            result.message = `Elastic reservation cancel failed. reservation id : ${data.reservation_id}`;
+        }
+    }
+    return result;
 }
 
 /**
@@ -215,19 +248,19 @@ function deleteRouterHandler(req, res) {
  * @returns {*}
  */
 function failureManager(reservation, data, task, type, testObj) {
-    log.debug('Router', 'Reservation - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`)
+    log.debug('Router', 'Reservation - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`);
     if (type === 'POST') {
         if (!task.insertElastic && task.insertFB) {
             return Reservation.deleteFB(reservation.fbData, data, testObj)
                 .then(result => {
                     if (!result) return false;
                     task.deleteFB = true;
-                    log.debug('Router', 'Reservation-failureManager', `deleteFB success! type : ${type}. task : ${task}`);
+                    log.debug('Router', 'Reservation-failureManager', `deleteFB success! type : ${type}. task : ${JSON.stringify(task)}`);
                     return Reservation.deleteSQL(reservation.sqlData.id, testObj)})
                 .then(result => {
                     if (!result) return task;
                     task.deleteSQL = true;
-                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${task}`);
+                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${JSON.stringify(task)}`);
                     return task;
                 });
         } else if (!task.insertFB && task.insertSQL) {
@@ -235,7 +268,7 @@ function failureManager(reservation, data, task, type, testObj) {
                 .then(result => {
                     if (!result) return task;
                     task.deleteSQL = true;
-                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${task}`);
+                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${JSON.stringify(task)}`);
                     return task;
                 });
         } else { return Promise.resolve(task); }

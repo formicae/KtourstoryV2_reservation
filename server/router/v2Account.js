@@ -12,11 +12,11 @@ exports.post = (req, res) => {
         return res.status(400).json({message: "Content-Type should be json"});
     } else if (!req.body.reservationResult) {
         if ((!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth)) {
-            log.warn('Router', 'Account export-POST', 'unAuthorized request');
+            log.warn('Router', 'Account export-POST', 'account router unauthorized!');
             return res.status(401).json({message:'account router unauthorized!'});
         } else {
-            log.warn('Router', 'Account export-POST', 'failed request from reservation router');
-            return res.status(500).json({message:'failed request from reservation router!'});
+            log.warn('Router', 'Account export-POST', 'this requester should send data through reservation router. not authorized for direct request to account router');
+            return res.status(500).json({message:'this requester should send data through reservation router. not authorized for direct request to account router'});
         }
     }
     return accountHandler(req, res, 'POST')
@@ -144,73 +144,49 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
         type : requestType,
         reservationResult : data.reservationResult || 'no reservation task done before',
         reservationTask : data.reservationTask,
-        accountResult : success
+        accountResult : success,
+        accountTask : accountTask
     };
     if (success) {
         log.debug('Router', 'v2Account', `all task done successfully : ${requestType}`);
         result.message = `Account saved properly : ${requestType}`;
         if (requestType === 'POST') {
-            Object.entries({
-                resultData : {
-                    id : data.reservation_id,
-                    product: data.product,
-                    pickup : data.pickupData.pickupPlace,
-                    clientName : data.name,
-                    adult : data.adult, kid : data.kid, infant : data.infant
-                },
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.resultData = {
+                id : data.reservation_id,
+                product: data.product,
+                pickup : data.pickupData.pickupPlace,
+                clientName : data.name,
+                adult : data.adult, kid : data.kid, infant : data.infant
+            };
         } else {
-            Object.entries({
-                id : data.reverseAccountId,
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.id = data.reverseAccountId;
         }
     } else {
         result.errorNumber = errorNumber;
         if (errorNumber === 1) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / reverse account process failed. account id : ${data.account_id}`);
-            Object.entries({
-                message:`accountHandler failed in processReverseAccount : ${data.account_id}`,
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.message = `accountHandler failed in processReverseAccount : ${data.account_id}`;
         } else if (errorNumber === 2) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / insert account to SQL failed. account id : ${data.account_id}`);
-            Object.entries({
-                message:`accountHandler failed in insert account to Elastic : ${data.reservation_id}`,
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id}`;
         } else if (errorNumber === 3) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / insert account to Elastic failed. [${data.reservation_id} / ${data.account_id}]`);
-            Object.entries({
-                message:`accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`,
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`;
         } else if (errorNumber === 4) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
             Object.entries({
                 message:`accountHandler failed in processing productData : ${data.product}`,
-                accountTask : accountTask,
                 detail : data.productData.detail
             }).forEach(temp => {result[temp[0]] = temp[1]});
         } else if (errorNumber === 5) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / ValidDataCheck failed, [${data.reservation_id}]`);
-            Object.entries({
-                message: `accountHandler failed in account validation : ${data.reservation_id}`,
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.message = `accountHandler failed in account validation : ${data.reservation_id}`;
         } else if (errorNumber === 6) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to SQL failed, [${data.reservation_id}]`);
-            Object.entries({
-                message: `accountHandler failed in insert account to SQL : ${data.reservation_id}`,
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.message = `accountHandler failed in insert account to SQL : ${data.reservation_id}`;
         } else if (errorNumber === 7) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`);
-            Object.entries({
-                message:`accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`,
-                accountTask : accountTask
-            }).forEach(temp => {result[temp[0]] = temp[1]});
+            result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`;
         }
     }
     return result;
