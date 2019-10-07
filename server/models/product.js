@@ -297,7 +297,7 @@ class Product {
         data.productData = productData;
         if (!productData) {
             log.warn('Router', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
-            return {result : false, priceGroup : null, detail : productExtractTask};
+            return {result : false, priceGroup : {}, detail : productExtractTask};
         } else {
             productExtractTask.getProduct = true;
             let priceGroup = {
@@ -314,14 +314,14 @@ class Product {
             };
             let salesData = await this.salesMatch(data, productData, productExtractTask);
             if (!salesData.task.salesMatch || salesData.task.no_agency) {
-                return {result: false, priceGroup: null, detail: salesData.task};
+                return {result: false, priceGroup: {}, detail: salesData.task};
             } else {
                 productExtractTask = salesData.task;
                 priceGroup.income = salesData.income;
                 priceGroup.currency = salesData.currency;
                 if (!productExtractTask.priceAgencyMatch) {
                     log.warn('product', 'productDataExtractFromFB', `price data matching failed : ${productData.id} / ${productData.alias} / ${data.agency}`);
-                    return {result : false, priceGroup : null, detail : productExtractTask};
+                    return {result : false, priceGroup : {}, detail : productExtractTask};
                 } else {
                     if (!!productData.bus) priceGroup.bus = productData.bus;
                     else priceGroup.bus = {company : 'busking', size : 43, cost : 0};

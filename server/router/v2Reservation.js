@@ -65,11 +65,12 @@ async function postRouterHandler(req, res) {
     } else {
         if (pickupData.hasOwnProperty('pickupPlace')) reservationTask.pickupDataFound = true;
         let productData = await Product.productDataExtractFromFB(data);
+        data.productData = productData.priceGroup;
+        data.productData.detail = productData.detail;
         if (!productData.result) {
             return res.status(400).json(rRRM('POST', data, reservationTask, false, 2));
         } else {
             reservationTask.priceGroupFound = true;
-            data.productData = productData.priceGroup;
             log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
             const reservation = new Reservation(data);
             let validCheck = await Reservation.validationCreate(reservation);
@@ -201,37 +202,37 @@ function rRRM(requestType, data, reservationTask, reservationResult, errorNumber
     } else {
         result.errorNumber = errorNumber;
         if (errorNumber === 1) {
-            log.warn('Router', 'reservationHandler', `pickupData load failed. product : ${JSON.stringify(data.pickupData)}`);
+            log.warn('Router', 'reservationHandler', `errorNumber : ${errorNumber} / pickupData load failed. product : ${JSON.stringify(data.pickupData)}`);
             Object.entries({
                 message:'reservationHandler failed in searching pickupData',
                 detail : data.pickupData
             }).forEach(temp => result[temp[0]] = temp[1]);
         } else if (errorNumber === 2) {
-            log.warn('Router', 'reservationHandler', `productData load failed. product : ${data.product}`);
+            log.warn('Router', 'reservationHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
             Object.entries({
                 message : `reservationHandler failed in productData matching. product : ${data.product}}`,
                 detail : data.productData.detail
             }).forEach(temp => result[temp[0]] = temp[1]);
         } else if (errorNumber === 3) {
-            log.warn('Router', 'reservationHandler', `reservation validation failed in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`);
+            log.warn('Router', 'reservationHandler', `errorNumber : ${errorNumber} / reservation validation failed in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`);
             result.message = `reservationHandler failed in validation in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`;
         } else if (errorNumber === 4) {
-            log.warn('Router', 'createReservation', `reservation insert into SQL failed. message_id : ${data.message_id}`);
+            log.warn('Router', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into SQL failed. message_id : ${data.message_id}`);
             result.message = `reservation insert into SQL failed. message_id : ${data.message_id}`;
         } else if (errorNumber === 5) {
-            log.warn('Router', 'createReservation', `reservation insert into Firebase failed. reservation id : ${data.reservation_id}`);
+            log.warn('Router', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Firebase failed. reservation id : ${data.reservation_id}`);
             result.message = `reservation insert into Firebase failed. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 6) {
-            log.warn('Router', 'createReservation', `reservation insert into Elastic failed. reservation id : ${data.reservation_id}`);
+            log.warn('Router', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Elastic failed. reservation id : ${data.reservation_id}`);
             result.message = `reservation insert into Elastic failed. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 7) {
-            log.warn('Router', 'deleteRouterHandler', `reservation is already canceled. reservation id : ${data.reservation_id}`);
+            log.warn('Router', 'deleteRouterHandler', `errorNumber : ${errorNumber} / reservation is already canceled. reservation id : ${data.reservation_id}`);
             result.message = `reservation is already canceled. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 8) {
-            log.warn('Router', 'deleteRouterHandler', `SQL reservation cancel failed. reservation id : ${data.reservation_id}`);
+            log.warn('Router', 'deleteRouterHandler', `errorNumber : ${errorNumber} / SQL reservation cancel failed. reservation id : ${data.reservation_id}`);
             result.message = `SQL reservation cancel failed. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 9) {
-            log.warn('Router', 'deleteRouterHandler', `Elastic reservation cancel failed. reservation id : ${data.reservation_id}`);
+            log.warn('Router', 'deleteRouterHandler', `errorNumber : ${errorNumber} / Elastic reservation cancel failed. reservation id : ${data.reservation_id}`);
             result.message = `Elastic reservation cancel failed. reservation id : ${data.reservation_id}`;
         }
     }

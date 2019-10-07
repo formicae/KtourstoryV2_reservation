@@ -76,7 +76,7 @@ function RESERVATION_VALID_CHECK_PARAMETER_MAP(data) {
         ['writer', [data.writer, 'string']],
         ['agency', [data.agency, 'string']],
         ['agency_code', [data.agency_code, 'string']],
-        ['tour_date', [data.tour_date, data.product_id, data.agency]],
+        ['tour_date', [data.tour_date, data.product_id, data.agency, data.force || false]],
         ['options', [data.options, 'object']],
         ['adult', [data.adult]],
         ['kid', [data.kid]],
@@ -247,12 +247,13 @@ function validCheckOptionalItem(item, type) {
  * @param tour_date {Date} Local date (UTC+9)
  * @param product_id {Number} product id
  * @param agency {String} agency
+ * @param force {Boolean} deadline validation pass by force when client requests
  * @returns {PromiseLike<any | never | boolean | never>}
  */
-function validCheckOperationDateTime(tour_date, product_id, agency) {
+function validCheckOperationDateTime(tour_date, product_id, agency, force) {
     let product;
     let dayCheckData;
-    const tourDateCheckTask = {simpleLengthCheck:false, getProduct:false, validCheckDayOfWeek:false, checkTourDateInValidRange:false, getAvailablePriceGroup:false};
+    const tourDateCheckTask = {simpleLengthCheck:false, getProduct:false, validCheckDayOfWeek:false, checkTourDateInValidRange:false, getAvailablePriceGroup:false, forcedValidation : force};
     if (!tour_date) {
         log.warn('Validation', 'validCheckOperationDateTime', 'tour_date is undefined');
         return Promise.resolve(false);}
@@ -287,6 +288,7 @@ function validCheckOperationDateTime(tour_date, product_id, agency) {
             tourDateCheckTask.getAvailablePriceGroup = true;
             log.debug('Validation','validCheckOperationDateTime','priceGroupCheck passed');
             if (String(product_id).indexOf('test') > -1) return true;
+            if (force) return true;
             if (env.released) return ((new Date(tour_date).getTime() - new Date(2018,4,13).getTime()) / (60 * 60 * 1000)) >= product.deadline;
             return true;})
         .then(result => {
