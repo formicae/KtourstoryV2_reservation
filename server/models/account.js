@@ -59,20 +59,18 @@ class Account {
                 kid : data.kid,
                 infant : data.infant,
                 product : {
-                    name : data.productData.name,
-                    alias : data.productData.alias,
-                    category : data.productData.category,
-                    area : data.productData.area
+                    name : data.productData.name || 'no product name',
+                    alias : data.productData.alias || 'no product alias',
+                    category : data.productData.category || 'no product category',
+                    area : data.productData.area || 'no product area'
                 },
                 options : data.options || {}
             },
-            operation : data.operationData
+            operation : data.operationData || {}
         };
         if (result.reservation.nationality === 'unknown') {
-            if (data.hasOwnProperty('reservation')) {
-                if (data.reservation.hasOwnProperty('nationality')){
-                    result.reservation.nationality = data.reservation.nationality.toUpperCase();
-                }
+            if (data.hasOwnProperty('nationality')){
+                result.reservation.nationality = data.nationality;
             }
         }
         if (data.hasOwnProperty('account_memo')) {

@@ -2,6 +2,7 @@ const sqlDB = require('../auth/postgresql');
 const Account = require('../models/account');
 const Product = require('../models/product');
 const Nationality = require('../models/nationality');
+const Pickup = require('../models/pickups');
 const log = require('../../log');
 const env = require('../../package.json').env;
 sqlDB.connect();
@@ -10,13 +11,13 @@ exports.post = (req, res) => {
     if (!req.get('Content-Type')) {
         log.warn('Router', 'Account export-POST', 'wrong Content-Type');
         return res.status(400).json({message: "Content-Type should be json"});
-    } else if (!req.body.reservationResult) {
-        if ((!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth)) {
-            log.warn('Router', 'Account export-POST', 'account router unauthorized!');
-            return res.status(401).json({message:'account router unauthorized!'});
-        } else {
+    } else if (!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth) {
+        if (!req.body.reservationResult) {
             log.warn('Router', 'Account export-POST', 'this requester should send data through reservation router. not authorized for direct request to account router');
             return res.status(500).json({message:'this requester should send data through reservation router. not authorized for direct request to account router'});
+        } else {
+            log.warn('Router', 'Account export-POST', 'account router unauthorized!');
+            return res.status(401).json({message:'account router unauthorized!'});
         }
     }
     return accountHandler(req, res, 'POST')
@@ -88,42 +89,52 @@ async function accountHandler(req, res, requestType) {
             }
         }
     } else {
-        const task = {validation : false, insertSQL : false, insertElastic: false, productDataFound : false};
+        const task = {validation : false, insertSQL : false, insertElastic: false, productDataFound : false, pickupDataFound : false};
         let productData;
-        if (!data.hasOwnProperty('productData') && data.hasOwnProperty('product')) {
-            productData = await Product.productDataExtractFromFB(data);
-            data.productData = productData.priceGroup;
-        } else {
-            productData = data.productData;
-            productData.result = true;
-        }
-        if (!productData.result) {
-            return res.status(400).json(aRRM('POST', data, task, false, 4));
-        } else {
-            task.productDataFound = true;
-            if (!data.hasOwnProperty('cash')) data.cash = false;
-            const account = new Account(data);
-            let validCheck = await Account.validation(account);
-            if (!validCheck.result) {
-                task.validationDetail = validCheck.detail;
-                return res.status(400).json(aRRM('POST', data, task, false, 5));
+        if (data.category === 'reservation' || data.category === 'Reservation') {
+            if (!data.hasOwnProperty('productData') && data.hasOwnProperty('product')) {
+                productData = await Product.productDataExtractFromFB(data);
+                data.productData = productData.priceGroup;
             } else {
-                task.validation = true;
-                let sqlAccount = await Account.insertSQL(account.sqlData, testObj);
-                if (!sqlAccount) {
-                    return res.status(500).json(aRRM('POST', data, task, false, 6));
+                productData = data.productData;
+                productData.result = true;
+            }
+            if (!productData.result) {
+                return res.status(400).json(aRRM('POST', data, task, false, 4));
+            }
+            task.productDataFound = true;
+            let pickupData = await Pickup.getPickup(data.pickup);
+            data.pickupData = pickupData;
+            if (!pickupData) {
+                return res.status(400).json(aRRM('POST', data, task, false, 5));
+            }
+            task.pickupDataFound = true;
+        } else {
+            data.reservation_id = null;
+        }
+        if (!data.hasOwnProperty('cash')) data.cash = false;
+        if (!data.hasOwnProperty('productData')) return res.status(400).json(aRRM('POST', data, task, false, 6))
+        const account = new Account(data);
+        let validCheck = await Account.validation(account);
+        if (!validCheck.result) {
+            task.validationDetail = validCheck.detail;
+            return res.status(400).json(aRRM('POST', data, task, false, 7));
+        } else {
+            task.validation = true;
+            let sqlAccount = await Account.insertSQL(account.sqlData, testObj);
+            if (!sqlAccount) {
+                return res.status(500).json(aRRM('POST', data, task, false, 8));
+            } else {
+                task.insertSQL = true;
+                account.sqlData.id = sqlAccount.id;
+                account.elasticData.id = sqlAccount.id;
+                let elasticResult = await Account.insertElastic(account.elasticData, testObj);
+                if (!elasticResult) {
+                    let failureTask = await failureManager(account.sqlData, task, requestType, testObj);
+                    return res.status(500).json(aRRM('POST', data, failureTask, false, 9));
                 } else {
-                    task.insertSQL = true;
-                    account.sqlData.id = sqlAccount.id;
-                    account.elasticData.id = sqlAccount.id;
-                    let elasticResult = await Account.insertElastic(account.elasticData, testObj);
-                    if (!elasticResult) {
-                        let failureTask = await failureManager(account.sqlData, task, requestType, testObj);
-                        return res.status(500).json(aRRM('POST', data, failureTask, false, 7));
-                    } else {
-                        task.insertElastic = true;
-                        return res.status(200).json(aRRM('POST', data, task, true, null));
-                    }
+                    task.insertElastic = true;
+                    return res.status(200).json(aRRM('POST', data, task, true, null));
                 }
             }
         }
@@ -150,11 +161,12 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
     if (success) {
         log.debug('Router', 'v2Account', `all task done successfully : ${requestType}`);
         result.message = `Account saved properly : ${requestType}`;
+        let pickup = (data.category === 'reservation' || data.category === 'Reservation') ? data.pickupData.pickupPlace : 'no pickup data';
         if (requestType === 'POST') {
             result.resultData = {
                 id : data.reservation_id,
                 product: data.product,
-                pickup : data.pickupData.pickupPlace,
+                pickup : pickup,
                 clientName : data.name,
                 adult : data.adult, kid : data.kid, infant : data.infant
             };
@@ -179,12 +191,18 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
                 detail : data.productData.detail
             }).forEach(temp => {result[temp[0]] = temp[1]});
         } else if (errorNumber === 5) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / pickupData load failed. pickup : ${data.pickup}`);
+            result.message = `accountHandler failed in pickupData find. pickup : ${data.pickup}`;
+        } else if (errorNumber === 6) {
+            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / productData is not present in non-reservation account. category : ${data.category}`);
+            result.message = `productData is not present in non-reservation account. category : ${data.category}`;
+        } else if (errorNumber === 7) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / ValidDataCheck failed, [${data.reservation_id}]`);
             result.message = `accountHandler failed in account validation : ${data.reservation_id}`;
-        } else if (errorNumber === 6) {
+        } else if (errorNumber === 8) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to SQL failed, [${data.reservation_id}]`);
             result.message = `accountHandler failed in insert account to SQL : ${data.reservation_id}`;
-        } else if (errorNumber === 7) {
+        } else if (errorNumber === 9) {
             log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`);
             result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`;
         }
@@ -217,7 +235,6 @@ function failureManager(account, task, type, testObj){
     } else {
         if (task.insertSQL && !task.insertElastic) {
             const originalSQLAccount = Account.reverseMoneyProcess(Account.reverseAccountDataProcessing(account));
-            console.log('failuremanager reverse account : ',JSON.stringify(originalSQLAccount));
             if (originalSQLAccount.id) delete originalSQLAccount.id;
             return Account.insertSQL(originalSQLAccount, testObj)
                 .then(result => {
