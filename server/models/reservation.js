@@ -186,11 +186,12 @@ class Reservation {
 
     /**
      * Validation for updating reservation before delete / insert data from / to databases.
+     * @param data {Object} raw data object
      * @param reservation {Object} reservation object
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static async validationUpdate(reservation) {
-        const val = await validation.validReservationUpdateCheck(reservation);
+    static async validationUpdate(data, reservation) {
+        const val = await validation.validReservationUpdateCheck(data, reservation);
         if (!val.result) log.warn('Model', 'Reservation - validationUpdate', `reservation update validation failed. detail : ${JSON.stringify(val.detail)}`);
         else log.debug('Model', 'Reservation - validationUpdate', `reservation update validation success`);
         return val;
@@ -198,11 +199,12 @@ class Reservation {
 
     /**
      * Validation for creating reservation before insert data to databases.
+     * @param data {Object} raw data object
      * @param reservation {Object} reservation object
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static async validationCreate(reservation) {
-        const val = await validation.validReservationCreateCheck(reservation);
+    static async validationCreate(data, reservation) {
+        const val = await validation.validReservationCreateCheck(data, reservation);
         if (!val.result) log.warn('Model', 'Reservation - validationCreate', `reservation create validation failed. detail : ${JSON.stringify(val.detail)}`);
         else log.debug('Model', 'Reservation - validationCreate', `reservation create validation success`);
         return val;

@@ -73,7 +73,7 @@ async function postRouterHandler(req, res) {
             reservationTask.priceGroupFound = true;
             log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
             const reservation = new Reservation(data);
-            let validCheck = await Reservation.validationCreate(reservation);
+            let validCheck = await Reservation.validationCreate(data, reservation);
             reservationTask.validation = validCheck.result;
             reservationTask.validationDetail = validCheck.detail;
             if (!validCheck.result) {

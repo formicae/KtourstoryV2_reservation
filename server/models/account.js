@@ -123,11 +123,12 @@ class Account {
 
     /**
      * validation for account Object
+     * @param data {Object} raw data object
      * @param account {Object} account object
      * @returns {PromiseLike<T | never> | Promise<T | never>}
      */
-    static async validation(account) {
-        const val = await validation.validAccountCheck(account);
+    static async validation(data, account) {
+        const val = await validation.validAccountCheck(data, account);
         if (!val.result) log.warn('Model', 'Account - validation', `account validation failed. detail : ${JSON.stringify(val.detail)}`);
         else log.debug('Model', 'Account - validation', `account validation success`);
         return val;

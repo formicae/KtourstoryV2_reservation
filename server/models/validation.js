@@ -65,27 +65,28 @@ const RESERVATION_CREATE_VALID_CHECK_LIST_MAP = {
 
 /**
  * Parameter Map for reservation validation
- * @param data {Object} Reservation object
+ * @param data {Object} raw data object
+ * @param reservation {Object} reservation object
  * @returns {Map<any, any>} Reservation parameter map
  * @constructor
  */
-function RESERVATION_VALID_CHECK_PARAMETER_MAP(data) {
+function RESERVATION_VALID_CHECK_PARAMETER_MAP(data, reservation) {
     return new Map([
-        ['id', ['reservation', 'id', data.id]],
-        ['message_id', [data.message_id, 'string']],
-        ['writer', [data.writer, 'string']],
-        ['agency', [data.agency, 'string']],
-        ['agency_code', [data.agency_code, 'string']],
-        ['tour_date', [data.tour_date, data.product_id, data.agency, data.force || false]],
-        ['options', [data.options, 'object']],
-        ['adult', [data.adult]],
-        ['kid', [data.kid]],
-        ['infant', [data.infant]],
-        ['canceled', [data.canceled, 'boolean']],
-        ['created_date', [data.created_date]],
-        ['modified_date', [data.modified_date]],
-        ['productCheck', [data.product_id, data.tour_date, data.agency]],
-        ['totalPeopleNumberCheck', [data.adult, data.kid, data.infant]],
+        ['id', ['reservation', 'id', reservation.id]],
+        ['message_id', [reservation.message_id, 'string']],
+        ['writer', [reservation.writer, 'string']],
+        ['agency', [reservation.agency, 'string']],
+        ['agency_code', [reservation.agency_code, 'string']],
+        ['tour_date', [reservation.tour_date, reservation.product_id, reservation.agency, data.force]],
+        ['options', [reservation.options, 'object']],
+        ['adult', [reservation.adult]],
+        ['kid', [reservation.kid]],
+        ['infant', [reservation.infant]],
+        ['canceled', [reservation.canceled, 'boolean']],
+        ['created_date', [reservation.created_date]],
+        ['modified_date', [reservation.modified_date]],
+        ['productCheck', [reservation.product_id, reservation.tour_date, reservation.agency]],
+        ['totalPeopleNumberCheck', [reservation.adult, reservation.kid, reservation.infant]],
     ]);
 }
 
@@ -95,18 +96,18 @@ function RESERVATION_VALID_CHECK_PARAMETER_MAP(data) {
  * @returns {Map<any, any>} Account parameter map
  * @constructor
  */
-function ACCOUNT_VALID_CHECK_PARAMETER_MAP(data) {
+function ACCOUNT_VALID_CHECK_PARAMETER_MAP(data, account) {
     return new Map([
-        ['id', ['account', 'id', data.id]],
-        ['writer', [data.writer, 'string']],
-        ['category', [data.category, 'string']],
-        ['currency', [data.currency, 'string']],
-        ['income', [data.income]],
-        ['expenditure', [data.expenditure]],
-        ['cash', [data.cash, 'boolean']],
-        ['created_date', [data.created_date]],
-        ['reservation_id', ['reservation', 'reservation_id', data.reservation_id]],
-        ['totalMoneyCheck', [data.income, data.expenditure]]
+        ['id', ['account', 'id', account.id]],
+        ['writer', [account.writer, 'string']],
+        ['category', [account.category, 'string']],
+        ['currency', [account.currency, 'string']],
+        ['income', [account.income]],
+        ['expenditure', [account.expenditure]],
+        ['cash', [account.cash, 'boolean']],
+        ['created_date', [account.created_date]],
+        ['reservation_id', ['reservation', 'reservation_id', account.reservation_id]],
+        ['totalMoneyCheck', [account.income, account.expenditure]]
     ]);
 }
 
@@ -241,65 +242,76 @@ function validCheckOptionalItem(item, type) {
         else resolve(false);
     });
 }
+
+
+function dateCheckFailureManager(failureNumber, passed, tour_date, product, additionalData) {
+    if (failureNumber === 1) {
+        log.warn('Validation', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / tour_date is undefined`);
+    } else if (failureNumber === 2) {
+        log.warn('Validation', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / product_id is undefined`);
+    } else if (failureNumber === 3) {
+        if (passed) log.debug('Validation','validCheckOperationDateTime','validCheckSimpleDateTime passed');
+        else log.warn('Validation', 'simpleLengthCheck',`failureNumber : ${failureNumber} / simple length check failed : ${tour_date}`);
+    } else if (failureNumber === 4) {
+        if (passed) log.debug('Validation','validCheckOperationDateTime','dayCheck passed');
+        else log.warn('Validation', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / dayCheck failed. invalid operation day of week. day of tour_date : ${DAY_MAP[additionalData.tourDay]} / firebase Tour day array : ${JSON.stringify(additionalData.productDayArray)}`);
+    } else if (failureNumber === 5) {
+        if (passed) log.debug('Validation','validCheckOperationDateTime','tourDateRangeCheck passed');
+        else log.warn('Validation','validCheckOperationDateTime', `failureNumber : ${failureNumber} / tourDateCheck failed`);
+    } else if (failureNumber === 6) {
+        if (passed) log.debug('Validation','validCheckOperationDateTime', `priceGroupCheck passed. number of available price group : ${additionalData.length}`);
+        else log.warn('Valdation','validCheckOperationDateTime', `failureNumber : ${failureNumber} / priceGroupCheck failed. no existing price group in product : ${product.id} / priceGroup : ${additionalData}`);
+    } else if (failureNumber === 7) {
+        if (passed) log.debug('Validation','validCheckOperationDateTime',`deadLine passed : [${additionalData} hours left / deadline : ${product.deadline}] hours`);
+        else log.warn('Validation','validCheckOperationDateTime',`failureNumber : ${failureNumber} / deadLine failed : [${additionalData} hours left / deadline : ${product.deadline}] hours`);
+    }
+    return false;
+}
+
 /**
  * validation check for tour_date(operation date) of reservation.
  * simple string, availability of day of week, tour_date valid check with available reservation date, price group is checked.
- * @param tour_date {Date} Local date (UTC+9)
+ * @param tour_date {Date || String} Local date (UTC+9)
  * @param product_id {Number} product id
  * @param agency {String} agency
  * @param force {Boolean} deadline validation pass by force when client requests
  * @returns {PromiseLike<any | never | boolean | never>}
  */
-function validCheckOperationDateTime(tour_date, product_id, agency, force) {
-    let product;
-    let dayCheckData;
-    const tourDateCheckTask = {simpleLengthCheck:false, getProduct:false, validCheckDayOfWeek:false, checkTourDateInValidRange:false, getAvailablePriceGroup:false, forcedValidation : force};
+async function validCheckOperationDateTime(tour_date, product_id, agency, force) {
+    const task = {getProduct:false, simpleLengthCheck:false, validCheckDayOfWeek:false, checkTourDateInValidRange:false, getAvailablePriceGroup:false};
     if (!tour_date) {
-        log.warn('Validation', 'validCheckOperationDateTime', 'tour_date is undefined');
-        return Promise.resolve(false);}
-    if (!product_id) {
-        log.warn('Validation', 'validCheckOperationDateTime', 'product_id is undefined');
-        return Promise.resolve(false);}
-    return validCheckSimpleDateTime(tour_date)
-        .then(simpleLengthCheck => {
-            if (!simpleLengthCheck) return false;
-            tourDateCheckTask.simpleLengthCheck = true;
-            log.debug('Validation','validCheckOperationDateTime','validCheckSimpleDateTime passed');
-            return Product.getProduct(product_id)})
-        .then(result => {
-            product = result;
-            if (!result) return false;
-            tourDateCheckTask.getProduct = true;
-            log.debug('Validation','validCheckOperationDateTime','get Product passed');
-            return validCheckDayOfWeek(product, tour_date)})
-        .then(dayCheck => {
-            dayCheckData = dayCheck;
-            if (!dayCheck.result) return false;
-            tourDateCheckTask.validCheckDayOfWeek = true;
-            log.debug('Validation','validCheckOperationDateTime','dayCheck passed');
-            return Product.checkTourDateInValidRange(tour_date, product.tour_begin, product.tour_end, product.timezone)})
-        .then(tourDateCheck => {
-            if (!tourDateCheck) return false;
-            tourDateCheckTask.checkTourDateInValidRange = true;
-            log.debug('Validation','validCheckOperationDateTime','tourDateCheck passed');
-            return Product.getAvailablePriceGroup(tour_date, product, agency)})
-        .then((priceGroupCheck) => {
-            if (!priceGroupCheck) return false;
-            tourDateCheckTask.getAvailablePriceGroup = true;
-            log.debug('Validation','validCheckOperationDateTime','priceGroupCheck passed');
-            if (String(product_id).indexOf('test') > -1) return true;
-            if (force) return true;
-            if (env.released) return ((new Date(tour_date).getTime() - new Date(2018,4,13).getTime()) / (60 * 60 * 1000)) >= product.deadline;
-            return true;})
-        .then(result => {
-            if (result) return true;
-            if (!tourDateCheckTask.simpleLengthCheck) log.warn('Validation', 'simpleLengthCheck',`simple lenght check failed : ${tour_date}`);
-            else if (!tourDateCheckTask.getProduct) log.warn('Validation', 'validCheckOperationDateTime',`getProduct failed. [${product_id}] is not in productMap.`);
-            else if (!tourDateCheckTask.validCheckDayOfWeek) log.warn('Validation', 'validCheckOperationDateTime', `dayCheck failed. invalid operation day of week. day of tour_date : ${DAY_MAP[dayCheckData.tourDay]} / firebase Tour day array : ${JSON.stringify(dayCheckData.productDayArray)}`);
-            else if (!tourDateCheckTask.checkTourDateInValidRange) log.warn('Validation','validCheckOperationDateTime', 'tourDateCheck failed');
-            else if (!tourDateCheckTask.getAvailablePriceGroup) log.warn('Valdation','validCheckOperationDateTime', 'priceGroupCheck failed. no existing price group in product');
+        return dateCheckFailureManager(1, true, tour_date, null, null);
+    } else if (!product_id) {
+        return dateCheckFailureManager(2, true, tour_date, null, null)
+    } else {
+        let product = await Product.getProduct(product_id);
+        if (product) task.getProduct = true;
+        if (!product.hasOwnProperty('timezone')) product.timezone = 'UTC+9';
+        task.simpleLengthCheck = await validCheckSimpleDateTime(tour_date);
+        dateCheckFailureManager(3, task.simpleLengthCheck, tour_date, product, null);
+        let dayCheckData = await validCheckDayOfWeek(product, tour_date);
+        task.validCheckDayOfWeek = dayCheckData.result;
+        dateCheckFailureManager(4, task.validCheckDayOfWeek, tour_date, product, dayCheckData);
+        task.checkTourDateInValidRange = await Product.checkTourDateInValidRange(tour_date, product.tour_begin, product.tour_end, product.timezone);
+        dateCheckFailureManager(5, task.checkTourDateInValidRange, tour_date, product, null);
+        let availablePriceGroup = await Product.getAvailablePriceGroup(tour_date, product, agency);
+        task.getAvailablePriceGroup = availablePriceGroup.length > 0;
+        dateCheckFailureManager(6, task.getAvailablePriceGroup, tour_date, product, availablePriceGroup);
+        if (Object.values(task).includes(false)) {
+            log.warn('Validation', 'validCheckOperationDateTime', `over one of task failed : ${JSON.stringify(task)}`);
             return false;
-        });
+        } else {
+          if (force) {
+              log.debug('Validation', 'validCheckOperationDateTime', `all task passed : ${JSON.stringify(task)} and forced validation : no deadline will be checked`);
+              return true
+          } else {
+              let leftTime = ((new Date(tour_date).getTime() - Product.getLocalDate(new Date(), product.timezone).getTime()) / (60 * 60 * 1000));
+              let beforeDeadLine = leftTime >= product.deadline;
+              dateCheckFailureManager(7, beforeDeadLine, tour_date, product, leftTime);
+              return beforeDeadLine;
+          }
+        }
+    }
 }
 
 /**
@@ -454,15 +466,16 @@ function buildPromiseArray(list, paramMap, functionMap) {
 }
 /**
  * validation check for reservation / account object according to check list.
+ * @param data {Object} raw data object
  * @param object {Object} object (reservation || account)
  * @param paramMap {Object} parameter map : JSON
  * @param checkList {Array} validation check list : Array
  * @param functionMap {function(): Map<any, any>} function map : MAP
  * @returns {Promise<{result: boolean, detail} | never>}
  */
-function validDataCheck(object, paramMap ,checkList, functionMap) {
+function validDataCheck(data, object, paramMap ,checkList, functionMap) {
     const checkObject = {};
-    const promiseArray = buildPromiseArray(checkList, paramMap(object), functionMap());
+    const promiseArray = buildPromiseArray(checkList, paramMap(data, object), functionMap());
     const checkKey = promiseArray.keys;
     return Promise.all(promiseArray.array)
         .then(checkList => {
@@ -477,30 +490,33 @@ function validDataCheck(object, paramMap ,checkList, functionMap) {
 
 /**
  * validation check for reservation update (reservation is already exist)
- * @param reservation {Object}
+ * @param data {Object} raw data object
+ * @param reservation {Object} reservation object
  * @returns {Promise<{result: boolean, detail} | never | boolean>}
  */
-function validReservationUpdateCheck(reservation) {
-    return validDataCheck(reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_UPDATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
+function validReservationUpdateCheck(data, reservation) {
+    return validDataCheck(data, reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_UPDATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
 }
 
 /**
  * validation check for reservation create
- * @param reservation {Object}
+ * @param data {Object} raw data object
+ * @param reservation {Object} reservation object
  * @returns {Promise<{result: boolean, detail} | never | boolean>}
  */
-function validReservationCreateCheck(reservation) {
+function validReservationCreateCheck(data, reservation) {
     console.log('reservation validation check!');
-    return validDataCheck(reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_CREATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
+    return validDataCheck(data, reservation.sqlData, RESERVATION_VALID_CHECK_PARAMETER_MAP, RESERVATION_CREATE_VALID_CHECK_LIST_MAP, RESERVATION_VALID_CHECK_FUNCTION_MAP)
 }
 
 /**
  * validation for account creation. account cannot be modified.
- * @param account
+ * @param data {Object} raw data object
+ * @param account {Object} account obejct
  * @returns {Promise<{result: boolean, detail} | never | boolean>}
  */
-function validAccountCheck(account) {
-    return validDataCheck(account.sqlData, ACCOUNT_VALID_CHECK_PARAMETER_MAP, ACCOUNT_VALID_CHECK_LIST_MAP, ACCOUNT_VALID_CHECK_FUNCTION_MAP)
+function validAccountCheck(data, account) {
+    return validDataCheck(data, account.sqlData, ACCOUNT_VALID_CHECK_PARAMETER_MAP, ACCOUNT_VALID_CHECK_LIST_MAP, ACCOUNT_VALID_CHECK_FUNCTION_MAP)
 }
 
 exports.RESERVATION_KEY_MAP = RESERVATION_KEY_MAP;

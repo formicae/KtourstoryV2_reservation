@@ -115,7 +115,7 @@ async function accountHandler(req, res, requestType) {
         if (!data.hasOwnProperty('cash')) data.cash = false;
         if (!data.hasOwnProperty('productData')) return res.status(400).json(aRRM('POST', data, task, false, 6))
         const account = new Account(data);
-        let validCheck = await Account.validation(account);
+        let validCheck = await Account.validation(data, account);
         if (!validCheck.result) {
             task.validationDetail = validCheck.detail;
             return res.status(400).json(aRRM('POST', data, task, false, 7));
