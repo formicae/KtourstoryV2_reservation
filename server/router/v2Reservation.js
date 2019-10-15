@@ -20,8 +20,9 @@ exports.post = (req, res) => {
     return postRouterHandler(req, res)
         .catch(err => {
             log.error('Router', 'RESERVATION export-POST', `unhandled error occurred! error`);
-            res.status(500).send(`unhandled RESERVATION POST error`)
+            return res.status(500).send(`unhandled RESERVATION POST error`)
         });
+
 };
 
 exports.delete = (req, res) => {

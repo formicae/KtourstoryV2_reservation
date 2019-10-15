@@ -280,9 +280,9 @@ function dateCheckFailureManager(failureNumber, passed, tour_date, product, addi
 async function validCheckOperationDateTime(tour_date, product_id, agency, force) {
     const task = {getProduct:false, simpleLengthCheck:false, validCheckDayOfWeek:false, checkTourDateInValidRange:false, getAvailablePriceGroup:false};
     if (!tour_date) {
-        return dateCheckFailureManager(1, true, tour_date, null, null);
+        return dateCheckFailureManager(1, false, tour_date, null, null);
     } else if (!product_id) {
-        return dateCheckFailureManager(2, true, tour_date, null, null)
+        return dateCheckFailureManager(2, false, tour_date, null, null)
     } else {
         let product = await Product.getProduct(product_id);
         if (product) task.getProduct = true;
