@@ -15,7 +15,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 server/models/dataFiles/*.json
-server/auth/*
+server/auth/keys/*
 server/models/
 *.pem
 *.tsv

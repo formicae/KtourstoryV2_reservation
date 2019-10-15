@@ -24,7 +24,7 @@ class Account {
             expenditure : Account.moneyPreprocess(data.productData.expenditure),
             cash : data.cash || false,
             created_date : currentDate,
-            reservation_id : data.reservation_id,
+            reservation_id : data.reservation_id || null,
             card_number : data.card_number || '',
             sub_category: data.sub_category || '',
             contents : data.contents || `agency:${data.agency} agency_code:${data.agency_code || ''}`
@@ -51,7 +51,7 @@ class Account {
             created_date: currentDate,
             star : false,
             reservation : {
-                id : data.reservation_id,
+                id : data.reservation_id || 'no reservation id',
                 agency : data.agency || '',
                 tour_date : data.date,
                 nationality : data.nationality || 'unknown',

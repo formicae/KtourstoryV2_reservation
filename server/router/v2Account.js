@@ -16,8 +16,7 @@ exports.post = (req, res) => {
             log.warn('Router', 'Account export-POST', 'this requester should send data through reservation router. not authorized for direct request to account router');
             return res.status(500).json({message:'this requester should send data through reservation router. not authorized for direct request to account router'});
         } else {
-            log.warn('Router', 'Account export-POST', 'account router unauthorized!');
-            return res.status(401).json({message:'account router unauthorized!'});
+            log.debug('Router', 'Account export-POST', 'no account authority but passed : came through reservation router');
         }
     }
     return accountHandler(req, res, 'POST')
@@ -36,8 +35,7 @@ exports.delete = (req, res) => {
             log.warn('Router', 'Account export-DELETE', 'unAuthorized request');
             return res.status(401).json({message:'account router unauthorized!'});
         } else {
-            log.warn('Router', 'Account export-DELETE', 'failed request from reservation router');
-            return res.status(500).json({message:'failed request from reservation router!'});
+            log.debug('Router', 'Account export-POST', 'no account authority but passed : came through reservation router');
         }
     }
     return accountHandler(req, res, 'REVERSE_CREATE')
@@ -109,12 +107,12 @@ async function accountHandler(req, res, requestType) {
                 return res.status(400).json(aRRM('POST', data, task, false, 5));
             }
             task.pickupDataFound = true;
-        } else {
-            data.reservation_id = null;
         }
         if (!data.hasOwnProperty('cash')) data.cash = false;
         if (!data.hasOwnProperty('productData')) return res.status(400).json(aRRM('POST', data, task, false, 6))
         const account = new Account(data);
+        if (account.sqlData.category !== 'reservation' && account.sqlData.category !== 'Reservation') data.reservation_id = null;
+        data.category = account.sqlData.category;
         let validCheck = await Account.validation(data, account);
         if (!validCheck.result) {
             task.validationDetail = validCheck.detail;
@@ -167,6 +165,7 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
                 id : data.reservation_id,
                 product: data.product,
                 pickup : pickup,
+                category : data.category,
                 clientName : data.name,
                 adult : data.adult, kid : data.kid, infant : data.infant
             };
