@@ -8,17 +8,12 @@
 
 ### Node ###
 # Logs
-logs
-*.log
-server/models/tempDataFiles/*.json
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
-server/models/dataFiles/*.json
 server/auth/keys/*
-server/models/
+server/models/dataFiles/*
+server/models/tempDataFiles/*
 *.pem
-*.tsv
 
 # Runtime data
 pids
@@ -171,3 +166,23 @@ fabric.properties
 
 
 # End of https://www.gitignore.io/api/node,webstorm
+.DS_Store
+Instance_group_overall.key
+cloud_sql_proxy
+report.20190331.170638.8406.001.json
+server/.DS_Store
+server/auth/.DS_Store
+server/auth/keys/.DS_Store
+server/models/.DS_Store
+server/models/dataFiles/.DS_Store
+server/models/dataFiles/_old/
+server/models/firebaseWatcher.js
+server/models/tempDataFiles/.DS_Store
+server/models/tempDataFiles/productSQLDataProcessing.js
+server/models/tempDataFiles/v2ConvertedElasticData.json.zip
+server/models/validationTestFile/v2ElasticTestProduct.json
+server/models/validationTestFile/v2ElasticTestReservation.json
+server/models/validationTestFile/v2FbTestProduct.json
+server/models/validationTestFile/v2FbTestReservation.json
+v2AccountConverter_diagram_v0.key
+v2Ktour_network_setting.key
