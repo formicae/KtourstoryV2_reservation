@@ -223,12 +223,14 @@ class Reservation {
             const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
+                    console.log('query : ',query)
                     log.warn('Model', 'Reservation-insertSQL', `data insert to SQL failed : ${reservation.id}`);
                     resolve(false);
+                } else {
+                    log.debug('Model','Reservation-insertSQL', `${ result.rows[0].id = 'r' + result.rows[0]._id} data insert to SQL success`);
+                    result.rows[0].id = 'r' + result.rows[0]._id;
+                    resolve(result.rows[0]);
                 }
-                log.debug('Model','Reservation-insertSQL', `${ result.rows[0].id = 'r' + result.rows[0]._id} data insert to SQL success`);
-                result.rows[0].id = 'r' + result.rows[0]._id;
-                resolve(result.rows[0]);
             });
         });
     }
@@ -344,7 +346,7 @@ class Reservation {
             team.reservations[reservation.id] = reservation;
             fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').push(team, err => {
                 if (err) {
-                    log.warn('Model', 'newTeamBuild', `operation team push failed`);
+                    log.info('Model', 'newTeamBuild', `operation team push failed`);
                     resolve(false);
                 }
             }).then(result => {
@@ -352,6 +354,7 @@ class Reservation {
                 let path = result.path.pieces_;
                 data.operation = path[1] + '/' + path[2] + '/' + path[4] + '/' + reservation.id;
                 data.team_id = path[4];
+                fbDB.ref('operation').child(data.date).child(data.productData.id).update({area:data.productData.area, product_alias:data.productData.alias, product_name:data.productData.name})
                 fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').child(path[4])
                     .update({id:path[4]}).then(() => {resolve(data);})
             });
@@ -535,10 +538,12 @@ class Reservation {
         return new Promise((resolve, reject) => {
             fbDB.ref('operation').child(date).update(reservation, err => {
                 if (err) {
-                    console.log('insertFBforConvert error : ', date);
+                    console.log('insertFBforConvert error : ', date, JSON.stringify(err));
                     resolve(false);
+                } else {
+                    console.log('insertFBforConvert success : ',date, JSON.stringify(reservation));
+                    resolve(true);
                 }
-                resolve(true);
             })
         })
     }
@@ -770,7 +775,13 @@ function reservationQueryProcessing(object, type) {
                 if (typeof value === 'object') { tempValues += "'" + JSON.stringify(value) + "'" + ", "}
                 else if (typeof value === 'number') {tempValues += value + ", "}
                 else if (typeof value === 'boolean' || key === 'canceled') { tempValues += Boolean(value) + ", "}
-                else { tempValues += "'" + value + "'" + ", "}
+                else {
+                    if (value.match(`'`)) {
+                        let temp = value.split(`'`);
+                        value = temp[0] + temp[1];
+                    }
+                    tempValues += "'" + value + "'" + ", "
+                }
                 tempKeys += key + ", ";
             } else if (type === 'update') {
                 tempUpdateResult += key + " = ";

@@ -192,7 +192,7 @@ function validCheckProduct(product_id, tour_date, agency) {
                 return false;
             } else {
                 product = result;
-                return product.on === 'ON';
+                return product.on === 'ON' || product.on === 'true' || product.on === true;
             }})
         .then(statusCheck => {
             if (!statusCheck) {

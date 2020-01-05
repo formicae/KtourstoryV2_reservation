@@ -37,23 +37,27 @@ class Pickup {
 
 function monitorPickup() {
     return new Promise((resolve, reject) => {
-        fbDB.ref('geos').on('value', snapshot => {
-            const geos = snapshot.val();
-            Object.entries(geos.areas).forEach(async temp => {
+        fbDB.ref('geos').on('value', async snapshot => {
+            const geos = await snapshot.val();
+            for (let temp of Object.entries(geos.areas)) {
                 let areaName = temp[0];
                 let areaData = temp[1];
-                await areaData.pickups.forEach(async data => {
-                    await pickupMap.set(data.name, {
-                        pickupPlace : data.name,
-                        incoming : data.incoming,
-                        location : data.location,
-                        areaName : areaName
-                    });
-                    await data.incoming.forEach(incoming => {
-                        incomingMap.set(incoming, data.name);
-                    });
-                });
-            });
+                if (areaData.hasOwnProperty('pickups')) {
+                    for (let data of areaData.pickups) {
+                        if (data.hasOwnProperty('name')) {
+                            pickupMap.set(data.name, {
+                                pickupPlace : data.name,
+                                incoming : data.incoming,
+                                location : data.location,
+                                areaName : areaName
+                            });
+                            data.incoming.forEach(incoming => {
+                                incomingMap.set(incoming, data.name);
+                            });
+                        }
+                    }
+                }
+            }
             resolve(pickupMap);
         });
     });

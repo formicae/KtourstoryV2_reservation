@@ -7,6 +7,7 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_에버', '서울에버'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
+    ['Seoul_Spring_벛꽃랜덤','서울벚꽃랜덤'],
     ['Seoul_Spring_진해', '서울진해'],
     ['Seoul_Summer_진도', '서울진도'],
     ['Seoul_Spring_보성녹차축제', '서울보성녹차'],
@@ -35,9 +36,11 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Strawberry_포천딸기', '포천'],
     ['Seoul_Summer_여름포천', '포천'],
     ['Seoul_Autumn_설악산단풍', '설악단풍'],
+    ['Seoul_Autumn_설악산', '설악단풍'],
     ['Seoul_Autumn_덕유산_closed', '덕유산'],
     ['Busan_Spring_부산-보성녹차', '부산보성녹차'],
     ['Seoul_Autumn_단풍랜덤', '서울단풍랜덤'],
+    ['Seoul_Autumn_단풍랜덤투어', '서울단풍랜덤'],
     ['Busan_Autumn_단풍랜덤부산', '부산단풍랜덤'],
     ['Seoul_Mud_머드-편도', '머드편도'],
     ['Seoul_Mud_머드-편도ticket주중', '머드편도'],
@@ -52,7 +55,9 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_스킨케어', '스킨케어'],
     ['Busan_Regular_서부산', '서부산'],
     ['Busan_Regular_안동', '안동'],
-    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리']
+    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리'],
+    ['Seoul_Private_Private(S)', '서울프라이빗'],
+    ['Busan_Summer_포항불꽃축제','부산포항불꽃']
 ]);
 let productMap = new Map();
 const elasticDB = require('../auth/elastic');
@@ -461,7 +466,7 @@ function monitorProduct() {
         if (!ignoreSet.has(deletedProduct.id)) { productMap.delete(deletedProduct.id) }
         if (!!deletedProduct.options) {
             deletedProduct.options.forEach(option => {
-                if (!!options.incoming) {
+                if (!!option.incoming) {
                     option.incoming.forEach(incoming => {
                         if (!ignoreSet.has(incoming)) { productMap.delete(incoming) }
                     })

@@ -10,6 +10,7 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_에버', '서울에버'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
+    ['Seoul_Spring_벛꽃랜덤','서울벚꽃랜덤'],
     ['Seoul_Spring_진해', '서울진해'],
     ['Seoul_Summer_진도', '서울진도'],
     ['Seoul_Spring_보성녹차축제', '서울보성녹차'],
@@ -38,9 +39,11 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Strawberry_포천딸기', '포천'],
     ['Seoul_Summer_여름포천', '포천'],
     ['Seoul_Autumn_설악산단풍', '설악단풍'],
+    ['Seoul_Autumn_설악산', '설악단풍'],
     ['Seoul_Autumn_덕유산_closed', '덕유산'],
     ['Busan_Spring_부산-보성녹차', '부산보성녹차'],
     ['Seoul_Autumn_단풍랜덤', '서울단풍랜덤'],
+    ['Seoul_Autumn_단풍랜덤투어', '서울단풍랜덤'],
     ['Busan_Autumn_단풍랜덤부산', '부산단풍랜덤'],
     ['Seoul_Mud_머드-편도', '머드편도'],
     ['Seoul_Mud_머드-편도ticket주중', '머드편도'],
@@ -55,7 +58,9 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_스킨케어', '스킨케어'],
     ['Busan_Regular_서부산', '서부산'],
     ['Busan_Regular_안동', '안동'],
-    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리']
+    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리'],
+    ['Seoul_Private_Private(S)', '서울프라이빗'],
+    ['Busan_Summer_포항불꽃축제','부산포항불꽃']
 ]);
 
 class v2AccountConverter {
@@ -73,7 +78,7 @@ class v2AccountConverter {
         return new Promise((resolve, reject) => {
             const result = {
                 v1 : v1_fb_key,
-                writer: v1Account.writer || v1Account.agency,
+                writer: v1Account.writer || v1Account.agency || "no writer",
                 category: v1Account.category || '',
                 sub_category : '',
                 contents : '',
@@ -111,7 +116,7 @@ class v2AccountConverter {
     static generateSQLObject(v1_fb_key, v1Account, v2Reservation, is_reverseAccount, v2ExistAccount) {
         const result = {
             v1 : v1_fb_key,
-            writer: v1Account.writer || v1Account.agency,
+            writer: v1Account.writer || v1Account.agency || "no writer",
             category: v1Account.category || 'Reservation',
             sub_category : '',
             contents : '',
@@ -965,7 +970,7 @@ class v2AccountConverter {
         obj.taskObj[type] += 1;
         obj.totalCount += 1;
         if (!v2AccountId) {
-            console.log(` ## Account creation Error : ${type} / ${v2ReservationId} / ${message_id}`);
+            console.log(` ## Account creation Error : ${type} / ${v1_fb_key}/ ${message_id} / ${v2ReservationId}`);
             obj.errorCount += 1;
             return new Error(`${type} / ${v2ReservationId} / ${message_id}`);
         }
@@ -1141,230 +1146,218 @@ async function v2AccountConverterTest(testData, v1CanceledBulkData){
     }
 }
 
-const testCase = {
-    case1 : {
-        description : {canceledData: false, sqlReservationId : 'r25052'},
-        result : ['[2a]','[7ca]','[4ra]','[14ra]','[10ca]'],
-        data : {
-            "2019-07-29" : {
-                "-Ljdu17pOMCqdfdBDUAc": {
-                    "card": 220000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-07-13\nagency: L\nproduct: Seoul_Regular_남아 \npeople: 5(5/0/0\noption: ",
-                    "id": "16be9e80327b2c0f",
-                    "writer": "L"
-                },
-                "-LkabtXigDUKdP0NRbxB": {
-                    "card": -220000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Modified: 2019-07-25\nagency: L\nproduct: Seoul_Regular_남아\npeople: 3(3/0\noption: ",
-                    "id": "16be9e80327b2c0f",
-                    "writer": "L"
-                },
-                "-LkabtXWGkAh6P3cT9FK": {
-                    "card": 132000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-07-25\nagency: L\nproduct: Seoul_Regular_남아 \npeople: 3(3/0/0\noption: ",
-                    "id": "16be9e80327b2c0f",
-                    "writer": "L"
-                },
-                "-Lkr8S14LqNU0hSgTgmf": {
-                    "card": 168000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-07-28\nagency: L\nproduct: Seoul_Regular_남쁘아 \npeople: 3(3/0/0\noption: ",
-                    "id": "16be9e80327b2c0f",
-                    "writer": "L"
-                },
-                "-Lkr8S19vh6Swh8jGRKY": {
-                    "card": -132000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Modified: 2019-07-28\nagency: L\nproduct: Seoul_Regular_남쁘아\npeople: 3(3/0\noption: ",
-                    "id": "16be9e80327b2c0f",
-                    "writer": "L"
-                },
-            }
-        }
-    },
-    case2 : {
-        description : {canceledData: false, sqlReservationId : 'r25065'},
-        result : ['[1ca]','[6ra]','[9a]','[14ra]','[10ca]'],
-        data : {
-            "2019-07-29": {
-                "-Lkadqp7lH9e3Zwcmbj1": {
-                    "card": -360000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Modified: 2019-07-25\nagency: L\nproduct: Seoul_Regular_쁘남레아\npeople: 3(3/0\noption: [object Object]",
-                    "id": "16b4b0c5624596f4",
-                    "writer": "L"
-                },
-                "-Lkadqp3Ci-gOWr8yPoD": {
-                    "card": 270000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-07-25\nagency: L\nproduct: Seoul_Regular_쁘남레아 \npeople: 3(3/0/0\noption: [object Object]",
-                    "id": "16b4b0c5624596f4",
-                    "writer": "L"
-                },
-                "-LhA26EHgRO-1Cx2qLh8": {
-                    "card": 360000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-06-12\nagency: L\nproduct: Seoul_Regular_쁘남레아 \npeople: 4(4/0/0\noption: [object Object]",
-                    "id": "16b4b0c5624596f4",
-                    "writer": "L"
-                },
-                "-LkpmOHYUuuJEj1YraGx": {
-                    "card": 270000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-07-27\nagency: L\nproduct: Seoul_Regular_쁘남레아 \npeople: 3(3/0/0\noption: [object Object]",
-                    "id": "16b4b0c5624596f4",
-                    "writer": "L"
-                },
-                "-LkpmOHcK3QF046HLeX-": {
-                    "card": -270000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Modified: 2019-07-27\nagency: L\nproduct: Seoul_Regular_쁘남레아\npeople: 3(3/0\noption: [object Object]",
-                    "id": "16b4b0c5624596f4",
-                    "writer": "L"
-                },
-            }
-        },
-    },
-    case3 : {
-        description : {canceledData: false, sqlReservationId : 'r25018'},
-        result : ['[1ca]','[5a]','[4ra]'],
-        data : {
-            "2019-07-29": {
-                "-LjZzysgbnLIECUgXOwc": {
-                    "card": -144000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Modified: 2019-07-12\nagency: KK\nproduct: Busan_Regular_에덴루지\npeople: 3(3/0\noption: ",
-                    "id": "NM-1562915081073",
-                    "writer": "KK"
-                },
-                "-LjZzsi3ayb4QSFrBcWH": {
-                    "card": 144000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-07-12\nagency: KK\nproduct: Busan_Regular_동부산 에덴루지 \npeople: 3(3/0/0\noption: ",
-                    "id": "NM-1562915081073",
-                    "writer": "KK"
-                },
-                "-LjZzyscYu7SEbAZTTyO": {
-                    "card": 180000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-29",
-                    "detail": "Created: 2019-07-12\nagency: KK\nproduct: Busan_Regular_에덴루지 \npeople: 3(3/0/0\noption: ",
-                    "id": "NM-1562915081073",
-                    "writer": "KK"
-                },
-            }
-        }
-    },
-    case4 : {
-        description : {canceledData: true, sqlReservationId : null},
-        result : ['[15ra]','[22ra]','[24ca]'],
-        data : {
-            "2019-07-27": {
-                "-LiW_9aYO-jmR2PkjP5m": {
-                    "card": 82000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-27",
-                    "detail": "Created: 2019-06-29\nagency: P\nproduct: Seoul_Mud_머드-편도ticket주말 \npeople: 2(2/0/0\noption: ",
-                    "id": "NM-1561784002964",
-                    "writer": "P"
-                },
-                "-LiW_GYzDAaBTMLQo4AN": {
-                    "card": 120000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-27",
-                    "detail": "Created: 2019-06-29\nagency: P\nproduct: Seoul_Mud_머드-공연일 \npeople: 2(2/0/0\noption: ",
-                    "id": "NM-1561784002964",
-                    "writer": "P"
-                },
-                "-LiW_GZ21I8GO4l2EeWE": {
-                    "card": -82000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-27",
-                    "detail": "Modified: 2019-06-29\nagency: P\nproduct: Seoul_Mud_머드-공연일\npeople: 2(2/0\noption: ",
-                    "id": "NM-1561784002964",
-                    "writer": "P"
-                },
-            }
-        }
-    },
-    case5 : {
-        description: {canceledData: true, sqlReservationId : null},
-        result : ['[15ra]','[17a]'],
-        data: {
-            "2019-07-27" : {
-                "-Lkbih4X4bKalfIf0wRn": {
-                    "card": -40000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-27",
-                    "detail": "Modified: 2019-07-25\nagency: T\nproduct: Seoul_Summer_여름포천\npeople: 1(1/0\noption: ",
-                    "id": "NM-1563580441106",
-                    "writer": "T"
-                },
-                "-LkBe17ZykOm1kF3OvYc": {
-                    "card": 40000,
-                    "category": "Reservation",
-                    "currency": "KRW",
-                    "date": "2019-07-27",
-                    "detail": "Created: 2019-07-19\nagency: T\nproduct: Seoul_Summer_여름포천 \npeople: 1(1/0/0\noption: ",
-                    "id": "NM-1563580441106",
-                    "writer": "T"
-                }
-            }
-        }
-    }
-};
+// const testCase = {
+//     case1 : {
+//         description : {canceledData: false, sqlReservationId : 'r25052'},
+//         result : ['[2a]','[7ca]','[4ra]','[14ra]','[10ca]'],
+//         data : {
+//             "2019-07-29" : {
+//                 "-Ljdu17pOMCqdfdBDUAc": {
+//                     "card": 220000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-07-13\nagency: L\nproduct: Seoul_Regular_남아 \npeople: 5(5/0/0\noption: ",
+//                     "id": "16be9e80327b2c0f",
+//                     "writer": "L"
+//                 },
+//                 "-LkabtXigDUKdP0NRbxB": {
+//                     "card": -220000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Modified: 2019-07-25\nagency: L\nproduct: Seoul_Regular_남아\npeople: 3(3/0\noption: ",
+//                     "id": "16be9e80327b2c0f",
+//                     "writer": "L"
+//                 },
+//                 "-LkabtXWGkAh6P3cT9FK": {
+//                     "card": 132000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-07-25\nagency: L\nproduct: Seoul_Regular_남아 \npeople: 3(3/0/0\noption: ",
+//                     "id": "16be9e80327b2c0f",
+//                     "writer": "L"
+//                 },
+//                 "-Lkr8S14LqNU0hSgTgmf": {
+//                     "card": 168000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-07-28\nagency: L\nproduct: Seoul_Regular_남쁘아 \npeople: 3(3/0/0\noption: ",
+//                     "id": "16be9e80327b2c0f",
+//                     "writer": "L"
+//                 },
+//                 "-Lkr8S19vh6Swh8jGRKY": {
+//                     "card": -132000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Modified: 2019-07-28\nagency: L\nproduct: Seoul_Regular_남쁘아\npeople: 3(3/0\noption: ",
+//                     "id": "16be9e80327b2c0f",
+//                     "writer": "L"
+//                 },
+//             }
+//         }
+//     },
+//     case2 : {
+//         description : {canceledData: false, sqlReservationId : 'r25065'},
+//         result : ['[1ca]','[6ra]','[9a]','[14ra]','[10ca]'],
+//         data : {
+//             "2019-07-29": {
+//                 "-Lkadqp7lH9e3Zwcmbj1": {
+//                     "card": -360000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Modified: 2019-07-25\nagency: L\nproduct: Seoul_Regular_쁘남레아\npeople: 3(3/0\noption: [object Object]",
+//                     "id": "16b4b0c5624596f4",
+//                     "writer": "L"
+//                 },
+//                 "-Lkadqp3Ci-gOWr8yPoD": {
+//                     "card": 270000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-07-25\nagency: L\nproduct: Seoul_Regular_쁘남레아 \npeople: 3(3/0/0\noption: [object Object]",
+//                     "id": "16b4b0c5624596f4",
+//                     "writer": "L"
+//                 },
+//                 "-LhA26EHgRO-1Cx2qLh8": {
+//                     "card": 360000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-06-12\nagency: L\nproduct: Seoul_Regular_쁘남레아 \npeople: 4(4/0/0\noption: [object Object]",
+//                     "id": "16b4b0c5624596f4",
+//                     "writer": "L"
+//                 },
+//                 "-LkpmOHYUuuJEj1YraGx": {
+//                     "card": 270000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-07-27\nagency: L\nproduct: Seoul_Regular_쁘남레아 \npeople: 3(3/0/0\noption: [object Object]",
+//                     "id": "16b4b0c5624596f4",
+//                     "writer": "L"
+//                 },
+//                 "-LkpmOHcK3QF046HLeX-": {
+//                     "card": -270000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Modified: 2019-07-27\nagency: L\nproduct: Seoul_Regular_쁘남레아\npeople: 3(3/0\noption: [object Object]",
+//                     "id": "16b4b0c5624596f4",
+//                     "writer": "L"
+//                 },
+//             }
+//         },
+//     },
+//     case3 : {
+//         description : {canceledData: false, sqlReservationId : 'r25018'},
+//         result : ['[1ca]','[5a]','[4ra]'],
+//         data : {
+//             "2019-07-29": {
+//                 "-LjZzysgbnLIECUgXOwc": {
+//                     "card": -144000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Modified: 2019-07-12\nagency: KK\nproduct: Busan_Regular_에덴루지\npeople: 3(3/0\noption: ",
+//                     "id": "NM-1562915081073",
+//                     "writer": "KK"
+//                 },
+//                 "-LjZzsi3ayb4QSFrBcWH": {
+//                     "card": 144000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-07-12\nagency: KK\nproduct: Busan_Regular_동부산 에덴루지 \npeople: 3(3/0/0\noption: ",
+//                     "id": "NM-1562915081073",
+//                     "writer": "KK"
+//                 },
+//                 "-LjZzyscYu7SEbAZTTyO": {
+//                     "card": 180000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-29",
+//                     "detail": "Created: 2019-07-12\nagency: KK\nproduct: Busan_Regular_에덴루지 \npeople: 3(3/0/0\noption: ",
+//                     "id": "NM-1562915081073",
+//                     "writer": "KK"
+//                 },
+//             }
+//         }
+//     },
+//     case4 : {
+//         description : {canceledData: true, sqlReservationId : null},
+//         result : ['[15ra]','[22ra]','[24ca]'],
+//         data : {
+//             "2019-07-27": {
+//                 "-LiW_9aYO-jmR2PkjP5m": {
+//                     "card": 82000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-27",
+//                     "detail": "Created: 2019-06-29\nagency: P\nproduct: Seoul_Mud_머드-편도ticket주말 \npeople: 2(2/0/0\noption: ",
+//                     "id": "NM-1561784002964",
+//                     "writer": "P"
+//                 },
+//                 "-LiW_GYzDAaBTMLQo4AN": {
+//                     "card": 120000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-27",
+//                     "detail": "Created: 2019-06-29\nagency: P\nproduct: Seoul_Mud_머드-공연일 \npeople: 2(2/0/0\noption: ",
+//                     "id": "NM-1561784002964",
+//                     "writer": "P"
+//                 },
+//                 "-LiW_GZ21I8GO4l2EeWE": {
+//                     "card": -82000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-27",
+//                     "detail": "Modified: 2019-06-29\nagency: P\nproduct: Seoul_Mud_머드-공연일\npeople: 2(2/0\noption: ",
+//                     "id": "NM-1561784002964",
+//                     "writer": "P"
+//                 },
+//             }
+//         }
+//     },
+//     case5 : {
+//         description: {canceledData: true, sqlReservationId : null},
+//         result : ['[15ra]','[17a]'],
+//         data: {
+//             "2019-07-27" : {
+//                 "-Lkbih4X4bKalfIf0wRn": {
+//                     "card": -40000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-27",
+//                     "detail": "Modified: 2019-07-25\nagency: T\nproduct: Seoul_Summer_여름포천\npeople: 1(1/0\noption: ",
+//                     "id": "NM-1563580441106",
+//                     "writer": "T"
+//                 },
+//                 "-LkBe17ZykOm1kF3OvYc": {
+//                     "card": 40000,
+//                     "category": "Reservation",
+//                     "currency": "KRW",
+//                     "date": "2019-07-27",
+//                     "detail": "Created: 2019-07-19\nagency: T\nproduct: Seoul_Summer_여름포천 \npeople: 1(1/0/0\noption: ",
+//                     "id": "NM-1563580441106",
+//                     "writer": "T"
+//                 }
+//             }
+//         }
+//     }
+// };
 
 const v1AccountBulkData = require('../dataFiles/intranet-64851-account-export.json');
 // const v1Account_2019_JuneToOct = require('../dataFiles/v1AccountData_2019_JuneToOct.json');
-const temp_v1Account_due_to_error_2019_June = require('../dataFiles/temp_v1AccountData_2019_June.json');
-const v1Account_2019_Sep = require('../dataFiles/v1AccountData_2019_Sep.json');
+// const temp_v1Account_due_to_error_2017 = require('../dataFiles/temp_account_2017.json');
+const v1Account_2019 = require('../dataFiles/v1AccountData_2019.json');
 const v1CanceledBulkDataData = require('../dataFiles/intranet-64851-canceled-export.json');
 const v1FbTeamBulkData = require('../dataFiles/v1FbTeamBulkData_noDate.json');
-// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, '9', 'server/models/dataFiles/v1AccountData_2019_Sep.json').then(result => console.log('result : ', result));
+// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, '10~', '../dataFiles/v1AccountData_2019.json').then(result => console.log('result : ', result));
 // v2AccountConverter.reservationCancelSQLandELASTICandFB({tour_date: '2019-07-15',product_id:'p360',id:'r32623'}).then(result=>console.log(result));
 // v2AccountConverterTest(testCase, v1CanceledBulkDataData);
-v2AccountConverter.mainConverter(v1Account_2019_Sep, v1CanceledBulkDataData, v1FbTeamBulkData);
-// v2AccountConverter.mainConverter({'2019-06-29' : {
-//         "-LiH7E94RsXoqrSKYcLj": {
-//             "card": 794000,
-//             "category": "Reservation",
-//             "currency": "KRW",
-//             "date": "2019-06-29",
-//             "detail": "Created: 2019-06-26\nagency: KT\nproduct: Seoul_Regular_레남쁘 \npeople: 14(14/0/0\noption: [object Object]",
-//             "id": "NM-1561278149235",
-//             "writer": "KT"
-//         },}}, v1CanceledBulkDataData, v1FbTeamBulkData);
-// v2AccountConverter.fbTeamDataProcess(v1FbTeamBulkData, 'server/models/dataFiles/v1FbTeamBulkData_noDate.json').then(result => console.log('result : ',result));
-// v2AccountConverter.reservationCancelSQLandELASTICandFB(v2Reservation).then(result => console.log('result : ',result));
+v2AccountConverter.mainConverter(v1Account_2019, v1CanceledBulkDataData, v1FbTeamBulkData);

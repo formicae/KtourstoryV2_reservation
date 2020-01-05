@@ -9,6 +9,7 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_에버', '서울에버'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
+    ['Seoul_Spring_벛꽃랜덤','서울벚꽃랜덤'],
     ['Seoul_Spring_진해', '서울진해'],
     ['Seoul_Summer_진도', '서울진도'],
     ['Seoul_Spring_보성녹차축제', '서울보성녹차'],
@@ -37,9 +38,11 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Strawberry_포천딸기', '포천'],
     ['Seoul_Summer_여름포천', '포천'],
     ['Seoul_Autumn_설악산단풍', '설악단풍'],
+    ['Seoul_Autumn_설악산', '설악단풍'],
     ['Seoul_Autumn_덕유산_closed', '덕유산'],
     ['Busan_Spring_부산-보성녹차', '부산보성녹차'],
     ['Seoul_Autumn_단풍랜덤', '서울단풍랜덤'],
+    ['Seoul_Autumn_단풍랜덤투어', '서울단풍랜덤'],
     ['Busan_Autumn_단풍랜덤부산', '부산단풍랜덤'],
     ['Seoul_Mud_머드-편도', '머드편도'],
     ['Seoul_Mud_머드-편도ticket주중', '머드편도'],
@@ -54,7 +57,9 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_스킨케어', '스킨케어'],
     ['Busan_Regular_서부산', '서부산'],
     ['Busan_Regular_안동', '안동'],
-    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리']
+    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리'],
+    ['Seoul_Private_Private(S)', '서울프라이빗'],
+    ['Busan_Summer_포항불꽃축제','부산포항불꽃']
 ]);
 const CHECK_RESERVATION_KEY_MAP = ['message_id', 'writer', 'product_id', 'agency', 'agency_code', 'tour_date', 'adult', 'kid', 'infant', 'canceled'];
 const fs = require('fs');
@@ -63,7 +68,7 @@ class v2ReservationConverter {
     constructor(v1OperationData) {
         this.data = v1OperationData;
     }
-    
+
     static async generateSimpleFbData(v1Reservation, v2SqlReservation, v2ExistFbReservation) {
         let v2FbReservation;
         if (!v1Reservation && v2ExistFbReservation) {
@@ -107,7 +112,7 @@ class v2ReservationConverter {
         }
         return v2FbReservation;
     }
-    
+
     static async generateFbDataWithElastic(v2ElasticData, g, o){
         return {
             id : v2ElasticData.id,
@@ -164,19 +169,24 @@ class v2ReservationConverter {
                             Object.keys(v1Data.teams[key].reservations).forEach(r_id => {
                                 keyArr.push({team_id: key, v1_r_id: r_id});
                                 // SQL에서 먼저 reservation id 를 만든 후에 firebase에 넣어야 하기 때문에 아래의 findV2ReservationInSQL이 필요 v2 product id를 찾는것이 목표.
-                                promiseArr.push(v2ReservationConverter.findV2ReservationInSQL(v1Data.teams[key].reservations[r_id], v2ProductData, r_id));
+                                let reservation = v1Data.teams[key].reservations[r_id];
+                                if (reservation.hasOwnProperty('id') && (reservation.hasOwnProperty('adult') || reservation.hasOwnProperty('kid') || reservation.hasOwnProperty('infant'))) {
+                                    promiseArr.push(v2ReservationConverter.findV2ReservationInSQL(reservation, v2ProductData, r_id));
+                                }
                             });
                         }
                     });
                 }
                 return Promise.all(promiseArr)
             }).then(async promiseResult => {
+                // console.log('promiseResult : ',date,productId,JSON.stringify(promiseResult))
                 if (promiseResult.length > 0) {
                     for (let i = 0; i < promiseResult.length; i++) {
                         let team_id = keyArr[i].team_id;
                         let v1_reservation_id = keyArr[i].v1_r_id;
                         if (v1Data.teams[team_id].reservations) {
                             let v1Reservation = v1Data.teams[team_id].reservations[v1_reservation_id];
+                            if (!promiseResult[i]) console.log('[Error] no id :: ',i, v1_reservation_id,team_id,JSON.stringify(promiseResult[i]))
                             reservation.teams[team_id].reservations[promiseResult[i].id] = {
                                 id: promiseResult[i].id,
                                 agency_code: promiseResult[i].agency_code,
@@ -217,12 +227,12 @@ class v2ReservationConverter {
                             result.elasticData.push(await this.elasticDataMatch(v1Data.teams[team_id].reservations[v1_reservation_id], productData, team_id, promiseResult[i], null));
                         }
                     }
-                    result.fbData = fbData;
-                    return result;
                 }
+                result.fbData = fbData;
+                return result;
             });
     }
-    
+
     /**
      *
      * @param v1Reservation {Object} v1 Reservation data
@@ -350,54 +360,55 @@ class v2ReservationConverter {
      * @returns {Promise<any | never>}
      */
     static generateSQLObject(v1Reservation , canceled, is_canceledData){
-        let v1ProductName = v1Reservation.product.split('_')[2];
-        if (v1ProductName.match(/-/i)) {
-            const temp = v1ProductName.split('-');
-            v1ProductName = temp[0] + temp[1];
-        }
-        if (V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.has(v1Reservation.product)) {
-            v1ProductName = V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.get(v1Reservation.product);
-        }
-        // return Product.getProduct()
-        return v2ReservationConverter.findProduct(v1Reservation.product, v1ProductName)
-            .then(product => {
-                if (product) {
-                    const result = {
-                        message_id : v1Reservation.id,
-                        writer : v1Reservation.agency,
-                        product_id : product.id,
-                        agency : v1Reservation.agency,
-                        agency_code : v1Reservation.agencyCode.trim(),
-                        tour_date : Product.getLocalDate(v1Reservation.date, 'UTC+9'),
-                        options : [],
-                        adult : v1Reservation.adult,
-                        kid : v1Reservation.kid,
-                        infant : v1Reservation.infant,
-                        nationality : (v1Reservation.nationality || 'unknown').toUpperCase(),
-                        canceled : canceled,
-                        created_date : '',
-                        modified_date : ''
-                    };
-                    if (is_canceledData) {
-                        result.created_date = Product.getLocalDate(v1Reservation.canceledDate,'UTC+9');
-                        result.modified_date = Product.getLocalDate(v1Reservation.canceledDate,'UTC+9');
+        if (v1Reservation.product) {
+            let v1ProductName = v1Reservation.product.split('_')[2];
+            if (v1ProductName.match(/-/i)) {
+                const temp = v1ProductName.split('-');
+                v1ProductName = temp[0] + temp[1];
+            }
+            if (V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.has(v1Reservation.product)) {
+                v1ProductName = V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP.get(v1Reservation.product);
+            }
+            // return Product.getProduct()
+            return v2ReservationConverter.findProduct(v1Reservation.product, v1ProductName)
+                .then(product => {
+                    if (product) {
+                        const result = {
+                            message_id : v1Reservation.id,
+                            writer : v1Reservation.agency,
+                            product_id : product.id,
+                            agency : v1Reservation.agency,
+                            agency_code : v1Reservation.agencyCode.trim(),
+                            tour_date : Product.getLocalDate(v1Reservation.date, 'UTC+9'),
+                            options : [],
+                            adult : v1Reservation.adult,
+                            kid : v1Reservation.kid,
+                            infant : v1Reservation.infant,
+                            nationality : (v1Reservation.nationality || 'unknown').toUpperCase(),
+                            canceled : canceled,
+                            created_date : '',
+                            modified_date : ''
+                        };
+                        if (is_canceledData) {
+                            result.created_date = Product.getLocalDate(v1Reservation.canceledDate,'UTC+9');
+                            result.modified_date = Product.getLocalDate(v1Reservation.canceledDate,'UTC+9');
+                        } else {
+                            result.created_date = Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9');
+                            result.modified_date = Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9');
+                        }
+                        if (v1Reservation.option) {
+                            v1Reservation.option.forEach(each => {
+                                let temp = { name : each.option, number : each.people};
+                                result.options.push(temp);
+                            });
+                        }
+                        return result;
                     } else {
-                        result.created_date = Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9');
-                        result.modified_date = Product.getLocalDate(v1Reservation.reservedDate + ' ' + v1Reservation.reservedTime,'UTC+9');
+                        console.log('Product not found : ',v1Reservation.product, v1ProductName);
+                        return {fail: true, product:v1Reservation.product};
                     }
-                    if (v1Reservation.option) {
-                        v1Reservation.option.forEach(each => {
-                            let temp = { name : each.option, number : each.people};
-                            result.options.push(temp);
-                        });
-                    }
-                    return result;
-                } else {
-                    console.log('Product not found : ',v1Reservation.product, v1ProductName);
-                    return {fail: true, product:v1Reservation.product};
-                }
-
-            });
+                });
+        }
     }
 
     static cancelSQL(reservation_id, modified_date) {
@@ -457,7 +468,7 @@ class v2ReservationConverter {
             })
         })
     }
-    
+
     static findV2ReservationInElastic(v1ReservationId) {
         return new Promise((resolve, reject) => {
             elasticDB.search({
@@ -478,7 +489,7 @@ class v2ReservationConverter {
             });
         })
     }
-    
+
     /**
      * find v2 reservation object from postgreSQL with v1 data
      * @param v1ReservationData
@@ -489,11 +500,14 @@ class v2ReservationConverter {
     static findV2ReservationInSQL(v1ReservationData, v2Data, r_id) {
         return new Promise((resolve, reject) => {
             const tourDate = new Date(v1ReservationData.date);
-            const query = `SELECT * FROM reservation WHERE message_id = '${v1ReservationData.id}' and product_id = '${v2Data.id}' and adult=${v1ReservationData.adult} and kid=${v1ReservationData.kid} and infant=${v1ReservationData.infant} and agency_code = '${v1ReservationData.agencyCode.trim()}'`;
-            sqlDB.query(query, (err, result) => {
-                if (err) throw new Error(`findV2ReservationInSQL in SQL : ${r_id} ${tourDate}, ${v1ReservationData.date} ${v2Data.id} \n query : ${query}`);
-                resolve(result.rows[0])
-            })
+            if (!v1ReservationData.agencyCode) console.log('not agencyCode : ',r_id,JSON.stringify(v1ReservationData),JSON.stringify(v2Data))
+            if (v1ReservationData.hasOwnProperty('adult') && (v1ReservationData.hasOwnProperty('adult') || v1ReservationData.hasOwnProperty('kid'))) {
+                const query = `SELECT * FROM reservation WHERE message_id = '${v1ReservationData.id}' and product_id = '${v2Data.id}' and adult=${v1ReservationData.adult} and kid=${v1ReservationData.kid} and infant=${v1ReservationData.infant} and agency_code = '${v1ReservationData.agencyCode.trim()}'`;
+                sqlDB.query(query, (err, result) => {
+                    if (err) throw new Error(`findV2ReservationInSQL in SQL : ${r_id} ${tourDate}, ${v1ReservationData.date} ${v2Data.id} \n query : ${query}`);
+                    resolve(result.rows[0])
+                })
+            }
         })
     }
 
@@ -558,6 +572,8 @@ class v2ReservationConverter {
                 console.log(' >> generate v2 reservation done');
                 resultArr.forEach(v2Reservation => {
                     countObj.total += 1;
+                    console.log('convert result : ',JSON.stringify(v2Reservation))
+                    if(!v2Reservation) console.log('no reservation : ',JSON.stringify(v2Reservation));
                     if (v2Reservation.fail) {
                         countObj.failed += 1;
                         console.log(`error! maybe no product data : ${v2Reservation.product}`);
@@ -639,14 +655,19 @@ class v2ReservationConverter {
     }
 
     static async insertElasticBulkData(v2ElasticBulkData) {
+        let allSuccess = true;
         for (let v2ElasticDataObj of Object.values(v2ElasticBulkData)) {
             for (let v2ElasticData of v2ElasticDataObj.elasticData) {
                 let result = await Reservation.insertElastic(v2ElasticData, {});
-                if (result) console.log(`  ${v2ElasticData.id} insert to Elastic success`);
-                else console.log (`   error : ${v2ElasticData.id} insert to Elastic failed`);
+                if (result) {
+                    console.log(`  ${v2ElasticData.id} insert to Elastic success`);
+                } else {
+                    console.log (`   error : ${v2ElasticData.id} insert to Elastic failed`);
+                    allSuccess = false
+                }
             }
         }
-        return true;
+        return allSuccess;
     }
 
     /**
@@ -676,7 +697,7 @@ class v2ReservationConverter {
                 if (!finalResult.includes(false)) {
                     console.log(' >> FB insert all success!');
                     return this.insertElasticBulkData(data);
-                };
+                }
             });
     }
 
@@ -767,9 +788,9 @@ class v2ReservationConverter {
      * @param path {String} file path to be stored
      * @returns {Promise<any>}
      */
-    static operationDataExtractByMonth(v1OperationBulkData, year, month, path) {
+    static async operationDataExtractByMonth(v1OperationBulkData, year, month, path) {
         let result = {};
-        Object.entries(v1OperationBulkData).forEach(temp => {
+        for(let temp of Object.entries(v1OperationBulkData)){
             let date = temp[0];
             let v1Operation = temp[1];
             let dateArr = date.trim().split('-');
@@ -794,13 +815,13 @@ class v2ReservationConverter {
             } else {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) === month) result[date] = v1Operation;
             }
+        }
+        fs.writeFile(path, JSON.stringify(result), err => {
+            if (err) console.log('error in file write : ',JSON.stringify(err));
+            else {
+                console.log('operationDataExtractByMonth : done');
+            }
         });
-        return new Promise((resolve, reject) => {
-            fs.writeFile(path, JSON.stringify(result), err => {
-                if (err) resolve(console.log('error in file write : ',JSON.stringify(err)));
-                resolve(console.log('operationDataExtractByMonth : done'));
-            });
-        })
     }
 
 }
@@ -821,12 +842,18 @@ function writeFile(filePath, object, message) {
 function reservationQueryProcessing(object) {
     let result = "";
     Object.keys(object).forEach(key => {
-        value = object[key];
+        let value = object[key];
         if (CHECK_RESERVATION_KEY_MAP.includes(key)) {
             if (typeof value === 'object') { result += (key + ' = ' + "'" + JSON.stringify(value) + "'" + " and ")}
             else if (typeof value === 'number') { result += (key + ' = ' + value + " and ")}
             else if (typeof value === 'boolean' || key === 'canceled') { result += (key + ' = ' + Boolean(value) + " and ")}
-            else { result += (key + ' = ' + "'" + value + "'" + " and ")}
+            else {
+                if (value.match(`'`)) {
+                    let temp = value.split(`'`);
+                    value = temp[0] + temp[1];
+                }
+                result += (key + ' = ' + "'" + value + "'" + " and ")
+            }
         }
     });
     return result.slice(0,-5);
@@ -846,11 +873,21 @@ function deleteFirebaseData(year, month){
         })
     }
 }
-// deleteFirebaseData(2019,9)
+
+async function deleteAllFirebaseReservation(year){
+    for (let month = 1; month <= 12; month ++) {
+        deleteFirebaseData(year, month)
+    }
+}
+
+
+// deleteAllFirebaseReservation(2020)
 const v1OperationBulkData = require('../dataFiles/intranet-64851-operation-export.json');
-const v1Operation_2019_SepOct = require('../dataFiles/v1OperationData_2019_SepOct.json');
-// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '9~10', 'server/models/dataFiles/v1OperationData_2019_SepOct.json');
-// let result = v2ReservationConverter.mainConverter(v1Operation_2019_SepOct);
+const v1Operation_2019 = require('../dataFiles/v1OperationData_2019.json');
+// const v1Operation_2017 = require('../dataFiles/v1OperationData_2017');
+// const v1Operation_2018 = require('../dataFiles/v1OperationData_2018');
+// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '10~', '../dataFiles/v1OperationData_2019.json');
+// let result = v2ReservationConverter.mainConverter(v1Operation_2019);
 // deleteFirebaseData(2019,7);
 // v2ReservationConverter.convertElasticToFile(require('../dataFiles/v1OperationData_2019_July'), 'server/models/tempDataFiles/v2ConvertedElasticData.json')
 //     .then(result => console.log('result : ',result));

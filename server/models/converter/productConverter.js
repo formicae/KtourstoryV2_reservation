@@ -6,10 +6,12 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_에버', '서울에버'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
+    ['Seoul_Spring_벛꽃랜덤','서울벚꽃랜덤'],
     ['Seoul_Spring_진해', '서울진해'],
     ['Seoul_Summer_진도', '서울진도'],
     ['Seoul_Spring_보성녹차축제', '서울보성녹차'],
     ['Seoul_Ski_남이엘리시안', '남이엘리'],
+    ['Busan_Private_PRIVATE', '부산프라이빗'],
     ['Busan_Private_Private(B)', '부산프라이빗'],
     ['Seoul_Spring_서울-광양구례', '서울광양구례'],
     ['Busan_Spring_부산-광양구례', '부산광양구례'],
@@ -33,9 +35,11 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Strawberry_포천딸기', '포천'],
     ['Seoul_Summer_여름포천', '포천'],
     ['Seoul_Autumn_설악산단풍', '설악단풍'],
+    ['Seoul_Autumn_설악산', '설악단풍'],
     ['Seoul_Autumn_덕유산_closed', '덕유산'],
     ['Busan_Spring_부산-보성녹차', '부산보성녹차'],
     ['Seoul_Autumn_단풍랜덤', '서울단풍랜덤'],
+    ['Seoul_Autumn_단풍랜덤투어', '서울단풍랜덤'],
     ['Busan_Autumn_단풍랜덤부산', '부산단풍랜덤'],
     ['Seoul_Mud_머드-편도', '머드편도'],
     ['Seoul_Mud_머드-편도ticket주중', '머드편도'],
@@ -50,9 +54,20 @@ const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Seoul_Regular_스킨케어', '스킨케어'],
     ['Busan_Regular_서부산', '서부산'],
     ['Busan_Regular_안동', '안동'],
-    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리']
+    ['Busan_Autumn_부산 핑크뮬리', '부산핑크뮬리'],
+    ['Seoul_Private_Private(S)', '서울프라이빗'],
+    ['Busan_Summer_포항불꽃축제','부산포항불꽃']
 ]);
 const ALL_V2_PRODUCT_ALIAS = ['레송감국',
+    '김해',
+    '대구출발안동',
+    '대구에덴벨리',
+    '대구출발경주',
+    '제주단풍랜덤',
+    '부산Rafting',
+    '대구내장산',
+    '대구에덴밸리',
+    'AIRPORT',
     '레남아',
     '외도',
     '태감송해',
@@ -436,7 +451,7 @@ class v2ProductConveter {
         console.log('done', count);
     }
 
-    static async doubleCheckBetweenSQLandElastic(){
+    static async doubleCheckBetweenSQLandElastic() {
         const query = `SELECT alias FROM product`;
         let v2ProductIdArr;
         sqlDB.query(query, async (err, result) => {
@@ -473,10 +488,10 @@ async function test(v1Product) {
         }();
     }
 }
-// test(tmpProduct)
+const v1ProductBulkData = require('../dataFiles/intranet-64851-product-export.json');
+// v2ProductConveter.checkExceptionalProduct(v1ProductBulkData)
 // fbDB.ref('product').child('test4').update()
 // fbDB.ref('product').remove().then(result => console.log(result));
-const v1ProductBulkData = require('../dataFiles/intranet-64851-product-export.json');
-// v2ProductConveter.mainConverter(v1ProductBulkData)
+v2ProductConveter.mainConverter(v1ProductBulkData)
 
 module.exports = v2ProductConveter;
