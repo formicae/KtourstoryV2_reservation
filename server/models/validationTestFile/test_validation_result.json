@@ -56,7 +56,7 @@
         "priceGroupFound" : false
       },
       "detail" : {
-        "no_agency" : true
+        "hasAgeny" : false
       }
     },
     "rct9": {

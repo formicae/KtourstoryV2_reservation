@@ -207,7 +207,7 @@ function rRRM(requestType, data, reservationTask, reservationResult, errorNumber
             Object.entries({
                 message:'reservationHandler failed in searching pickupData',
                 detail : {
-                    no_pickup_data : true
+                    pickup : false
                 }
             }).forEach(temp => result[temp[0]] = temp[1]);
         } else if (errorNumber === 2) {

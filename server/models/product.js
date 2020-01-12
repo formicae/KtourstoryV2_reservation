@@ -233,13 +233,13 @@ class Product {
     static async agencyMatching(data, productData, salesItem, task) {
         let result = {income : 0, currency : null};
         if (!data.hasOwnProperty('agency')) {
-            task.no_agency = true;
+            task.hasAgency = false;
             return {task : task}
         } else {
-            task.has_agencies = false;
+            task.hasAgencies = false;
             for (let agencyData of salesItem.byAgency) {
                 if (agencyData.hasOwnProperty('agencies')) {
-                    task.has_agencies = true;
+                    task.hasAgencies = true;
                     if (agencyData.agencies.includes(data.agency)) {
                         task.priceAgencyMatch = true;
                         result.income = Product.incomeCalculation(data, productData, agencyData.sales);
@@ -255,11 +255,11 @@ class Product {
                     return result;
                 }
             }
-            if (task.has_agencies && !task.priceAgencyMatch) {
+            if (task.hasAgencies && !task.priceAgencyMatch) {
                 log.info('product.js', 'agencyMatching', `agencyMatching failed : ${data.agency} / product : ${data.product}, ${data.productData.id}`);
                 return {task : task}
             } else {
-                log.error('product.js', 'agencyMatching', `unExpected error : ${data.agency} / product : ${data.product}, ${data.productData.id}`)
+                log.info('product.js', 'agencyMatching', `unExpected error : ${data.agency} / product : ${data.product}, ${data.productData.id}`);
                 return {task : task}
             }
         }
@@ -320,7 +320,7 @@ class Product {
                 bus: {}
             };
             let salesData = await this.salesMatch(data, productData, productExtractTask);
-            if (!salesData.task.salesMatch || salesData.task.no_agency) {
+            if (!salesData.task.salesMatch || !salesData.task.hasAgency) {
                 return {result: false, priceGroup: {}, detail: salesData.task};
             } else {
                 productExtractTask = salesData.task;
