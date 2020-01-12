@@ -1,4 +1,5 @@
 const fbDB = require('../auth/firebase').database;
+const log = require('../../log');
 let incomingMap = new Map();
 let pickupMap = new Map();
 

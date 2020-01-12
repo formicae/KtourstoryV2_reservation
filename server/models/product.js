@@ -232,6 +232,7 @@ class Product {
 
     static async agencyMatching(data, productData, salesItem, task) {
         let result = {income : 0, currency : null};
+        task.hasAgency = true;
         if (!data.hasOwnProperty('agency')) {
             task.hasAgency = false;
             return {task : task}
@@ -321,8 +322,10 @@ class Product {
             };
             let salesData = await this.salesMatch(data, productData, productExtractTask);
             if (!salesData.task.salesMatch || !salesData.task.hasAgency) {
+                log.info('product.js', 'productDataExtractFromFB', `sales data match failed : ${productData.id} / ${productData.alias} / ${data.agency} / sales data : ${JSON.stringify(salesData)}`);
                 return {result: false, priceGroup: {}, detail: salesData.task};
             } else {
+                log.debug('product.js', 'productDataExtractFromFB', 'sales data exist');
                 productExtractTask = salesData.task;
                 priceGroup.income = salesData.income;
                 priceGroup.currency = salesData.currency;

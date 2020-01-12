@@ -1,4 +1,5 @@
 const fbDB = require('../auth/firebase').database;
+const log = require('../../log');
 let nationalityMap = new Map();
 
 class Nationality {
@@ -39,4 +40,5 @@ function monitorNationality() {
     });
 }
 
+monitorNationality();
 module.exports = Nationality;
