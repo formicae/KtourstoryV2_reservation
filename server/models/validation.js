@@ -169,7 +169,7 @@ function validCheckObjectSQL(table, field, objectId) {
     return new Promise((resolve, reject) => {
         sqlDB.query(query, (err, result) => {
             if (err || !result || result.rowCount <= 0 || !result.rows[0].exists) {
-                log.warn('Validation','validCheckObjectSQL', `sqlDB query failed : [query : ${query}, objectId : ${objectId}]`);
+                log.info('validation.js','validCheckObjectSQL', `sqlDB query failed : [query : ${query}, objectId : ${objectId}]`);
                 resolve(false)}
             resolve(true);
         });
@@ -188,7 +188,7 @@ function validCheckProduct(product_id, tour_date, agency) {
     return Product.getProduct(product_id)
         .then(result => {
             if (!result) {
-                log.warn('Validation','validCheckProduct', `getProduct failed : ${product_id}`);
+                log.info('validation.js','validCheckProduct', `getProduct failed : ${product_id}`);
                 return false;
             } else {
                 product = result;
@@ -196,19 +196,19 @@ function validCheckProduct(product_id, tour_date, agency) {
             }})
         .then(statusCheck => {
             if (!statusCheck) {
-                log.warn('Validation','validCheckProduct', 'statusCheck failed. product.on is not TRUE');
+                log.info('validation.js','validCheckProduct', 'statusCheck failed. product.on is not TRUE');
                 return false;
             } else {
-                log.debug('Debug','validCheckProduct status check', `statusCheck success with ${product_id}`);
+                log.debug('validation.js','validCheckProduct', `statusCheck success with ${product_id}`);
                 return Product.getAvailablePriceGroup(tour_date, product, agency)
             }})
         .then(availablePriceGroup => {
             if (!availablePriceGroup) return false;
             if (availablePriceGroup.length === 0) {
-                log.warn('Validation','validCheckProduct', `availablePriceGroup failed number of available price group : ${availablePriceGroup.length}`);
+                log.info('validation.js','validCheckProduct', `availablePriceGroup failed number of available price group : ${availablePriceGroup.length}`);
                 return false;
             } else {
-                log.debug('Debug','validCheckProduct price group check', `availablePriceGroup check success with ${availablePriceGroup[0].name}`);
+                log.debug('validation.js','validCheckProduct', `availablePriceGroup check success with ${availablePriceGroup[0].name}`);
                 return availablePriceGroup.length > 0;
             }
         });
@@ -246,24 +246,24 @@ function validCheckOptionalItem(item, type) {
 
 function dateCheckFailureManager(failureNumber, passed, tour_date, product, additionalData) {
     if (failureNumber === 1) {
-        log.warn('Validation', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / tour_date is undefined`);
+        log.info('validation.js', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / tour_date is undefined`);
     } else if (failureNumber === 2) {
-        log.warn('Validation', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / product_id is undefined`);
+        log.info('validation.js', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / product_id is undefined`);
     } else if (failureNumber === 3) {
-        if (passed) log.debug('Validation','validCheckOperationDateTime','validCheckSimpleDateTime passed');
-        else log.warn('Validation', 'simpleLengthCheck',`failureNumber : ${failureNumber} / simple length check failed : ${tour_date}`);
+        if (passed) log.debug('validation.js','validCheckOperationDateTime','validCheckSimpleDateTime passed');
+        else log.info('validation.js', 'simpleLengthCheck',`failureNumber : ${failureNumber} / simple length check failed : ${tour_date}`);
     } else if (failureNumber === 4) {
-        if (passed) log.debug('Validation','validCheckOperationDateTime','dayCheck passed');
-        else log.warn('Validation', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / dayCheck failed. invalid operation day of week. day of tour_date : ${DAY_MAP[additionalData.tourDay]} / firebase Tour day array : ${JSON.stringify(additionalData.productDayArray)}`);
+        if (passed) log.debug('validation.js','validCheckOperationDateTime','dayCheck passed');
+        else log.info('validation.js', 'validCheckOperationDateTime', `failureNumber : ${failureNumber} / dayCheck failed. invalid operation day of week. day of tour_date : ${DAY_MAP[additionalData.tourDay]} / firebase Tour day array : ${JSON.stringify(additionalData.productDayArray)}`);
     } else if (failureNumber === 5) {
-        if (passed) log.debug('Validation','validCheckOperationDateTime','tourDateRangeCheck passed');
-        else log.warn('Validation','validCheckOperationDateTime', `failureNumber : ${failureNumber} / tourDateCheck failed`);
+        if (passed) log.debug('validation.js','validCheckOperationDateTime','tourDateRangeCheck passed');
+        else log.info('validation.js','validCheckOperationDateTime', `failureNumber : ${failureNumber} / tourDateCheck failed`);
     } else if (failureNumber === 6) {
-        if (passed) log.debug('Validation','validCheckOperationDateTime', `priceGroupCheck passed. number of available price group : ${additionalData.length}`);
-        else log.warn('Valdation','validCheckOperationDateTime', `failureNumber : ${failureNumber} / priceGroupCheck failed. no existing price group in product : ${product.id} / priceGroup : ${additionalData}`);
+        if (passed) log.debug('validation.js','validCheckOperationDateTime', `priceGroupCheck passed. number of available price group : ${additionalData.length}`);
+        else log.info('validation.js','validCheckOperationDateTime', `failureNumber : ${failureNumber} / priceGroupCheck failed. no existing price group in product : ${product.id} / priceGroup : ${additionalData}`);
     } else if (failureNumber === 7) {
-        if (passed) log.debug('Validation','validCheckOperationDateTime',`deadLine passed : [${additionalData} hours left / deadline : ${product.deadline}] hours`);
-        else log.warn('Validation','validCheckOperationDateTime',`failureNumber : ${failureNumber} / deadLine failed : [${additionalData} hours left / deadline : ${product.deadline}] hours`);
+        if (passed) log.debug('validation.js','validCheckOperationDateTime',`deadLine passed : [${additionalData} hours left / deadline : ${product.deadline}] hours`);
+        else log.info('validation.js','validCheckOperationDateTime',`failureNumber : ${failureNumber} / deadLine failed : [${additionalData} hours left / deadline : ${product.deadline}] hours`);
     }
     return false;
 }
@@ -298,11 +298,11 @@ async function validCheckOperationDateTime(tour_date, product_id, agency, force)
         task.getAvailablePriceGroup = availablePriceGroup.length > 0;
         dateCheckFailureManager(6, task.getAvailablePriceGroup, tour_date, product, availablePriceGroup);
         if (Object.values(task).includes(false)) {
-            log.warn('Validation', 'validCheckOperationDateTime', `over one of task failed : ${JSON.stringify(task)}`);
+            log.info('validation.js', 'validCheckOperationDateTime', `over one of task failed : ${JSON.stringify(task)}`);
             return false;
         } else {
           if (force) {
-              log.debug('Validation', 'validCheckOperationDateTime', `all task passed : ${JSON.stringify(task)} and forced validation : no deadline will be checked`);
+              log.debug('validation.js', 'validCheckOperationDateTime', `all task passed : ${JSON.stringify(task)} and forced validation : no deadline will be checked`);
               return true
           } else {
               let leftTime = ((new Date(tour_date).getTime() - Product.getLocalDate(new Date(), product.timezone).getTime()) / (60 * 60 * 1000));
@@ -392,7 +392,7 @@ function validCheckDayOfWeek(product, date) {
     else correctedDate = Product.getReverseTimezoneDate(date, new Date().getTimezoneOffset());
     let tourDay = new Date(correctedDate).getDay() - 1;
     tourDay = (tourDay < 0) ? 6 : tourDay;
-    log.debug('Validation', 'validCheckDayOfWeek', `tourDay : ${tourDay}, operation day : ${JSON.stringify(product.days)}`)
+    log.debug('validation.js', 'validCheckDayOfWeek', `tourDay : ${tourDay}, operation day : ${JSON.stringify(product.days)}`)
     let productDayArray = {};
     for (let i=0; i<product.days.length; i++) {
         productDayArray[DAY_MAP[i]] = product.days[i];
@@ -483,7 +483,7 @@ function validDataCheck(data, object, paramMap ,checkList, functionMap) {
             return {result:!checkList.includes(false), detail:checkObject};
         }).catch(err => {
             console.log(err);
-            log.error('Validation', 'validDataCheck', 'check failed due to rejection');
+            log.info('validation.js', 'validDataCheck', 'check failed due to rejection');
             return {result:false, detail:'error'};
         });
 }

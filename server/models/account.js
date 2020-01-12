@@ -9,7 +9,7 @@ class Account {
     constructor(data) {
         if (!!data.id) this.id = data.id;
         if (Math.abs(data.productData.income) + Math.abs(data.productData.expenditure) <= 0)
-            log.warn('Model', 'Account-contructor', `no Money info : [income : ${data.productData.income}, expenditure : ${data.productData.expenditure}]`);
+            log.info('account.js', 'Account-constructor', `no Money info : [income : ${data.productData.income}, expenditure : ${data.productData.expenditure}]`);
         const currentDate = Account.getGlobalDate();
         this.sqlData = Account.generateSQLObject(data, currentDate);
         this.elasticData = Account.generateElasticObject(data, currentDate);
@@ -129,8 +129,8 @@ class Account {
      */
     static async validation(data, account) {
         const val = await validation.validAccountCheck(data, account);
-        if (!val.result) log.warn('Model', 'Account - validation', `account validation failed. detail : ${JSON.stringify(val.detail)}`);
-        else log.debug('Model', 'Account - validation', `account validation success`);
+        if (!val.result) log.info('account.js', 'validation', `account validation failed. detail : ${JSON.stringify(val.detail)}`);
+        else log.debug('account.js', 'validation', `account validation success`);
         return val;
     }
 
@@ -162,15 +162,15 @@ class Account {
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    log.warn('Model', 'processReverseAccount', `query from Account failed : ${query}`);
+                    log.info('account.js', 'processReverseAccount', `query from Account failed : ${query}`);
                     resolve(false);
                 } else {
-                    log.debug('Model','processReverseAccount',`query from Account success! target account id : ${account_id}`);
+                    log.debug('account.js','processReverseAccount',`query from Account success! target account id : ${account_id}`);
                     resolve(result.rows[0])
                 }})})
             .then(existSQLAccount => {
                 if (!existSQLAccount) {
-                    log.warn('Model', 'processReverseAccount', `Account load from SQL failed`);
+                    log.info('account.js', 'processReverseAccount', `Account load from SQL failed`);
                     return false;
                 } else {
                     const prev_account_id = existSQLAccount.id;
@@ -179,7 +179,7 @@ class Account {
                 }})
             .then(existElasticAccount => {
                 if (!existElasticAccount) {
-                    log.warn('Model', 'processReverseAccount', `Account load from Elastic failed`);
+                    log.info('account.js', 'processReverseAccount', `Account load from Elastic failed`);
                     return false;
                 } else {
                     reverseElasticAccount = Account.reverseMoneyProcess(Account.reverseAccountDataProcessing(JSON.parse(JSON.stringify(existElasticAccount[account_id]))));
@@ -201,11 +201,11 @@ class Account {
         return new Promise((resolve, reject) => {
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    log.warn('Model','Account-insertSQL',`insert SQL failed query : ${query}`);
+                    log.info('account.js','insertSQL',`insert SQL failed query : ${query}`);
                     resolve(false);
                 }
                 result.rows[0].id = 'a' + result.rows[0]._id;
-                log.debug('Model','Account-insertSQL', `insert to SQL success : ${result.rows[0].id}`);
+                log.debug('account.js','insertSQL', `insert to SQL success : ${result.rows[0].id}`);
                 resolve(result.rows[0]);
             });
         });
@@ -216,7 +216,7 @@ class Account {
         return new Promise((resolve ,reject) => {
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    log.warn('Model','Account-getSQL',`get SQL failed query : ${query}`);
+                    log.info('account.js','getSQL',`get SQL failed query : ${query}`);
                     resolve(false);
                 } else resolve(result.rows[0].id)
             })
@@ -239,10 +239,10 @@ class Account {
                 body: account
             },(err, resp) => {
                 if (err) {
-                    log.warn('Model','Account-insertElastic', `insert Elastic failed : ${account.id}`);
+                    log.info('account.js','insertElastic', `insert Elastic failed : ${account.id}`);
                     resolve(false);
                 } else {
-                    log.debug('Model','Account-insertElastic', `insert to Elastic success : ${account.id}`);
+                    log.debug('account.js','insertElastic', `insert to Elastic success : ${account.id}`);
                     resolve(true);
                 }
             });
@@ -265,7 +265,7 @@ class Account {
                 }
             }, (err, resp) => {
                 if (err || resp.timed_out) {
-                    log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                    log.info('account.js', 'getElastic', `query from Elastic failed : ${query}`);
                     throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
                 }
                 if (resp._shards.successful <= 0) resolve(result);

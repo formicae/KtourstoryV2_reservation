@@ -23,11 +23,18 @@ class Pickup {
             if (pickupMap.size === 0 || incomingMap.size === 0) {
                 setTimeout(() => { resolve(Pickup.getPickup(input)) }, 200);
             } else {
-                if (!input) resolve(false);
-                else {
+                if (!input) {
+                    log.info('pickup.js', 'getPickup', 'no input!');
+                    resolve(false);
+                } else {
                     Pickup.pickupStringMatch(input).then(result => {
-                        if (!result) resolve(false);
-                        else resolve(pickupMap.get(result));
+                        if (!result) {
+                            log.info('pickup.js', 'getPickup', `no matching pickup information. input : ${input}`)
+                            resolve(false);
+                        } else {
+                            log.debug('pickup.js', 'getPickup', `pickup found. input : ${input} / result : ${result}`)
+                            resolve(pickupMap.get(result));
+                        }
                     });
                 }
             }

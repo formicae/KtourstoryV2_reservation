@@ -19,7 +19,7 @@ class Team {
 
 class Reservation {
     constructor(data) {
-        if (data.adult + data.kid + data.infant <= 0) log.warn('Model', 'Reservation-constructor', 'total summation number of adult, kid, infant is 0');
+        if (data.adult + data.kid + data.infant <= 0) log.info('reservation.js', 'Reservation-constructor', 'total summation number of adult, kid, infant is 0');
         const currentDate = Reservation.getGlobalDate();
         this.sqlData = Reservation.generatePostgreSQLObject(data, currentDate);
         this.fbData =  Reservation.generateFirebaseObject(data);
@@ -192,8 +192,8 @@ class Reservation {
      */
     static async validationUpdate(data, reservation) {
         const val = await validation.validReservationUpdateCheck(data, reservation);
-        if (!val.result) log.warn('Model', 'Reservation - validationUpdate', `reservation update validation failed. detail : ${JSON.stringify(val.detail)}`);
-        else log.debug('Model', 'Reservation - validationUpdate', `reservation update validation success`);
+        if (!val.result) log.info('reservation.js', 'Reservation - validationUpdate', `reservation update validation failed. detail : ${JSON.stringify(val.detail)}`);
+        else log.debug('reservation.js', 'Reservation - validationUpdate', `reservation update validation success`);
         return val;
     }
 
@@ -205,8 +205,8 @@ class Reservation {
      */
     static async validationCreate(data, reservation) {
         const val = await validation.validReservationCreateCheck(data, reservation);
-        if (!val.result) log.warn('Model', 'Reservation - validationCreate', `reservation create validation failed. detail : ${JSON.stringify(val.detail)}`);
-        else log.debug('Model', 'Reservation - validationCreate', `reservation create validation success`);
+        if (!val.result) log.info('reservation.js', 'Reservation - validationCreate', `reservation create validation failed. detail : ${JSON.stringify(val.detail)}`);
+        else log.debug('reservation.js', 'Reservation - validationCreate', `reservation create validation success`);
         return val;
     }
 
@@ -223,11 +223,10 @@ class Reservation {
             const query = `INSERT INTO reservation (${text.keys}) VALUES (${text.values}) RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    console.log('query : ',query)
-                    log.warn('Model', 'Reservation-insertSQL', `data insert to SQL failed : ${reservation.id}`);
+                    log.info('reservation.js', 'insertSQL', `data insert to SQL failed : ${reservation.id}`);
                     resolve(false);
                 } else {
-                    log.debug('Model','Reservation-insertSQL', `${ result.rows[0].id = 'r' + result.rows[0]._id} data insert to SQL success`);
+                    log.debug('reservation.js','insertSQL', `${ result.rows[0].id = 'r' + result.rows[0]._id} data insert to SQL success`);
                     result.rows[0].id = 'r' + result.rows[0]._id;
                     resolve(result.rows[0]);
                 }
@@ -247,10 +246,10 @@ class Reservation {
             const query = `DELETE FROM reservation WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    log.warn('Model', 'Reservation-deleteSQL', 'delete reservation from SQL failed');
+                    log.info('reservation.js', 'deleteSQL', 'delete reservation from SQL failed');
                     resolve(false);
                 }
-                log.debug('Model','Reservation-deleteSQL', 'data delete from SQL success')
+                log.debug('reservation.js','deleteSQL', 'data delete from SQL success')
                 resolve(result.rows[0]);
             })
         });
@@ -261,10 +260,10 @@ class Reservation {
             const query = `SELECT * FROM reservation WHERE id = '${reservation_id}'`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    log.warn('Model', 'Reservation-getSQL', 'get reservation from SQL failed');
+                    log.info('reservation.js', 'getSQL', 'get reservation from SQL failed');
                     resolve(false);
                 }
-                log.debug('Model','Reservation-getSQL', 'get data from SQL success')
+                log.debug('reservation.js','getSQL', 'get data from SQL success')
                 resolve(result.rows[0]);
             });
         });
@@ -282,10 +281,10 @@ class Reservation {
             const query = `UPDATE reservation SET canceled = true, modified_date = '${Reservation.getGlobalDate()}' WHERE id = '${reservation_id}' RETURNING *`;
             sqlDB.query(query, (err, result) => {
                 if (err) {
-                    log.warn('Model', 'Reservation-cancelSQL', `data update from SQL failed - make "cancel" column to TRUE. query : ${query}`);
+                    log.info('reservation.js', 'cancelSQL', `data update from SQL failed - make "cancel" column to TRUE. query : ${query}`);
                     resolve(false);
                 } else {
-                    log.debug('Model', 'Reservation-cancelSQL', 'data update from SQL success - make "cancel" column to TRUE');
+                    log.debug('reservation.js', 'cancelSQL', 'data update from SQL success - make "cancel" column to TRUE');
                     resolve(result.rows[0]);
                 }
             });
@@ -320,15 +319,15 @@ class Reservation {
             const query = `SELECT canceled from reservation where id = '${reservation_id}'`;
             sqlDB.query(query, (err, result) => {
                 if (err || !result.rows) {
-                    log.warn('Model', 'Reservation-checkSQLcanceled', 'get "canceled" information from SQL failed');
+                    log.info('reservation.js', 'checkSQLcanceled', 'get "canceled" information from SQL failed');
                     resolve(false);
                 }
                 const tempResult = result.rows[0].canceled;
                 if (typeof tempResult === 'boolean' && !!tempResult) {
-                    log.warn('Router', 'Reservation-checkSQLcanceled', `reservation ${reservation_id} is already canceled in SQL!`);
+                    log.info('reservation.js', 'checkSQLcanceled', `reservation ${reservation_id} is already canceled in SQL!`);
                     resolve(false);
                 }
-                log.debug('Router', 'Reservation-checkSQLcanceled', `reservation ${reservation_id} is not canceled yet`);
+                log.debug('reservation.js', 'checkSQLcanceled', `reservation ${reservation_id} is not canceled yet`);
                 resolve(true);
             });
         });
@@ -346,11 +345,11 @@ class Reservation {
             team.reservations[reservation.id] = reservation;
             fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').push(team, err => {
                 if (err) {
-                    log.info('Model', 'newTeamBuild', `operation team push failed`);
+                    log.info('reservation.js', 'newTeamBuild', `operation team push failed`);
                     resolve(false);
                 }
             }).then(result => {
-                log.debug('Model', 'newTeamBuild', `new team build for reservation id ${reservation.id} success`);
+                log.debug('reservation.js', 'newTeamBuild', `new team build for reservation id ${reservation.id} success`);
                 let path = result.path.pieces_;
                 data.operation = path[1] + '/' + path[2] + '/' + path[4] + '/' + reservation.id;
                 data.team_id = path[4];
@@ -390,7 +389,7 @@ class Reservation {
         const reservedPeopleNumber = Number(reservation.adult) + Number(reservation.kid) + Number(reservation.infant);
         return new Promise((resolve, reject) => {
             if (!operation.teams) {
-                log.debug('Model', 'regularTeamBuild', `no teams in operation --> newTeamBuild : ${reservation.id}`);
+                log.debug('reservation.js', 'regularTeamBuild', `no teams in operation --> newTeamBuild : ${reservation.id}`);
                 resolve(this.newTeamBuild(reservation, data));
             }
             for (let teamId in operation.teams) {
@@ -403,11 +402,11 @@ class Reservation {
                     peopleCount += Number(tempReservation.adult) + Number(tempReservation.kid) + Number(tempReservation.infant);
                 }
                 if (peopleCount + reservedPeopleNumber <= BUS_PEOPLE_MAX_NUMBER) {
-                    log.debug('Model', 'regularTeamBuild', `reservation ${reservation.id} is added to the teams : ${teamId}`);
+                    log.debug('reservation.js', 'regularTeamBuild', `reservation ${reservation.id} is added to the teams : ${teamId}`);
                     return fbDB.ref('operation').child(data.date).child(data.productData.id)
                         .child('teams').child(teamId).child('reservations').child(reservation.id).update(reservation, err => {
                             if (err) {
-                                log.warn('Model', 'regularTeamBuild', `operation reservation push failed`);
+                                log.info('reservation.js', 'regularTeamBuild', `operation reservation push failed`);
                                 resolve(false);
                             }
                             data.operation = data.date + '/' + data.productData.id + '/'+ teamId + '/' + reservation.id;
@@ -416,7 +415,7 @@ class Reservation {
                         });
                 }
             }
-            log.debug('Model', 'regularTeamBuild', `reservation ${reservation.id} will be added after newTeamBuild`);
+            log.debug('reservation.js', 'regularTeamBuild', `reservation ${reservation.id} will be added after newTeamBuild`);
             resolve(this.newTeamBuild(reservation, data));
         })
     }
@@ -439,12 +438,12 @@ class Reservation {
             // todo : guide id / name should be updated in team information later!
             Promise.all(promiseArr).then(result => {
                 if (result.includes(false)) {
-                    log.warn('Model', 'regularTeamBuild', `BIG reservation insert failed : ${result}`);
+                    log.info('reservation.js', 'regularTeamBuild', `BIG reservation insert failed : ${result}`);
                     resolve(false);
                 }
                 data.operation = result.map(data => data[0]);
                 data.teamIdArr= result.map(data => data[1]);
-                log.debug('Model', 'regularTeamBuild', `BIG reservation success`);
+                log.debug('reservation.js', 'regularTeamBuild', `BIG reservation success`);
                 resolve(data);
             });
         })
@@ -461,7 +460,7 @@ class Reservation {
         return new Promise((resolve, reject) => {
             fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').push(team, err => {
                 if (err) {
-                    log.warn('Model', 'bigTeamBuildPromiseArray', `BIG reservation insert failed : ${team.reservation}`);
+                    log.info('reservation.js', 'bigTeamBuildPromiseArray', `BIG reservation insert failed : ${team.reservation}`);
                     resolve(false);
                 }
             }).then(result => {
@@ -518,16 +517,16 @@ class Reservation {
             fbDB.ref('operation').child(data.date).child(data.productData.id).once('value', (snapshot) => {
                 const operation = snapshot.val();
                 if (!operation) {
-                    log.debug('Model', 'Reservation-insertFB', `no matching operation in firebase --> newTeamBuild : ${reservation.id}`);
+                    log.debug('reservation.js', 'insertFB', `no matching operation in firebase --> newTeamBuild : ${reservation.id}`);
                     resolve(this.newTeamBuild(reservation, data));
                 } else if (data.productData.name.match(/private/i)) {
-                    log.debug('Model', 'Reservation-insertFB', `private tour --> newTeamBuild : ${reservation.id}`);
+                    log.debug('reservation.js', 'insertFB', `private tour --> newTeamBuild : ${reservation.id}`);
                     resolve(this.newTeamBuild(reservation, data));
                 } else if (reservedPeopleNumber > BUS_PEOPLE_MAX_NUMBER) {
-                    log.debug('Model','Reservation-insertFB', `bigTeamBuild : ${reservation.id}`);
+                    log.debug('reservation.js','insertFB', `bigTeamBuild : ${reservation.id}`);
                     resolve(this.bigTeamBuild(reservation, data))
                 } else {
-                    log.debug('Model', 'Reservation-insertFB', `regularTeamBuild : ${reservation.id}`);
+                    log.debug('reservation.js', 'insertFB', `regularTeamBuild : ${reservation.id}`);
                     resolve(this.regularTeamBuild(reservation, data, operation));
                 }
             });
@@ -600,10 +599,10 @@ class Reservation {
             });
             return Promise.all(promiseArr).then(result => {
                 if (result.includes(false)) {
-                    log.warn('Model', 'deleteFB - bigTeamReservation', `firebase reservation delete failed! ${reservation.id}. result : ${result}`);
+                    log.info('reservation.js', 'deleteFB - bigTeamReservation', `firebase reservation delete failed! ${reservation.id}. result : ${result}`);
                     return false;
                 }
-                log.debug('Model', 'deleteFB - bigTeamReservation', `all of firebase reservation delete success! number of deleted reservation : ${result.length}`);
+                log.debug('reservation.js', 'deleteFB - bigTeamReservation', `all of firebase reservation delete success! number of deleted reservation : ${result.length}`);
                 return true;
             })
         }
@@ -614,10 +613,10 @@ class Reservation {
             fbDB.ref('operation').child(date).child(productId).child('teams').child(teamId)
                 .child('reservations').child(reservationId).remove(err => {
                 if (err) {
-                    log.warn('Model', 'Reservation-deleteFB', `delete reservation from FB failed : ${reservationId}`);
+                    log.info('reservation.js', 'deleteFB', `delete reservation from FB failed : ${reservationId}`);
                     resolve(false);
                 } else {
-                    log.debug('Model', 'Reservation-deleteFB', `delete reservation from FB success : ${reservationId}`);
+                    log.debug('reservation.js', 'deleteFB', `delete reservation from FB success : ${reservationId}`);
                     resolve(true);
                 }
             });
@@ -641,11 +640,11 @@ class Reservation {
                 body: reservation
             },(err, resp) => {
                 if (err) {
-                    log.warn('Model', 'Reservation-insertElastic', `insert into Elastic failed : ${reservation.id}`);
+                    log.info('reservation.js', 'insertElastic', `insert into Elastic failed : ${reservation.id}`);
                     console.log('error : ', JSON.stringify(err))
                     resolve(false);
                 } else {
-                    log.debug('Model', 'Reservation-cancelElastic', `insert to Elastic success : ${reservation.id}`);
+                    log.debug('reservation.js', 'insertElastic', `insert to Elastic success : ${reservation.id}`);
                     resolve(true);
                 }
             });
@@ -673,10 +672,10 @@ class Reservation {
                 }
             }, (err, resp) => {
                 if (err) {
-                    log.warn('Model', 'Reservation-cancelElastic', `update from Elastic failed : ${reservation_id}`);
+                    log.info('reservation.js', 'cancelElastic', `update from Elastic failed : ${reservation_id}`);
                     resolve(false);
                 } else {
-                    log.debug('Model', 'Reservation-cancelElastic', `update from Elastic success : ${reservation_id}`);
+                    log.debug('reservation.js', 'cancelElastic', `update from Elastic success : ${reservation_id}`);
                     resolve(true);
                 }
             });
@@ -724,10 +723,10 @@ class Reservation {
                 id : reservation_id,
             }, (err, resp) => {
                 if (err) {
-                    log.warn('Model', 'Reservation-deleteElastic', `delete from Elastic failed : ${reservation_id}`);
+                    log.info('reservation.js', 'deleteElastic', `delete from Elastic failed : ${reservation_id}`);
                     resolve(false);
                 }
-                log.debug('Model', 'Reservation-deleteElastic', `delete from Elastic success : ${reservation_id}`);
+                log.debug('reservation.js', 'deleteElastic', `delete from Elastic success : ${reservation_id}`);
                 resolve(true);
             })
         })
@@ -750,7 +749,7 @@ class Reservation {
                 }
             }, (err, resp) => {
                 if (err || resp.timed_out) {
-                    log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                    log.info('reservation.js', 'searchElastic', `query from Elastic failed : ${query}`);
                     throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
                 }
                 if (resp._shards.successful <= 0) resolve(result);
@@ -843,7 +842,7 @@ function getAll() {
             }
         }, (err, resp) => {
             if (err || resp.timed_out) {
-                log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                log.info('reservation.js', 'getAll', `query from Elastic failed : ${query}`);
                 throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
             }
             if (resp._shards.successful <= 0) resolve(result);
@@ -865,7 +864,7 @@ function getProduct(query) {
             }
         }, (err, resp) => {
             if (err || resp.timed_out) {
-                log.warn('Model', 'Reservation-searchElastic', `query from Elastic failed : ${query}`);
+                log.info('reservation.js', 'getProduct', `get product query from Elastic failed : ${query}`);
                 throw new Error(`Failed : searchElastic : ${JSON.stringify(err)}`);
             }
             if (resp._shards.successful <= 0) resolve(result);

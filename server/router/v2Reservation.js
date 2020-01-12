@@ -11,15 +11,15 @@ sqlDB.connect();
 
 exports.post = (req, res) => {
     if (!req.get('Content-Type')) {
-        log.warn('Router', 'RESERVATION export-POST', 'wrong Content-Type');
+        log.warn('Reservation', 'Reservation-POST', 'wrong Content-Type');
         return res.status(400).json({message: "Content-Type should be json"});
     } else if (!req.body.hasOwnProperty('reservationRouterAuth') || !req.body.reservationRouterAuth) {
-        log.warn('Router', 'RESERVATION export-POST', 'unAuthorized request');
+        log.warn('Reservation', 'Reservation-POST', 'unAuthorized request');
         return res.status(401).json({message:'reservation router unauthorized!'});
     }
     return postRouterHandler(req, res)
         .catch(err => {
-            log.error('Router', 'RESERVATION export-POST', `unhandled error occurred! error`);
+            log.error('Reservation', 'Reservation-POST', `unhandled error occurred!`);
             return res.status(500).send(`unhandled RESERVATION POST error`)
         });
 
@@ -27,15 +27,15 @@ exports.post = (req, res) => {
 
 exports.delete = (req, res) => {
     if (!req.get('Content-Type')) {
-        log.warn('Router', 'RESERVATION export-DELETE', 'wrong Content-Type');
+        log.warn('Reservation', 'Reservation-DELETE', 'wrong Content-Type');
         return res.status(400).json({message: "Content-Type should be json"});
     } else if (!req.body.hasOwnProperty('reservationRouterAuth') || !req.body.reservationRouterAuth) {
-        log.warn('Router', 'RESERVATION export-DELETE', 'unAuthorized request');
+        log.warn('Reservation', 'Reservation-DELETE', 'unAuthorized request');
         return res.status(401).json({message:'reservation router unauthorized!'});
     }
     return deleteRouterHandler(req, res)
         .catch(err => {
-            log.error('Router', 'RESERVATION export-UPDATE', `unhandled error occurred! error`);
+            log.error('Reservation', 'Reservation-DELETE', `unhandled error occurred! error`);
             res.status(500).send(`unhandled RESERVATION UPDATE error`)
         });
 };
@@ -72,7 +72,7 @@ async function postRouterHandler(req, res) {
             return res.status(400).json(rRRM('POST', data, reservationTask, false, 2));
         } else {
             reservationTask.priceGroupFound = true;
-            log.debug('Router', 'reservationHandler', `productData load success. product id : ${productData.id}`);
+            log.debug('Reservation', 'reservationHandler', `productData load success. product id : ${productData.id}`);
             const reservation = new Reservation(data);
             let validCheck = await Reservation.validationCreate(data, reservation);
             reservationTask.validation = validCheck.result;
@@ -110,7 +110,7 @@ async function createReservation(res, reservation, data, reservationTask, testOb
         return res.status(500).json(rRRM('POST', data, reservationTask,false, 4))
     } else {
         reservationTask.insertSQL = true;
-        log.debug('Router', 'createReservation', `insertSQL success! reservation id : ${sqlReservation.id}`);
+        log.debug('Reservation', 'createReservation', `insertSQL success! reservation id : ${sqlReservation.id}`);
         data.reservation_id = sqlReservation.id;
         reservation.fbData.id = sqlReservation.id;
         reservation.sqlData.id = sqlReservation.id;
@@ -132,7 +132,7 @@ async function createReservation(res, reservation, data, reservationTask, testOb
                 reservationTask.insertElastic = true;
                 data.reservationResult = true;
                 data.reservationTask = reservationTask;
-                log.debug('Router', 'createReservation', `all process success!`);
+                log.debug('Reservation', 'createReservation', `all process success!`);
                 return data;
             }
         }
@@ -196,44 +196,46 @@ function rRRM(requestType, data, reservationTask, reservationResult, errorNumber
     };
     if (reservationResult) {
         if (requestType === 'POST') {
-            log.debug('Router', 'v2Reservation-postRouterHandler', 'all task done successfully [POST]. goto v2Account router');
+            log.debug('Reservation', 'v2Reservation-postRouterHandler', 'all task done successfully [POST]. goto v2Account router');
         } else {
-            log.debug('Router', 'v2Reservation-deleteRouterHandler', 'all task done successfully [DELETE]. goto v2Account router');
+            log.debug('Reservation', 'v2Reservation-deleteRouterHandler', 'all task done successfully [DELETE]. goto v2Account router');
         }
     } else {
         result.errorNumber = errorNumber;
         if (errorNumber === 1) {
-            log.warn('Router', 'reservationHandler', `errorNumber : ${errorNumber} / pickupData load failed. product : ${JSON.stringify(data.pickupData)}`);
+            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / pickupData load failed. product : ${JSON.stringify(data.pickupData)}`);
             Object.entries({
                 message:'reservationHandler failed in searching pickupData',
-                detail : data.pickupData
+                detail : {
+                    no_pickup_data : true
+                }
             }).forEach(temp => result[temp[0]] = temp[1]);
         } else if (errorNumber === 2) {
-            log.warn('Router', 'reservationHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
+            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
             Object.entries({
                 message : `reservationHandler failed in productData matching. product : ${data.product}}`,
                 detail : data.productData.detail
             }).forEach(temp => result[temp[0]] = temp[1]);
         } else if (errorNumber === 3) {
-            log.warn('Router', 'reservationHandler', `errorNumber : ${errorNumber} / reservation validation failed in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`);
+            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / reservation validation failed in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`);
             result.message = `reservationHandler failed in validation in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`;
         } else if (errorNumber === 4) {
-            log.warn('Router', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into SQL failed. message_id : ${data.message_id}`);
+            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into SQL failed. message_id : ${data.message_id}`);
             result.message = `reservation insert into SQL failed. message_id : ${data.message_id}`;
         } else if (errorNumber === 5) {
-            log.warn('Router', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Firebase failed. reservation id : ${data.reservation_id}`);
+            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Firebase failed. reservation id : ${data.reservation_id}`);
             result.message = `reservation insert into Firebase failed. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 6) {
-            log.warn('Router', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Elastic failed. reservation id : ${data.reservation_id}`);
+            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Elastic failed. reservation id : ${data.reservation_id}`);
             result.message = `reservation insert into Elastic failed. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 7) {
-            log.warn('Router', 'deleteRouterHandler', `errorNumber : ${errorNumber} / reservation is already canceled. reservation id : ${data.reservation_id}`);
+            log.warn('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / reservation is already canceled. reservation id : ${data.reservation_id}`);
             result.message = `reservation is already canceled. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 8) {
-            log.warn('Router', 'deleteRouterHandler', `errorNumber : ${errorNumber} / SQL reservation cancel failed. reservation id : ${data.reservation_id}`);
+            log.error('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / SQL reservation cancel failed. reservation id : ${data.reservation_id}`);
             result.message = `SQL reservation cancel failed. reservation id : ${data.reservation_id}`;
         } else if (errorNumber === 9) {
-            log.warn('Router', 'deleteRouterHandler', `errorNumber : ${errorNumber} / Elastic reservation cancel failed. reservation id : ${data.reservation_id}`);
+            log.error('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / Elastic reservation cancel failed. reservation id : ${data.reservation_id}`);
             result.message = `Elastic reservation cancel failed. reservation id : ${data.reservation_id}`;
         }
     }
@@ -250,19 +252,19 @@ function rRRM(requestType, data, reservationTask, reservationResult, errorNumber
  * @returns {*}
  */
 function failureManager(reservation, data, task, type, testObj) {
-    log.debug('Router', 'Reservation - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`);
+    log.debug('Reservation', 'Reservation - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`);
     if (type === 'POST') {
         if (!task.insertElastic && task.insertFB) {
             return Reservation.deleteFB(reservation.fbData, data, testObj)
                 .then(result => {
                     if (!result) return false;
                     task.deleteFB = true;
-                    log.debug('Router', 'Reservation-failureManager', `deleteFB success! type : ${type}. task : ${JSON.stringify(task)}`);
+                    log.debug('Reservation', 'Reservation-failureManager', `deleteFB success! type : ${type}. task : ${JSON.stringify(task)}`);
                     return Reservation.deleteSQL(reservation.sqlData.id, testObj)})
                 .then(result => {
                     if (!result) return task;
                     task.deleteSQL = true;
-                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${JSON.stringify(task)}`);
+                    log.debug('Reservation', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${JSON.stringify(task)}`);
                     return task;
                 });
         } else if (!task.insertFB && task.insertSQL) {
@@ -270,7 +272,7 @@ function failureManager(reservation, data, task, type, testObj) {
                 .then(result => {
                     if (!result) return task;
                     task.deleteSQL = true;
-                    log.debug('Router', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${JSON.stringify(task)}`);
+                    log.debug('Reservation', 'Reservation-failureManager', `deleteSQL success! type : ${type}. task : ${JSON.stringify(task)}`);
                     return task;
                 });
         } else { return Promise.resolve(task); }

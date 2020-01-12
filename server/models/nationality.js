@@ -11,8 +11,11 @@ class Nationality {
             if (nationalityMap.size === 0) {
                 setTimeout(() => { resolve(Nationality.getNationality(input)) }, 200);
             } else {
-                if (!input) resolve({result : false, data : null});
-                else {
+                if (!input) {
+                    log.info('nationality.js', 'getNationality', `no input!`);
+                    resolve({result : false, data : null});
+                } else {
+                    log.debug('nationality.js', 'getNationality', `nationality found. input : ${input} / result : ${nationalityMap.get(input)}`)
                     resolve ({result : true, data : nationalityMap.get(input)});
                 }
             }
@@ -36,5 +39,4 @@ function monitorNationality() {
     });
 }
 
-monitorNationality();
 module.exports = Nationality;

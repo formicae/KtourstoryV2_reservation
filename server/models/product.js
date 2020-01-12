@@ -213,7 +213,7 @@ class Product {
         const newBegin = new Date(array.begin[0], array.begin[1]-1, array.begin[2]);
         const newTarget = new Date(array.target[0], array.target[1]-1, array.target[2]);
         const newEnd = new Date(array.end[0], array.end[1]-1,array.end[2]);
-        log.debug('model', 'checkTourDateInValidRange', `checkTourDateInValidRange : ${newBegin} < ${newTarget} < ${newEnd}`);
+        log.debug('product.js', 'checkTourDateInValidRange', `checkTourDateInValidRange : ${newBegin} < ${newTarget} < ${newEnd}`);
         return newBegin <= newTarget && newTarget <= newEnd;
     }
 
@@ -256,10 +256,10 @@ class Product {
                 }
             }
             if (task.has_agencies && !task.priceAgencyMatch) {
-                log.warn('Model', 'Product - agencyMatching', `agencyMatching failed : ${data.agency} / product : ${data.product}, ${data.productData.id}`);
+                log.info('product.js', 'agencyMatching', `agencyMatching failed : ${data.agency} / product : ${data.product}, ${data.productData.id}`);
                 return {task : task}
             } else {
-                log.error('Model', 'Product - agencyMatching', `unExpected error : ${data.agency} / product : ${data.product}, ${data.productData.id}`)
+                log.error('product.js', 'agencyMatching', `unExpected error : ${data.agency} / product : ${data.product}, ${data.productData.id}`)
                 return {task : task}
             }
         }
@@ -276,10 +276,12 @@ class Product {
         task.salesMatch = false;
         task.agency = data.agency;
         for (let item of productData.sales) {
-            if (item.default) {
-                task.salesMatch = true;
-                task.defaultPrice = true;
-                return await this.agencyMatching(data, productData, item, task);
+            if (item.hasOwnProperty('default')) {
+                if (item.default === true || item.default === 'true') {
+                    task.salesMatch = true;
+                    task.defaultPrice = true;
+                    return await this.agencyMatching(data, productData, item, task);
+                }
             } else {
                 let timezone = (data.hasOwnProperty('timezone')) ? data.timezone : 'UTC+9';
                 task.reserveValid = Product.checkTourDateInValidRange(Product.getLocalDate(new Date(), timezone), item.reserve_begin, item.reserve_end, timezone);
@@ -291,7 +293,7 @@ class Product {
             }
         }
         if (!task.salesMatch) {
-            log.warn('Router', 'salesMatch', `sales data matching failed! ${data.product}, ${data.agency}`);
+            log.info('product.js', 'salesMatch', `sales data matching failed! ${data.product}, ${data.agency}`);
             return {task : task};
         }
     }
@@ -301,7 +303,7 @@ class Product {
         let productData = await Product.getProduct(data.product);
         data.productData = productData;
         if (!productData) {
-            log.warn('Router', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
+            log.info('product.js', 'productDataExtractFromFB', `product find failed. product : ${data.product}`);
             return {result : false, priceGroup : {}, detail : productExtractTask};
         } else {
             productExtractTask.getProduct = true;
@@ -325,7 +327,7 @@ class Product {
                 priceGroup.income = salesData.income;
                 priceGroup.currency = salesData.currency;
                 if (!productExtractTask.priceAgencyMatch) {
-                    log.warn('product', 'productDataExtractFromFB', `price data matching failed : ${productData.id} / ${productData.alias} / ${data.agency}`);
+                    log.info('product.js', 'productDataExtractFromFB', `price data matching failed : ${productData.id} / ${productData.alias} / ${data.agency}`);
                     return {result : false, priceGroup : {}, detail : productExtractTask};
                 } else {
                     if (!!productData.bus) priceGroup.bus = productData.bus;

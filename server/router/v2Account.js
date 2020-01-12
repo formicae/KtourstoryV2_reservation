@@ -9,38 +9,38 @@ sqlDB.connect();
 
 exports.post = (req, res) => {
     if (!req.get('Content-Type')) {
-        log.warn('Router', 'Account export-POST', 'wrong Content-Type');
+        log.warn('Account', 'Account-POST', 'wrong Content-Type');
         return res.status(400).json({message: "Content-Type should be json"});
     } else if (!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth) {
         if (!req.body.reservationResult) {
-            log.warn('Router', 'Account export-POST', 'this requester should send data through reservation router. not authorized for direct request to account router');
-            return res.status(500).json({message:'this requester should send data through reservation router. not authorized for direct request to account router'});
+            log.warn('Account', 'Account-POST', 'this requester should send data through reservation router. not authorized for direct request to account router');
+            return res.status(401).json({message:'this requester should send data through reservation router. not authorized for direct request to account router'});
         } else {
-            log.debug('Router', 'Account export-POST', 'no account authority but passed : came through reservation router');
+            log.debug('Account', 'Account-POST', 'no account authority but passed : came through reservation router');
         }
     }
     return accountHandler(req, res, 'POST')
         .catch(err => {
-            log.error('Router', 'ACCOUNT export-POST', `unhandled error occurred! error`);
+            log.error('Account', 'Account-POST', `unhandled error occurred!`);
             res.status(500).send(`unhandled ACCOUNT POST error`)
         });
 };
 
 exports.delete = (req, res) => {
     if (!req.get('Content-Type')) {
-        log.warn('Router', 'Account export-DELETE', 'wrong Content-Type');
+        log.warn('Account', 'Account-DELETE', 'wrong Content-Type');
         return res.status(400).json({message: "Content-Type should be json"});
     }  else if (!req.body.reservationResult) {
         if ((!req.body.hasOwnProperty('accountRouterAuth') || !req.body.accountRouterAuth)) {
-            log.warn('Router', 'Account export-DELETE', 'unAuthorized request');
+            log.warn('Account', 'Account-DELETE', 'unAuthorized request');
             return res.status(401).json({message:'account router unauthorized!'});
         } else {
-            log.debug('Router', 'Account export-POST', 'no account authority but passed : came through reservation router');
+            log.debug('Account', 'Account-DELETE', 'no account authority but passed : came through reservation router');
         }
     }
     return accountHandler(req, res, 'REVERSE_CREATE')
         .catch(err => {
-            log.error('Router', 'ACCOUNT export-REVERSE_CREATE', `unhandled error occurred! error`);
+            log.error('Account', 'Account-REVERSE_CREATE', `unhandled error occurred!`);
             res.status(500).send(`unhandled ACCOUNT POST error`)
         });
 };
@@ -109,7 +109,7 @@ async function accountHandler(req, res, requestType) {
             task.pickupDataFound = true;
         }
         if (!data.hasOwnProperty('cash')) data.cash = false;
-        if (!data.hasOwnProperty('productData')) return res.status(400).json(aRRM('POST', data, task, false, 6))
+        if (!data.hasOwnProperty('productData')) return res.status(400).json(aRRM('POST', data, task, false, 6));
         const account = new Account(data);
         if (account.sqlData.category !== 'reservation' && account.sqlData.category !== 'Reservation') data.reservation_id = null;
         data.category = account.sqlData.category;
@@ -157,7 +157,7 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
         accountTask : accountTask
     };
     if (success) {
-        log.debug('Router', 'v2Account', `all task done successfully : ${requestType}`);
+        log.debug('Account', 'v2Account', `all task done successfully : ${requestType}`);
         result.message = `Account saved properly : ${requestType}`;
         let pickup = (data.category === 'reservation' || data.category === 'Reservation') ? data.pickupData.pickupPlace : 'no pickup data';
         if (requestType === 'POST') {
@@ -175,34 +175,34 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
     } else {
         result.errorNumber = errorNumber;
         if (errorNumber === 1) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / reverse account process failed. account id : ${data.account_id}`);
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / reverse account process failed. account id : ${data.account_id}`);
             result.message = `accountHandler failed in processReverseAccount : ${data.account_id}`;
         } else if (errorNumber === 2) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / insert account to SQL failed. account id : ${data.account_id}`);
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / insert account to SQL failed. account id : ${data.account_id}`);
             result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id}`;
         } else if (errorNumber === 3) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / insert account to Elastic failed. [${data.reservation_id} / ${data.account_id}]`);
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / insert account to Elastic failed. [${data.reservation_id} / ${data.account_id}]`);
             result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`;
         } else if (errorNumber === 4) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
             Object.entries({
                 message:`accountHandler failed in processing productData : ${data.product}`,
                 detail : data.productData.detail
             }).forEach(temp => {result[temp[0]] = temp[1]});
         } else if (errorNumber === 5) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / pickupData load failed. pickup : ${data.pickup}`);
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / pickupData load failed. pickup : ${data.pickup}`);
             result.message = `accountHandler failed in pickupData find. pickup : ${data.pickup}`;
         } else if (errorNumber === 6) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / productData is not present in non-reservation account. category : ${data.category}`);
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / productData is not present in non-reservation account. category : ${data.category}`);
             result.message = `productData is not present in non-reservation account. category : ${data.category}`;
         } else if (errorNumber === 7) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / ValidDataCheck failed, [${data.reservation_id}]`);
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / ValidDataCheck failed, [${data.reservation_id}]`);
             result.message = `accountHandler failed in account validation : ${data.reservation_id}`;
         } else if (errorNumber === 8) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to SQL failed, [${data.reservation_id}]`);
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / account insert to SQL failed, [${data.reservation_id}]`);
             result.message = `accountHandler failed in insert account to SQL : ${data.reservation_id}`;
         } else if (errorNumber === 9) {
-            log.warn('Router', 'accountHandler', `errorNumber : ${errorNumber} / account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`);
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`);
             result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`;
         }
     }
@@ -218,7 +218,7 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
  * @returns {*}
  */
 function failureManager(account, task, type, testObj){
-    log.debug('Router', 'Account - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`)
+    log.debug('Account', 'Account - failureManager', `type : ${JSON.stringify(type)}, task : ${JSON.stringify(task)}`)
     task.insertReverseSQL = false;
     if (type === 'POST') {
         if (!task.insertElastic && task.insertSQL) {
@@ -228,7 +228,7 @@ function failureManager(account, task, type, testObj){
                 .then(result => {
                     if (!result) return task;
                     task.insertReverseSQL = true;
-                    log.debug('Router', 'Account-failureManager [POST]', `insert reverse Account (due to insertElastic failure) success! id : ${result.id}. task : ${task}`);
+                    log.debug('Account', 'Account-failureManager [POST]', `insert reverse Account (due to insertElastic failure) success! id : ${result.id}. task : ${task}`);
                     return task;});
         } else { return Promise.resolve(task); }
     } else {
@@ -239,7 +239,7 @@ function failureManager(account, task, type, testObj){
                 .then(result => {
                     if (!result) return task;
                     task.insertReverseSQL = true;
-                    log.debug('Router', 'Account-failureManager [DELETE]', `insert original Account (due to insertElastic failure) success! id : ${result.id}. task : ${task}`);
+                    log.debug('Account', 'Account-failureManager [DELETE]', `insert original Account (due to insertElastic failure) success! id : ${result.id}. task : ${task}`);
                     return task;
                 });
         } else { return Promise.resolve(task); }
