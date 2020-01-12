@@ -19,7 +19,7 @@ if (!env.released) {
 
 process.on("uncaughtException", function (err) {
     "use strict";
-    log.error('Router-Index', `uncaughtException`, `Reservation server died - ${new Date()} by unhandled error occurred! error : ${Object.getOwnPropertyNames(err)}`);
+    log.error('Router-Index', `uncaughtException`, `Reservation server died - ${new Date()} error : ${JSON.stringify(err)}`);
 });
 
 module.exports = api;
