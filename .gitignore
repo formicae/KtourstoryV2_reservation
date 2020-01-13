@@ -10,7 +10,7 @@
 # Logs
 npm-debug.log*
 yarn-debug.log*
-server/auth/keys/*
+server/auth/*
 server/models/dataFiles/*
 server/models/tempDataFiles/*
 *.pem

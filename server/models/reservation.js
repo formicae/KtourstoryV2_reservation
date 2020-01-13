@@ -12,7 +12,7 @@ sqlDB.connect();
 class Team {
     constructor() {
         this.notification = '';
-        this.guides = { id : '', name : '',};
+        this.guides = [{ id : '', name : '',}];
         this.reservations = {};
     }
 }

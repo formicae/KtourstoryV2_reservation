@@ -26,9 +26,9 @@ class Nationality {
 
 function monitorNationality() {
     return new Promise((resolve, reject) => {
-        fbDB.ref('geos').on('value', snapshot => {
-            const geos = snapshot.val();
-            Object.entries(geos.nationality).forEach(async temp => {
+        fbDB.ref('nationality').on('value', snapshot => {
+            const data = snapshot.val();
+            Object.entries(data).forEach(async temp => {
                 let abbreviation = temp[0];
                 let nationData = temp[1];
                 for (let data of nationData.possibles) {
