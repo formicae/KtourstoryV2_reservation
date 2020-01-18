@@ -12,7 +12,7 @@ sqlDB.connect();
 class Team {
     constructor() {
         this.notification = '';
-        this.guides = [{ id : '', name : '',}];
+        this.guides = [];
         this.reservations = {};
     }
 }
@@ -342,6 +342,9 @@ class Reservation {
     static newTeamBuild(reservation, data){
         return new Promise((resolve, reject) => {
             const team = new Team();
+            if (data.hasOwnProperty('guide')) {
+            	team.guides.push(data.guide);
+            }
             team.reservations[reservation.id] = reservation;
             fbDB.ref('operation').child(data.date).child(data.productData.id).child('teams').push(team, err => {
                 if (err) {
