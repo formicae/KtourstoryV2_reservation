@@ -8,6 +8,12 @@ const fs = require('fs');
 const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Busan_Regular_부산 Scenic', '부산Scenic'],
     ['Seoul_Regular_에버', '서울에버'],
+    ['Busan_Regular_대구출발경주','대구경주'],
+    ['Seoul_Regular_제천','서울제천'],
+    ['Busan_Spring_진해','부산진해'],
+    ['Seoul_Summer_보성녹차축제','서울보성녹차'],
+    ['Busan_Regular_대구출발안동','대구안동'],
+    ['Seoul_Regular_퍼스트 남쁘아','퍼스트남쁘아'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
     ['Seoul_Spring_벛꽃랜덤','서울벚꽃랜덤'],
@@ -1074,14 +1080,14 @@ class v2AccountConverter {
             });
         })
     }
-    
+
     static dataStore(result, v1Account, date, v1_fb_key) {
         if (v1Account.category !== 'reservation' && v1Account.category !== 'Reservation') console.log(' non-reservation : ',v1Account)
         if (!result.hasOwnProperty(date)) result[date] = {};
         result[date][v1_fb_key] = v1Account;
         return result;
     }
-    
+
     static fbTeamDataProcess(v1FbTeamBulkData, filePath) {
         const result = {};
         Object.values(v1FbTeamBulkData).forEach(data => {
@@ -1351,13 +1357,25 @@ async function v2AccountConverterTest(testData, v1CanceledBulkData){
 //     }
 // };
 
+async function sortAccountData(data) {
+    const keys = Object.keys(data).sort();
+    const result = {};
+    for (let key of keys) {
+        result[key] = data[key];
+    }
+    const stringResult = await JSON.stringify(result);
+    fs.writeFileSync('/Users/youngmo2/Nodejs/KtourstoryV2_reservation/server/models/dataFiles/sorted_account_file.json',stringResult)
+}
+
+
 const v1AccountBulkData = require('../dataFiles/intranet-64851-account-export.json');
+// sortAccountData(v1AccountBulkData).then(()=>{console.log('done!')});
 // const v1Account_2019_JuneToOct = require('../dataFiles/v1AccountData_2019_JuneToOct.json');
 // const temp_v1Account_due_to_error_2017 = require('../dataFiles/temp_account_2017.json');
-const v1Account_2019 = require('../dataFiles/v1AccountData_2019.json');
+// const v1Account_2019 = require('../dataFiles/v1AccountData_2019.json');
 const v1CanceledBulkDataData = require('../dataFiles/intranet-64851-canceled-export.json');
 const v1FbTeamBulkData = require('../dataFiles/v1FbTeamBulkData_noDate.json');
-// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2019, '10~', '../dataFiles/v1AccountData_2019.json').then(result => console.log('result : ', result));
+// v2AccountConverter.accountDataExtractByMonth(v1AccountBulkData, 2017, undefined, '../dataFiles/v1Account2017.json').then(result => console.log('result : ', result));
 // v2AccountConverter.reservationCancelSQLandELASTICandFB({tour_date: '2019-07-15',product_id:'p360',id:'r32623'}).then(result=>console.log(result));
 // v2AccountConverterTest(testCase, v1CanceledBulkDataData);
-v2AccountConverter.mainConverter(v1Account_2019, v1CanceledBulkDataData, v1FbTeamBulkData);
+v2AccountConverter.mainConverter(v1AccountBulkData, v1CanceledBulkDataData, v1FbTeamBulkData);

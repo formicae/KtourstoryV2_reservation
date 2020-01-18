@@ -7,6 +7,12 @@ const elasticDB = require('../../auth/elastic');
 const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Busan_Regular_부산 Scenic', '부산Scenic'],
     ['Seoul_Regular_에버', '서울에버'],
+    ['Busan_Regular_대구출발경주','대구경주'],
+    ['Seoul_Regular_제천','서울제천'],
+    ['Busan_Spring_진해','부산진해'],
+    ['Seoul_Summer_보성녹차축제','서울보성녹차'],
+    ['Busan_Regular_대구출발안동','대구안동'],
+    ['Seoul_Regular_퍼스트 남쁘아','퍼스트남쁘아'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
     ['Seoul_Spring_벛꽃랜덤','서울벚꽃랜덤'],
@@ -145,7 +151,7 @@ class v2ReservationConverter {
      */
     static generateFbElasticObject(v1Data, productId){
         const date = v1Data.date;
-        const result = {elasticData:[], fbOverallData:{}};
+        const result = {elasticData:[], fbOverallData:{}, v2ProductId:undefined};
         const fbData = {};
         fbData[date] = {};
         const promiseArr = [], keyArr = [];
@@ -157,6 +163,7 @@ class v2ReservationConverter {
                 // catch { console.log('error : ',productId,productId.split('_')[2],JSON.stringify(v2Data)) }
                 if (!v2ProductData) return [];
                 productData = v2ProductData;
+                result.v2ProductId = v2ProductData.id;
                 fbData[date][v2ProductData.id] = {product_name: v2ProductData.name, product_alias: v2ProductData.alias, area: v2ProductData.area, teams: {}};
                 if (!result.fbOverallData[date][v2ProductData.id]) result.fbOverallData[date][v2ProductData.id] = {};
                 reservation = fbData[date][v2ProductData.id];
@@ -191,7 +198,7 @@ class v2ReservationConverter {
                                 id: promiseResult[i].id,
                                 agency_code: promiseResult[i].agency_code,
                                 name: v1Reservation.clientName,
-                                nationality: v1Reservation.nationality.toUpperCase(),
+                                nationality: (v1Reservation.nationality || 'unknown').toUpperCase(),
                                 agency: promiseResult[i].agency,
                                 writer: promiseResult[i].writer || 'writer unknown',
                                 pickup: v1Reservation.pickupPlace,
@@ -229,6 +236,7 @@ class v2ReservationConverter {
                     }
                 }
                 result.fbData = fbData;
+                console.log('  ...  all task done in generateFbElasticObject : ', date, productId, result.v2ProductId);
                 return result;
             });
     }
@@ -246,6 +254,12 @@ class v2ReservationConverter {
         if (v1Reservation) {
             let pickupData = await Pickup.getPickup(v1Reservation.pickupPlace);
             // let pickupLocation = await Reservation.pickupPlaceFinder({pickup:v1Reservation.pickupPlace});
+            if (!pickupData) {
+                pickupData = {location : {lat:0.0, lon:0.0}};
+                console.log('no pickup data : ',v1Reservation.id, v2ProductData, v2SQLData.id)
+            } else if (!pickupData.hasOwnProperty('location')) {
+                pickupData = {location : {lat:0.0, lon:0.0}}
+            }
             const result = {
                 id: v2SQLData.id,
                 message_id: v1Reservation.id,
@@ -260,7 +274,7 @@ class v2ReservationConverter {
                 agency: v1Reservation.agency,
                 agency_code: v1Reservation.agencyCode,
                 name: v1Reservation.clientName,
-                nationality: v1Reservation.nationality.toUpperCase(),
+                nationality: (v1Reservation.nationality || 'unknown').toUpperCase(),
                 tour_date: v1Reservation.date,
                 pickup: { place: v1Reservation.pickupPlace, location:pickupData.location || {lat:0.0, lon:0.0}},
                 options : v2SQLData.options || [],
@@ -318,7 +332,7 @@ class v2ReservationConverter {
                 agency: v2SQLData.agency,
                 agency_code: v2SQLData.agency_code,
                 name: v2ElasticReservation.name,
-                nationality: v2SQLData.nationality.toUpperCase(),
+                nationality: (v2SQLData.nationality || 'unknown').toUpperCase(),
                 tour_date: v2ElasticReservation.tour_date,
                 pickup: v2ElasticReservation.pickup,
                 options: v2SQLData.options || [],
@@ -567,6 +581,7 @@ class v2ReservationConverter {
                 }
             });
         });
+        console.log('sqlGeneratePromiseArr made done. length : ',sqlGeneratePromiseArr.length);
         return Promise.all(sqlGeneratePromiseArr)
             .then(resultArr => {
                 console.log(' >> generate v2 reservation done');
@@ -646,10 +661,19 @@ class v2ReservationConverter {
                 promiseArr.push(v2ReservationConverter.generateFbElasticObject(v1OperationData[date][productId], productId));
             });
         });
-        return Promise.all(promiseArr).then(result => {
+        console.log('>> generateFbElasticObject done : ',promiseArr.length);
+        return Promise.all(promiseArr).then(async result => {
             const resultJSON = {};
             let i = 0;
-            result.forEach(each => {resultJSON[i++] = (each)});
+            for (let each of result) {
+                if (each.hasOwnProperty('v2ProductId')) {
+                    resultJSON[i] = (each);
+                    i += 1;
+                    console.log(' reservation for FB Elastic made done. ',i)
+                } else {
+                    console.log(' @@@ no matching product!!!')
+                }
+            }
             return JSON.parse(JSON.stringify(resultJSON));
         });
     }
@@ -678,7 +702,7 @@ class v2ReservationConverter {
     static convertAndInsertV1OperationToFB(v1OperationData) {
         const firebaseTaskArr = [];
         let data;
-        let firebaseRemoveArr = [];
+        let firebaseRemoveArr = [Promise.resolve()];
         Object.keys(v1OperationData).forEach(date => {
             firebaseRemoveArr.push(fbDB.ref('operation').child(date).remove());
         });
@@ -687,6 +711,7 @@ class v2ReservationConverter {
                 return v2ReservationConverter.convertFBElastic(v1OperationData)})
             .then(result => {
                 data = result;
+                console.log('result from convertFBElastic : ');
                 Object.keys(result).forEach(key => {
                     Object.keys(result[key].fbData).forEach(date => {
                         firebaseTaskArr.push(Reservation.insertFBforConvert(result[key].fbData[date], date));
@@ -795,7 +820,14 @@ class v2ReservationConverter {
             let v1Operation = temp[1];
             let dateArr = date.trim().split('-');
             if (!month) {
-                if (Number(dateArr[0]) === year) result[date] = v1Operation;
+                if (isNaN(Number(year))) {
+                    const yearFrom = year.slice(0,-1);
+                    if (dateArr[0] >= yearFrom) {
+                        result[date] = v1Operation;
+                    }
+                } else if (Number(dateArr[0]) === year) {
+                    result[date] = v1Operation;
+                }
             } else if (month === '~3') {
                 if (Number(dateArr[0]) === year && Number(dateArr[1]) <= 3) result[date] = v1Operation;
             } else if (month === '4~6') {
@@ -883,12 +915,13 @@ async function deleteAllFirebaseReservation(year){
 
 // deleteAllFirebaseReservation(2020)
 const v1OperationBulkData = require('../dataFiles/intranet-64851-operation-export.json');
-const v1Operation_2019 = require('../dataFiles/v1OperationData_2019.json');
-// const v1Operation_2017 = require('../dataFiles/v1OperationData_2017');
+const testOperationData = require('../dataFiles/test-operation.json');
+const v1Operation_2020 = require('../dataFiles/v1Operation2020toAll.json');
 // const v1Operation_2018 = require('../dataFiles/v1OperationData_2018');
-// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '10~', '../dataFiles/v1OperationData_2019.json');
-// let result = v2ReservationConverter.mainConverter(v1Operation_2019);
-// deleteFirebaseData(2019,7);
+// v2ReservationConverter.operationDataExtractByMonth(v1OperationBulkData, 2019, '7~', '../dataFiles/v1Operation2019_from_July.json');
+let result = v2ReservationConverter.mainConverter(v1Operation_2020);
+// deleteFirebaseData(2018,3);
+// deleteAllFirebaseReservation(2017)
 // v2ReservationConverter.convertElasticToFile(require('../dataFiles/v1OperationData_2019_July'), 'server/models/tempDataFiles/v2ConvertedElasticData.json')
 //     .then(result => console.log('result : ',result));
 // v2ReservationConverter.findV2ReservationInElastic('r13777').then(result => console.log(result));

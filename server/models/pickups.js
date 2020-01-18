@@ -33,7 +33,7 @@ class Pickup {
                             log.info('pickup.js', 'getPickup', `no matching pickup information. input : ${input}`)
                             resolve(false);
                         } else {
-                            log.debug('pickup.js', 'getPickup', `pickup found. input : ${input} / result : ${result}`)
+                            // log.debug('pickup.js', 'getPickup', `pickup found. input : ${input} / result : ${result}`)
                             resolve(pickupMap.get(result));
                         }
                     });
@@ -59,6 +59,7 @@ function monitorPickup() {
                                 location : data.location,
                                 areaName : areaName
                             });
+                            incomingMap.set(data.name, data.name);
                             data.incoming.forEach(incoming => {
                                 incomingMap.set(incoming, data.name);
                             });

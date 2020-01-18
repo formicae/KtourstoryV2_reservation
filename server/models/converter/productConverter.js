@@ -4,6 +4,12 @@ const elasticDB = require('../../auth/elastic');
 const V1_V2_PRODUCT_EXCEPTIONAL_NAME_MAP = new Map([
     ['Busan_Regular_부산 Scenic', '부산Scenic'],
     ['Seoul_Regular_에버', '서울에버'],
+    ['Busan_Regular_대구출발경주','대구경주'],
+    ['Seoul_Regular_제천','서울제천'],
+    ['Busan_Spring_진해','부산진해'],
+    ['Seoul_Summer_보성녹차축제','서울보성녹차'],
+    ['Busan_Regular_대구출발안동','대구안동'],
+    ['Seoul_Regular_퍼스트 남쁘아','퍼스트남쁘아'],
     ['Seoul_Regular_전주railbike', '전주'],
     ['Seoul_Spring_벚꽃랜덤', '서울벚꽃랜덤'],
     ['Seoul_Spring_벛꽃랜덤','서울벚꽃랜덤'],
