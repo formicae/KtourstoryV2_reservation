@@ -1,11 +1,14 @@
 const {Pool ,Client} = require('pg');
-const env = require('../../package.json').env;
+const nodeEnv = process.env.NODE_ENV;
 let hostName;
-if (!env.released) hostName = "35.221.69.227"; // for local-test
-else hostName = "10.229.128.3";  // private IP of postgreSQL (for virtual machine)
+if (nodeEnv === 'PRODUCTION') {
+    hostName = "10.229.128.3" // private IP of postgreSQL (for virtual machine)
+} else {
+    hostName = "35.221.69.227" // for local-test
+}
 
 const remoteConnectionConfig = {
-    host: "35.221.69.227",
+    host: hostName,
     port: 5432,
     database: "postgres",
     user: "formicae",
