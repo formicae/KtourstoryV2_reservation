@@ -3,7 +3,7 @@ const log = require('../../log');
 const nodeEnv = process.env.NODE_ENV;
 let client;
 if (nodeEnv === 'PRODUCTION') {
-    client = new elastic.Client({ host:'10.0.0.108:9200'}); // for local-test (load-balancer)
+    client = new elastic.Client({ host:'10.0.0.108:9200'}); // for VM (internal IP)
 } else {
     client = new elastic.Client({ host:'35.190.50.17'}); // for local-test (load-balancer)
 }
