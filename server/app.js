@@ -1,4 +1,4 @@
-const Log = require("../log");
+const log = require("../log");
 const express = require("express");
 const bodyParser = require("body-parser");
 const v2 = require('./router/index');
@@ -36,6 +36,7 @@ app.use((req, res, next) => {
 app.use((err, req, res, next) => {
     //500
     console.log('Application error : ',err);
+    log.error('Reservation', 'Reservation-App', `unexpected error : ${err.message}`);
     res.status(500).json({msg: "Error Occurs"})
 });
 
