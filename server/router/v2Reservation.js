@@ -196,9 +196,9 @@ function rRRM(requestType, data, reservationTask, reservationResult, errorNumber
     };
     if (reservationResult) {
         if (requestType === 'POST') {
-            log.debug('Reservation', 'v2Reservation-postRouterHandler', 'all task done successfully [POST]. goto v2Account router', result);
+            log.debug('Reservation', 'v2Reservation-postRouterHandler', 'all task done successfully [POST]. goto v2Account router');
         } else {
-            log.debug('Reservation', 'v2Reservation-deleteRouterHandler', 'all task done successfully [DELETE]. goto v2Account router', result);
+            log.debug('Reservation', 'v2Reservation-deleteRouterHandler', 'all task done successfully [DELETE]. goto v2Account router');
         }
     } else {
         result.errorNumber = errorNumber;
@@ -209,34 +209,34 @@ function rRRM(requestType, data, reservationTask, reservationResult, errorNumber
                     pickup : false
                 }
             }).forEach(temp => result[temp[0]] = temp[1]);
-            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / pickupData load failed. product : ${JSON.stringify(data.pickupData)}`, result);
+            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / pickupData load failed. product : ${JSON.stringify(data.pickupData)}`);
         } else if (errorNumber === 2) {
             Object.entries({
                 message : `reservationHandler failed in productData matching. product : ${data.product}}`,
                 detail : data.productData.detail
             }).forEach(temp => result[temp[0]] = temp[1]);
-            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`, result);
+            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
         } else if (errorNumber === 3) {
             result.message = `reservationHandler failed in validation in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`;
-            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / reservation validation failed in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`, result);
+            log.info('Reservation', 'reservationHandler', `errorNumber : ${errorNumber} / reservation validation failed in ${requestType}. detail : ${JSON.stringify(reservationTask.validationDetail)}`);
         } else if (errorNumber === 4) {
             result.message = `reservation insert into SQL failed. message_id : ${data.message_id}`;
-            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into SQL failed. message_id : ${data.message_id}`, result);
+            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into SQL failed. message_id : ${data.message_id}`);
         } else if (errorNumber === 5) {
             result.message = `reservation insert into Firebase failed. reservation id : ${data.reservation_id}`;
-            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Firebase failed. reservation id : ${data.reservation_id}`, result);
+            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Firebase failed. reservation id : ${data.reservation_id}`);
         } else if (errorNumber === 6) {
             result.message = `reservation insert into Elastic failed. reservation id : ${data.reservation_id}`;
-            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Elastic failed. reservation id : ${data.reservation_id}`, result);
+            log.error('Reservation', 'createReservation', `errorNumber : ${errorNumber} / reservation insert into Elastic failed. reservation id : ${data.reservation_id}`);
         } else if (errorNumber === 7) {
             result.message = `reservation is already canceled. reservation id : ${data.reservation_id}`;
-            log.warn('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / reservation is already canceled. reservation id : ${data.reservation_id}`, result);
+            log.warn('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / reservation is already canceled. reservation id : ${data.reservation_id}`);
         } else if (errorNumber === 8) {
             result.message = `SQL reservation cancel failed. reservation id : ${data.reservation_id}`;
-            log.error('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / SQL reservation cancel failed. reservation id : ${data.reservation_id}`, result);
+            log.error('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / SQL reservation cancel failed. reservation id : ${data.reservation_id}`);
         } else if (errorNumber === 9) {
             result.message = `Elastic reservation cancel failed. reservation id : ${data.reservation_id}`;
-            log.error('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / Elastic reservation cancel failed. reservation id : ${data.reservation_id}`, result);
+            log.error('Reservation', 'deleteRouterHandler', `errorNumber : ${errorNumber} / Elastic reservation cancel failed. reservation id : ${data.reservation_id}`);
         }
     }
     return result;
