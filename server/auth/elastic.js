@@ -1,7 +1,8 @@
 const elastic = require('elasticsearch');
 const log = require('../../log');
-let client = new elastic.Client({ host:'34.97.62.200:9200'});
-client.ping({ requestTimeout: 10000}, (err) => {
+let client = new elastic.Client({ host:'35.190.50.17'}); // for local-test (load-balancer)
+// for virtualmachine in GCP : host = 10.0.0.108:9200
+client.ping({ requestTimeout: 20000}, (err) => {
     if (err) {
         log.error('Elastic', 'Elasticserach', 'elastic server is down');
         console.trace('elasticsearch cluster is down!')

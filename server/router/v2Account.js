@@ -157,7 +157,6 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
         accountTask : accountTask
     };
     if (success) {
-        log.debug('Account', 'v2Account', `all task done successfully : ${requestType}`);
         result.message = `Account saved properly : ${requestType}`;
         let pickup = (data.category === 'reservation' || data.category === 'Reservation') ? data.pickupData.pickupPlace : 'no pickup data';
         if (requestType === 'POST') {
@@ -172,38 +171,39 @@ function aRRM(requestType, data, accountTask, success, errorNumber) {
         } else {
             result.id = data.reverseAccountId;
         }
+        log.debug('Account', 'v2Account', `all task done successfully : ${requestType}`, result);
     } else {
         result.errorNumber = errorNumber;
         if (errorNumber === 1) {
-            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / reverse account process failed. account id : ${data.account_id}`);
             result.message = `accountHandler failed in processReverseAccount : ${data.account_id}`;
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / reverse account process failed. account id : ${data.account_id}`, result);
         } else if (errorNumber === 2) {
-            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / insert account to SQL failed. account id : ${data.account_id}`);
             result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id}`;
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / insert account to SQL failed. account id : ${data.account_id}`,result);
         } else if (errorNumber === 3) {
-            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / insert account to Elastic failed. [${data.reservation_id} / ${data.account_id}]`);
             result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`;
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / insert account to Elastic failed. [${data.reservation_id} / ${data.account_id}]`,result);
         } else if (errorNumber === 4) {
-            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`);
             Object.entries({
                 message:`accountHandler failed in processing productData : ${data.product}`,
                 detail : data.productData.detail
             }).forEach(temp => {result[temp[0]] = temp[1]});
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / productData load failed. product : ${data.product}`, result);
         } else if (errorNumber === 5) {
-            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / pickupData load failed. pickup : ${data.pickup}`);
             result.message = `accountHandler failed in pickupData find. pickup : ${data.pickup}`;
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / pickupData load failed. pickup : ${data.pickup}`, result);
         } else if (errorNumber === 6) {
-            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / productData is not present in non-reservation account. category : ${data.category}`);
             result.message = `productData is not present in non-reservation account. category : ${data.category}`;
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / productData is not present in non-reservation account. category : ${data.category}`, result);
         } else if (errorNumber === 7) {
-            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / ValidDataCheck failed, [${data.reservation_id}]`);
             result.message = `accountHandler failed in account validation : ${data.reservation_id}`;
+            log.info('Account', 'accountHandler', `errorNumber : ${errorNumber} / ValidDataCheck failed, [${data.reservation_id}]`, result);
         } else if (errorNumber === 8) {
-            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / account insert to SQL failed, [${data.reservation_id}]`);
             result.message = `accountHandler failed in insert account to SQL : ${data.reservation_id}`;
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / account insert to SQL failed, [${data.reservation_id}]`, result);
         } else if (errorNumber === 9) {
-            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`);
             result.message = `accountHandler failed in insert account to Elastic : ${data.reservation_id} / ${data.account_id}`;
+            log.error('Account', 'accountHandler', `errorNumber : ${errorNumber} / account insert to Elastic failed, [${data.reservation_id} / ${data.account_id}]`, result);
         }
     }
     return result;
