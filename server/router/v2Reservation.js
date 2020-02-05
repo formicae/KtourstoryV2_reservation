@@ -4,6 +4,7 @@ const Reservation = require('../models/reservation');
 const Product = require('../models/product');
 const Pickup = require('../models/pickups');
 const Nationality = require('../models/nationality');
+const Language = require('../models/language');
 const accountRouter = require('./v2Account');
 const log = require('../../log');
 const env = require('../../package.json').env;
@@ -59,6 +60,8 @@ async function postRouterHandler(req, res) {
     let reservationTask = {type : 'CREATE', router:'reservation', pickupDataFound : false, priceGroupFound : false};
     let nationalityData = await Nationality.getNationality(data.nationality);
     if (nationalityData.result) data.nationality = nationalityData.data;
+    let languageData = await Language.getLanguage(data.language);
+    if (languageData.result) data.language = languageData.data;
     let pickupData = await Pickup.getPickup(data.pickup);
     data.pickupData = pickupData;
     if (!pickupData) {
