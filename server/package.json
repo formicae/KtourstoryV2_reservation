@@ -6,7 +6,7 @@
   "dependencies": {
     "body-parser": "^1.18.3",
     "express": "^4.16.4",
-    "firebase-admin": "^6.4.0",
+    "firebase-admin": "^11.4.1",
     "url": "^0.11.0"
   },
   "scripts": {
